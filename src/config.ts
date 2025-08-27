@@ -8,7 +8,7 @@ export const config = {
     accessTtlMin: Number(process.env.JWT_ACCESS_TTL_MIN || 15),
   },
   refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 365),
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  redisUrl: process.env.REDIS_URL || 'redis://red-d2nf9m7diees73cjdo40:6379',
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
