@@ -7,6 +7,7 @@ import { config } from '../config';
 import { setJson, getJson } from '../redis';
 import { db } from '../firebase';
 import { signAccessJwt } from '../jwt';
+import admin from 'firebase-admin';
 
 export function createGoogleAuthRouter(): Router {
   const r = Router();
@@ -76,6 +77,33 @@ export function createGoogleAuthRouter(): Router {
         }
       }
 
+     // sync with Firebase Auth
+      try {
+        let existingUser: admin.auth.UserRecord | null = null;
+        console.log("mustafada firebase authentiation kayıt atıldı mı kontrol ")
+        try {
+          existingUser = await admin.auth().getUserByEmail(email);
+
+            console.log("existingUser : ",existingUser)
+        } catch (err: any) {
+          if (err.code !== 'auth/user-not-found') throw err;
+        }
+
+        if (!existingUser) {
+          await admin.auth().createUser({ uid: userId, email, emailVerified: !!emailVerified });
+
+        } else {
+          userId = existingUser.uid;
+           console.log("userId : ",userId)
+          console.log("existingUser.uid : ",existingUser.uid)
+          await admin.auth().updateUser(existingUser.uid, { email, emailVerified: !!emailVerified });
+        }
+      } catch (err) {
+        console.error('Firebase Auth sync error', err);
+        return res.status(500).send('Firebase auth error');
+      }
+
+
       // upsert device
       let deviceId: string;
       const deviceSnap = await db
@@ -102,11 +130,14 @@ export function createGoogleAuthRouter(): Router {
         createdAt: new Date(),
       });
       const access = signAccessJwt(userId, deviceId);
+      // Firebase custom token for client-side auth
+      const firebaseToken = await admin.auth().createCustomToken(userId);
       await setJson(`gls:${state}`, {
         ready: true,
         access_token: access,
         refresh_token: rawRefresh,
         refresh_token_id: refreshRef.id,
+        firebase_token: firebaseToken,
       }, 600);
       return res.send('<html><body>Login successful. You may close this window.</body></html>');
     } catch (e) {
