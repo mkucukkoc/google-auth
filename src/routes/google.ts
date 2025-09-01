@@ -63,44 +63,21 @@ export function createGoogleAuthRouter(): Router {
       const emailVerified = payload?.email_verified;
       if (!email) return res.status(400).send('No email');
 
-      // upsert user
+      // ensure user exists in Firebase Auth---Firebase authenticationa kayıt atlıyor sadece 
       let userId: string;
-      const userSnap = await db.collection('users').where('email', '==', email).limit(1).get();
-      if (userSnap.empty) {
-        const userRef = db.collection('users').doc();
-        await userRef.set({ email, isEmailVerified: !!emailVerified, createdAt: new Date() });
-        userId = userRef.id;
-      } else {
-        userId = userSnap.docs[0].id;
-        if (emailVerified) {
-          await db.collection('users').doc(userId).set({ isEmailVerified: true }, { merge: true });
-        }
-      }
-
-     // sync with Firebase Auth
       try {
-        let existingUser: admin.auth.UserRecord | null = null;
-        console.log("mustafada firebase authentiation kayıt atıldı mı kontrol ")
-        try {
-          existingUser = await admin.auth().getUserByEmail(email);
-
-            console.log("existingUser : ",existingUser)
-        } catch (err: any) {
-          if (err.code !== 'auth/user-not-found') throw err;
+        const userRecord = await admin.auth().getUserByEmail(email);
+        userId = userRecord.uid;
+        if (emailVerified && !userRecord.emailVerified) {
+          await admin.auth().updateUser(userId, { emailVerified: true });
         }
-
-        if (!existingUser) {
-          await admin.auth().createUser({ uid: userId, email, emailVerified: !!emailVerified });
-
+      } catch (err: any) {
+        if (err.code === 'auth/user-not-found') {
+          const newUser = await admin.auth().createUser({ email, emailVerified: !!emailVerified });
+          userId = newUser.uid;
         } else {
-          userId = existingUser.uid;
-           console.log("userId : ",userId)
-          console.log("existingUser.uid : ",existingUser.uid)
-          await admin.auth().updateUser(existingUser.uid, { email, emailVerified: !!emailVerified });
+          throw err;
         }
-      } catch (err) {
-        console.error('Firebase Auth sync error', err);
-        return res.status(500).send('Firebase auth error');
       }
 
 
