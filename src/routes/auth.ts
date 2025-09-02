@@ -1,133 +1,349 @@
 import { Router } from 'express';
-import { randomBytes, createHash } from 'crypto';
-import { config } from '../config';
-import { signAccessJwt } from '../jwt';
-import { db } from '../firebase';
+import { UserService } from '../services/userService';
+import { SessionService } from '../services/sessionService';
+import { AuditService } from '../services/auditService';
+import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
+import { validate, authSchemas } from '../middleware/validationMiddleware';
+import { authRateLimits } from '../middleware/rateLimitMiddleware';
+import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse } from '../types/auth';
 
 export function createAuthRouter(): Router {
   const r = Router();
 
-  // POST /auth/refresh
-  r.post('/refresh', async (req, res) => {
-    const { refresh_token, device_id } = req.body || {};
-    const refreshId = req.headers['x-refresh-id'];
-    if (!refresh_token || typeof refreshId !== 'string' || !device_id) {
-      return res.status(400).json({ error: 'invalid_request' });
-    }
-    const tokenHash = sha256(refresh_token);
-    const currentSnap = await db.collection('refreshTokens').doc(refreshId).get();
-    if (!currentSnap.exists) {
-      return res.status(401).json({ error: 'invalid_refresh' });
-    }
-    const current = currentSnap.data() as any;
-    if (current.revokedAt || current.replacedBy) {
-      return res.status(401).json({ error: 'invalid_refresh' });
-    }
-    if (current.deviceId !== req.body.device_id) {
-      return res.status(401).json({ error: 'device_mismatch' });
-    }
-    if (current.tokenHash !== tokenHash) {
-      const query = await db
-        .collection('refreshTokens')
-        .where('userId', '==', current.userId)
-        .where('revokedAt', '==', null)
-        .get();
-      const batch = db.batch();
-      query.forEach((doc) => batch.update(doc.ref, { revokedAt: new Date() }));
-      await batch.commit();
-      return res.status(401).json({ error: 'reuse_detected' });
-    }
-    if (current.expiresAt.toDate() < new Date()) {
-      return res.status(401).json({ error: 'expired' });
-    }
-    // rotate
-    const nextRaw = randomToken();
-    const nextHash = sha256(nextRaw);
-    const nextRef = db.collection('refreshTokens').doc();
-    await nextRef.set({
-      userId: current.userId,
-      deviceId: current.deviceId,
-      tokenHash: nextHash,
-      expiresAt: addDays(new Date(), config.refreshTtlDays),
-      createdAt: new Date(),
-    });
-    await currentSnap.ref.update({ replacedBy: nextRef.id, revokedAt: new Date() });
-    const access = signAccessJwt(current.userId, current.deviceId);
-    return res.json({
-      access_token: access,
-      refresh_token: nextRaw,
-      refresh_token_id: nextRef.id,
-      user_id: current.userId,
-    });
-  });
+  // POST /auth/register
+  r.post('/register', 
+    authRateLimits.register,
+    validate(authSchemas.register),
+    async (req, res) => {
+      try {
+        const { email, password, device, deviceId, name }: RegisterRequest = req.body;
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('User-Agent');
 
-  // POST /auth/logout
-  r.post('/logout', async (req, res) => {
-    const refreshId = req.headers['x-refresh-id'];
-    const { device_id } = req.body || {};
-    if (typeof refreshId !== 'string' || !device_id) return res.status(400).json({ error: 'invalid_request' });
-    const rtSnap = await db.collection('refreshTokens').doc(refreshId).get();
-    if (rtSnap.exists) {
-      const rt = rtSnap.data() as any;
-      if (rt.deviceId === device_id && !rt.revokedAt) {
-        await rtSnap.ref.update({ revokedAt: new Date() });
+        // Check if email is already registered
+        if (await UserService.isEmailRegistered(email)) {
+          await AuditService.logAuthEvent('register', {
+            ipAddress,
+            userAgent,
+            deviceInfo: device,
+            success: false,
+            errorMessage: 'Email already registered',
+          });
+          return res.status(409).json({ 
+            error: 'email_already_registered',
+            message: 'An account with this email already exists' 
+          });
+        }
+
+        // Create user
+        const user = await UserService.createUser({ email, password, device, deviceId, name });
+
+        // Create session
+        const { session, tokens } = await SessionService.createSession(
+          user.id,
+          device,
+          deviceId,
+          ipAddress,
+          userAgent
+        );
+
+        // Log successful registration
+        await AuditService.logAuthEvent('register', {
+          userId: user.id,
+          sessionId: session.id,
+          ipAddress,
+          userAgent,
+          deviceInfo: device,
+          success: true,
+        });
+
+        const response: AuthResponse = {
+          ...tokens,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+          },
+          deviceId,
+        };
+
+        res.status(201).json(response);
+      } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Registration failed' 
+        });
       }
     }
-    return res.json({ ok: true });
-  });
+  );
 
-  // POST /auth/logout_all
-  r.post('/logout_all', async (req, res) => {
-    const refreshId = req.headers['x-refresh-id'];
-    if (typeof refreshId !== 'string') return res.status(400).json({ error: 'invalid_request' });
-    const rtSnap = await db.collection('refreshTokens').doc(refreshId).get();
-    if (rtSnap.exists) {
-      const rt = rtSnap.data() as any;
-      const query = await db
-        .collection('refreshTokens')
-        .where('userId', '==', rt.userId)
-        .where('revokedAt', '==', null)
-        .get();
-      const batch = db.batch();
-      query.forEach((doc) => batch.update(doc.ref, { revokedAt: new Date() }));
-      await batch.commit();
-    }
-    return res.json({ ok: true });
-  });
+  // POST /auth/login
+  r.post('/login',
+    authRateLimits.login,
+    validate(authSchemas.login),
+    async (req, res) => {
+      try {
+        const { email, password, device, deviceId }: LoginRequest = req.body;
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('User-Agent');
 
-  // GET /user/me
-  r.get('/me', async (req, res) => {
-    const header = req.headers.authorization;
-    if (!header) return res.status(401).json({ error: 'unauthorized' });
-    const token = header.split(' ')[1];
-    try {
-      const { verifyAccessJwt } = await import('../jwt');
-      const claims = verifyAccessJwt(token);
-      const userSnap = await db.collection('users').doc(claims.sub).get();
-      if (!userSnap.exists) return res.status(404).json({ error: 'not_found' });
-      const user = userSnap.data() as any;
-      return res.json({ id: userSnap.id, email: user.email, is_email_verified: user.isEmailVerified });
-    } catch {
-      return res.status(401).json({ error: 'unauthorized' });
+        // Find user
+        const user = await UserService.findByEmail(email);
+        if (!user) {
+          await AuditService.logAuthEvent('login', {
+            ipAddress,
+            userAgent,
+            deviceInfo: device,
+            success: false,
+            errorMessage: 'User not found',
+          });
+          return res.status(401).json({ 
+            error: 'invalid_credentials',
+            message: 'Invalid email or password' 
+          });
+        }
+
+        // Check if user is locked
+        if (UserService.isUserLocked(user)) {
+          await AuditService.logAuthEvent('login', {
+            userId: user.id,
+            ipAddress,
+            userAgent,
+            deviceInfo: device,
+            success: false,
+            errorMessage: 'Account locked',
+          });
+          return res.status(423).json({ 
+            error: 'account_locked',
+            message: 'Account is temporarily locked due to too many failed attempts' 
+          });
+        }
+
+        // Verify password
+        const isValidPassword = await UserService.verifyPassword(user, password);
+        if (!isValidPassword) {
+          await UserService.incrementFailedAttempts(user.id);
+          await AuditService.logAuthEvent('login', {
+            userId: user.id,
+            ipAddress,
+            userAgent,
+            deviceInfo: device,
+            success: false,
+            errorMessage: 'Invalid password',
+          });
+          return res.status(401).json({ 
+            error: 'invalid_credentials',
+            message: 'Invalid email or password' 
+          });
+        }
+
+        // Reset failed attempts on successful login
+        await UserService.resetFailedAttempts(user.id);
+
+        // Create session
+        const { session, tokens } = await SessionService.createSession(
+          user.id,
+          device,
+          deviceId,
+          ipAddress,
+          userAgent
+        );
+
+        // Log successful login
+        await AuditService.logAuthEvent('login', {
+          userId: user.id,
+          sessionId: session.id,
+          ipAddress,
+          userAgent,
+          deviceInfo: device,
+          success: true,
+        });
+
+        const response: AuthResponse = {
+          ...tokens,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+          },
+          deviceId,
+        };
+
+        res.json(response);
+      } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Login failed' 
+        });
+      }
     }
-  });
+  );
+
+  // POST /auth/refresh
+  r.post('/refresh',
+    authRateLimits.refresh,
+    validate(authSchemas.refresh),
+    async (req, res) => {
+      try {
+        const { refreshToken, sessionId, deviceId }: RefreshRequest = req.body;
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('User-Agent');
+
+        try {
+          const result = await SessionService.verifyAndRotateRefreshToken(
+            sessionId,
+            refreshToken,
+            deviceId
+          );
+
+          if (!result) {
+            await AuditService.logAuthEvent('refresh', {
+              sessionId,
+              ipAddress,
+              userAgent,
+              success: false,
+              errorMessage: 'Invalid session or token',
+            });
+            return res.status(401).json({ 
+              error: 'invalid_refresh_token',
+              message: 'Invalid or expired refresh token' 
+            });
+          }
+
+          // Log successful refresh
+          await AuditService.logAuthEvent('refresh', {
+            userId: result.session.userId,
+            sessionId: result.session.id,
+            ipAddress,
+            userAgent,
+            success: true,
+          });
+
+          res.json(result.tokens);
+        } catch (error) {
+          if (error.message === 'REUSE_DETECTED') {
+            await AuditService.logAuthEvent('reuse_detected', {
+              sessionId,
+              ipAddress,
+              userAgent,
+              success: false,
+              errorMessage: 'Refresh token reuse detected',
+            });
+            return res.status(401).json({ 
+              error: 'token_reuse_detected',
+              message: 'Security violation detected. All sessions have been revoked.' 
+            });
+          }
+          throw error;
+        }
+      } catch (error) {
+        console.error('Refresh error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Token refresh failed' 
+        });
+      }
+    }
+  );
+
+  // POST /auth/logout
+  r.post('/logout',
+    authRateLimits.general,
+    validate(authSchemas.logout),
+    async (req, res) => {
+      try {
+        const { sessionId }: LogoutRequest = req.body;
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('User-Agent');
+
+        const success = await SessionService.revokeSession(sessionId);
+
+        if (success) {
+          await AuditService.logAuthEvent('logout', {
+            sessionId,
+            ipAddress,
+            userAgent,
+            success: true,
+          });
+        }
+
+        res.json({ success });
+      } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Logout failed' 
+        });
+      }
+    }
+  );
+
+  // POST /auth/logout-all
+  r.post('/logout-all',
+    authRateLimits.general,
+    authenticateToken,
+    async (req: AuthRequest, res) => {
+      try {
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const userAgent = req.get('User-Agent');
+
+        await SessionService.revokeAllUserSessions(req.user.id);
+
+        await AuditService.logAuthEvent('logout_all', {
+          userId: req.user.id,
+          ipAddress,
+          userAgent,
+          success: true,
+        });
+
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Logout all error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Logout failed' 
+        });
+      }
+    }
+  );
+
+  // GET /auth/me
+  r.get('/me',
+    authenticateToken,
+    async (req: AuthRequest, res) => {
+      try {
+        const user = await UserService.findById(req.user.id);
+        if (!user) {
+          return res.status(404).json({ 
+            error: 'user_not_found',
+            message: 'User not found' 
+          });
+        }
+
+        res.json({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatar: user.avatar,
+          isEmailVerified: user.isEmailVerified,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+        });
+      } catch (error) {
+        console.error('Get user error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Failed to get user information' 
+        });
+      }
+    }
+  );
+
   return r;
-}
-
-function randomToken(): string {
-  return base64url(randomBytes(32));
-}
-function sha256(input: string): string {
-  return createHash('sha256').update(input).digest('hex');
-}
-function base64url(b: Buffer | string): string {
-  const raw = Buffer.isBuffer(b) ? b : Buffer.from(b);
-  return raw.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function addDays(d: Date, days: number): Date {
-  const x = new Date(d);
-  x.setDate(d.getDate() + days);
-  return x;
 }
 
 
