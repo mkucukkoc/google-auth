@@ -53,7 +53,7 @@ export class TokenService {
         algorithms: ['HS256'],
       });
 
-      return payload as AccessTokenClaims;
+      return payload as unknown as AccessTokenClaims;
     } catch (error) {
       throw new Error('Invalid or expired token');
     }

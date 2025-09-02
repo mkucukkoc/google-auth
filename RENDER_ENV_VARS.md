@@ -67,7 +67,7 @@ SMTP_FROM=noreply@yourdomain.com
 ## 🚀 Render.com Deployment Adımları
 
 ### 1. Render.com'da Yeni Web Service Oluştur
-- **Build Command**: `npm install && npm run build`
+- **Build Command**: `npm ci --include=dev && npm run build`
 - **Start Command**: `npm start`
 - **Node Version**: `18`
 

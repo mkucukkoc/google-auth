@@ -6,7 +6,7 @@ import { createHash, randomBytes } from 'crypto';
 import { config } from '../config';
 import { setJson, getJson } from '../redis';
 import { db } from '../firebase';
-import { signAccessJwt } from '../jwt';
+import { TokenService } from '../services/tokenService';
 import admin from 'firebase-admin';
 
 export function createGoogleAuthRouter(): Router {
@@ -106,7 +106,7 @@ export function createGoogleAuthRouter(): Router {
         expiresAt: addDays(new Date(), config.refreshTtlDays),
         createdAt: new Date(),
       });
-      const access = signAccessJwt(userId, deviceId);
+      const access = await TokenService.createAccessToken(userId, 'google-auth-session');
       // Firebase custom token for client-side auth
       const firebaseToken = await admin.auth().createCustomToken(userId);
       await setJson(`gls:${state}`, {

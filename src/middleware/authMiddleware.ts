@@ -17,7 +17,7 @@ declare global {
 }
 
 export interface AuthRequest extends Request {
-  user: {
+  user?: {
     id: string;
     sessionId: string;
     jti: string;

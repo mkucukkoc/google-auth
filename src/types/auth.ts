@@ -90,7 +90,7 @@ export interface AuditLog {
   id: string;
   userId?: string;
   sessionId?: string;
-  event: 'login' | 'logout' | 'refresh' | 'reuse_detected' | 'register' | 'logout_all';
+  event: 'login' | 'logout' | 'refresh' | 'reuse_detected' | 'register' | 'logout_all' | 'password_reset_request' | 'password_reset_success' | 'password_reset_confirm';
   ipAddress?: string;
   userAgent?: string;
   deviceInfo?: DeviceInfo;

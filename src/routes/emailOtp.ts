@@ -3,7 +3,7 @@ import { randomInt, createHash } from 'crypto';
 import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
 import { config } from '../config';
-import { signAccessJwt } from '../jwt';
+import { TokenService } from '../services/tokenService';
 import { db } from '../firebase';
 
 export function createEmailOtpRouter(): Router {
@@ -80,7 +80,7 @@ export function createEmailOtpRouter(): Router {
       expiresAt: addDays(new Date(), config.refreshTtlDays),
       createdAt: new Date(),
     });
-    const access = signAccessJwt(userId, deviceId);
+    const access = await TokenService.createAccessToken(userId, 'email-otp-session');
     return res.json({
       access_token: access,
       refresh_token: rawRefresh,

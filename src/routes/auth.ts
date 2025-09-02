@@ -224,7 +224,7 @@ export function createAuthRouter(): Router {
           });
 
           res.json(result.tokens);
-        } catch (error) {
+        } catch (error: any) {
           if (error.message === 'REUSE_DETECTED') {
             await AuditService.logAuthEvent('reuse_detected', {
               sessionId,
@@ -286,15 +286,16 @@ export function createAuthRouter(): Router {
   r.post('/logout-all',
     authRateLimits.general,
     authenticateToken,
-    async (req: AuthRequest, res) => {
+    async (req: Request, res) => {
+      const authReq = req as AuthRequest;
       try {
         const ipAddress = req.ip || req.connection.remoteAddress;
         const userAgent = req.get('User-Agent');
 
-        await SessionService.revokeAllUserSessions(req.user.id);
+        await SessionService.revokeAllUserSessions(authReq.user!.id);
 
         await AuditService.logAuthEvent('logout_all', {
-          userId: req.user.id,
+          userId: authReq.user!.id,
           ipAddress,
           userAgent,
           success: true,
@@ -314,9 +315,10 @@ export function createAuthRouter(): Router {
   // GET /auth/me
   r.get('/me',
     authenticateToken,
-    async (req: AuthRequest, res) => {
+    async (req: Request, res) => {
+      const authReq = req as AuthRequest;
       try {
-        const user = await UserService.findById(req.user.id);
+        const user = await UserService.findById(authReq.user!.id);
         if (!user) {
           return res.status(404).json({ 
             error: 'user_not_found',
