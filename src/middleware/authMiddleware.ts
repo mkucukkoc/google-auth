@@ -67,7 +67,7 @@ export const authenticateToken = async (
     }
 
     // Attach user info to request
-    req.user = {
+    (req as any).user = {
       id: claims.sub,
       sessionId: claims.sid,
       jti: claims.jti,
@@ -101,7 +101,7 @@ export const optionalAuth = async (
         const session = await SessionService.findById(claims.sid);
         
         if (session && !session.revokedAt && session.expiresAt > new Date()) {
-          req.user = {
+          (req as any).user = {
             id: claims.sub,
             sessionId: claims.sid,
             jti: claims.jti,

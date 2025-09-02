@@ -14,8 +14,8 @@ export function createPasswordResetRouter(): Router {
     async (req, res) => {
       try {
         const { email } = req.body;
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         const result = await PasswordResetService.generateResetToken(
           email,
@@ -50,8 +50,8 @@ export function createPasswordResetRouter(): Router {
     async (req, res) => {
       try {
         const { token, password } = req.body;
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         const success = await PasswordResetService.verifyAndConsumeToken(
           token,

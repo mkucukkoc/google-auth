@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { UserService } from '../services/userService';
 import { SessionService } from '../services/sessionService';
 import { AuditService } from '../services/auditService';
@@ -17,8 +17,8 @@ export function createAuthRouter(): Router {
     async (req, res) => {
       try {
         const { email, password, device, deviceId, name }: RegisterRequest = req.body;
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         // Check if email is already registered
         if (await UserService.isEmailRegistered(email)) {
@@ -86,8 +86,8 @@ export function createAuthRouter(): Router {
     async (req, res) => {
       try {
         const { email, password, device, deviceId }: LoginRequest = req.body;
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         // Find user
         const user = await UserService.findByEmail(email);
@@ -190,8 +190,8 @@ export function createAuthRouter(): Router {
     async (req, res) => {
       try {
         const { refreshToken, sessionId, deviceId }: RefreshRequest = req.body;
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         try {
           const result = await SessionService.verifyAndRotateRefreshToken(
@@ -257,8 +257,8 @@ export function createAuthRouter(): Router {
     async (req, res) => {
       try {
         const { sessionId }: LogoutRequest = req.body;
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         const success = await SessionService.revokeSession(sessionId);
 
@@ -286,11 +286,11 @@ export function createAuthRouter(): Router {
   r.post('/logout-all',
     authRateLimits.general,
     authenticateToken,
-    async (req: Request, res) => {
-      const authReq = req as AuthRequest;
+    async (req: Request, res: Response) => {
+      const authReq = req as unknown as AuthRequest;
       try {
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const userAgent = req.get('User-Agent');
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
 
         await SessionService.revokeAllUserSessions(authReq.user!.id);
 
@@ -315,8 +315,8 @@ export function createAuthRouter(): Router {
   // GET /auth/me
   r.get('/me',
     authenticateToken,
-    async (req: Request, res) => {
-      const authReq = req as AuthRequest;
+    async (req: Request, res: Response) => {
+      const authReq = req as unknown as AuthRequest;
       try {
         const user = await UserService.findById(authReq.user!.id);
         if (!user) {
