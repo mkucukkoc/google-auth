@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAuthRouter = createAuthRouter;
 const express_1 = require("express");
@@ -8,6 +11,7 @@ const auditService_1 = require("../services/auditService");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
+const firebase_admin_1 = __importDefault(require("firebase-admin"));
 function createAuthRouter() {
     const r = (0, express_1.Router)();
     // POST /auth/register
@@ -118,6 +122,15 @@ function createAuthRouter() {
             }
             // Reset failed attempts on successful login
             await userService_1.UserService.resetFailedAttempts(user.id);
+            // Verify Firebase authentication user exists
+            try {
+                const firebaseUser = await firebase_admin_1.default.auth().getUser(user.id);
+                console.log('Firebase user verified for login:', firebaseUser.uid, firebaseUser.email);
+            }
+            catch (error) {
+                console.error('Firebase user verification failed during login:', error);
+                // Continue with login even if Firebase verification fails
+            }
             // Create session
             const { session, tokens } = await sessionService_1.SessionService.createSession(user.id, device, deviceId, ipAddress, userAgent);
             // Log successful login

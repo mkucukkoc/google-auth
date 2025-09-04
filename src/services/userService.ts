@@ -2,6 +2,7 @@ import { db } from '../firebase';
 import { HashService } from './hashService';
 import { User, RegisterRequest } from '../types/auth';
 import { v4 as uuidv4 } from 'uuid';
+import admin from 'firebase-admin';
 
 export class UserService {
   /**
@@ -11,9 +12,26 @@ export class UserService {
     const userId = uuidv4();
     const passwordHash = request.password ? await HashService.hashPassword(request.password) : '';
     const now = new Date();
+    const email = request.email.toLowerCase().trim();
+
+    // Create user in Firebase Authentication
+    let firebaseUser;
+    try {
+      firebaseUser = await admin.auth().createUser({
+        uid: userId,
+        email: email,
+        displayName: request.name || '',
+        emailVerified: false,
+        password: request.password,
+      });
+      console.log('Firebase user created:', firebaseUser.uid);
+    } catch (error) {
+      console.error('Firebase user creation failed:', error);
+      throw new Error('Failed to create Firebase user');
+    }
 
     const user: Omit<User, 'id'> = {
-      email: request.email.toLowerCase().trim(),
+      email: email,
       passwordHash,
       name: request.name,
       isEmailVerified: false,
@@ -36,9 +54,25 @@ export class UserService {
   static async createGoogleUser(email: string, name?: string): Promise<User> {
     const userId = uuidv4();
     const now = new Date();
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Create user in Firebase Authentication
+    let firebaseUser;
+    try {
+      firebaseUser = await admin.auth().createUser({
+        uid: userId,
+        email: normalizedEmail,
+        displayName: name || '',
+        emailVerified: true, // Google users are pre-verified
+      });
+      console.log('Firebase Google user created:', firebaseUser.uid);
+    } catch (error) {
+      console.error('Firebase Google user creation failed:', error);
+      throw new Error('Failed to create Firebase Google user');
+    }
 
     const user: Omit<User, 'id'> = {
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       passwordHash: '', // Google users don't have passwords
       name: name || '',
       isEmailVerified: true, // Google users are pre-verified

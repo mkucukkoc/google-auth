@@ -6,6 +6,7 @@ import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
 import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse } from '../types/auth';
+import admin from 'firebase-admin';
 
 export function createAuthRouter(): Router {
   const r = Router();
@@ -141,6 +142,15 @@ export function createAuthRouter(): Router {
 
         // Reset failed attempts on successful login
         await UserService.resetFailedAttempts(user.id);
+
+        // Verify Firebase authentication user exists
+        try {
+          const firebaseUser = await admin.auth().getUser(user.id);
+          console.log('Firebase user verified for login:', firebaseUser.uid, firebaseUser.email);
+        } catch (error) {
+          console.error('Firebase user verification failed during login:', error);
+          // Continue with login even if Firebase verification fails
+        }
 
         // Create session
         const { session, tokens } = await SessionService.createSession(

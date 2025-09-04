@@ -1,9 +1,13 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const firebase_1 = require("../firebase");
 const hashService_1 = require("./hashService");
 const uuid_1 = require("uuid");
+const firebase_admin_1 = __importDefault(require("firebase-admin"));
 class UserService {
     /**
      * Create a new user
@@ -12,8 +16,25 @@ class UserService {
         const userId = (0, uuid_1.v4)();
         const passwordHash = request.password ? await hashService_1.HashService.hashPassword(request.password) : '';
         const now = new Date();
+        const email = request.email.toLowerCase().trim();
+        // Create user in Firebase Authentication
+        let firebaseUser;
+        try {
+            firebaseUser = await firebase_admin_1.default.auth().createUser({
+                uid: userId,
+                email: email,
+                displayName: request.name || '',
+                emailVerified: false,
+                password: request.password,
+            });
+            console.log('Firebase user created:', firebaseUser.uid);
+        }
+        catch (error) {
+            console.error('Firebase user creation failed:', error);
+            throw new Error('Failed to create Firebase user');
+        }
         const user = {
-            email: request.email.toLowerCase().trim(),
+            email: email,
             passwordHash,
             name: request.name,
             isEmailVerified: false,
@@ -33,8 +54,24 @@ class UserService {
     static async createGoogleUser(email, name) {
         const userId = (0, uuid_1.v4)();
         const now = new Date();
+        const normalizedEmail = email.toLowerCase().trim();
+        // Create user in Firebase Authentication
+        let firebaseUser;
+        try {
+            firebaseUser = await firebase_admin_1.default.auth().createUser({
+                uid: userId,
+                email: normalizedEmail,
+                displayName: name || '',
+                emailVerified: true, // Google users are pre-verified
+            });
+            console.log('Firebase Google user created:', firebaseUser.uid);
+        }
+        catch (error) {
+            console.error('Firebase Google user creation failed:', error);
+            throw new Error('Failed to create Firebase Google user');
+        }
         const user = {
-            email: email.toLowerCase().trim(),
+            email: normalizedEmail,
             passwordHash: '', // Google users don't have passwords
             name: name || '',
             isEmailVerified: true, // Google users are pre-verified
