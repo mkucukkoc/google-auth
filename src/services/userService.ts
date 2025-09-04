@@ -9,7 +9,7 @@ export class UserService {
    */
   static async createUser(request: RegisterRequest): Promise<User> {
     const userId = uuidv4();
-    const passwordHash = await HashService.hashPassword(request.password);
+    const passwordHash = request.password ? await HashService.hashPassword(request.password) : '';
     const now = new Date();
 
     const user: Omit<User, 'id'> = {
@@ -17,6 +17,31 @@ export class UserService {
       passwordHash,
       name: request.name,
       isEmailVerified: false,
+      createdAt: now,
+      updatedAt: now,
+      failedLoginAttempts: 0,
+    };
+
+    await db.collection('subsc').doc(userId).set(user);
+
+    return {
+      id: userId,
+      ...user,
+    };
+  }
+
+  /**
+   * Create a Google user (without password)
+   */
+  static async createGoogleUser(email: string, name?: string): Promise<User> {
+    const userId = uuidv4();
+    const now = new Date();
+
+    const user: Omit<User, 'id'> = {
+      email: email.toLowerCase().trim(),
+      passwordHash: '', // Google users don't have passwords
+      name: name || '',
+      isEmailVerified: true, // Google users are pre-verified
       createdAt: now,
       updatedAt: now,
       failedLoginAttempts: 0,

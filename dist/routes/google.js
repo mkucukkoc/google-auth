@@ -67,23 +67,8 @@ function createGoogleAuthRouter() {
             // Check if user exists in our new auth system
             let user = await userService_1.UserService.findByEmail(email);
             if (!user) {
-                // Create new user in our auth system
-                user = await userService_1.UserService.createUser({
-                    email,
-                    password: '', // Google users don't have password
-                    name: payload?.name || payload?.given_name || '',
-                    device: {
-                        os: 'unknown',
-                        model: 'unknown',
-                        appVersion: '1.0.0',
-                        platform: 'web',
-                    },
-                    deviceId: session.device_id,
-                });
-                // Mark email as verified for Google users
-                await userService_1.UserService.updateUser(user.id, {
-                    isEmailVerified: true,
-                });
+                // Create new Google user in our auth system
+                user = await userService_1.UserService.createGoogleUser(email, payload?.name || payload?.given_name || '');
             }
             else {
                 // Update last login for existing user
@@ -128,6 +113,13 @@ function createGoogleAuthRouter() {
         }
         catch (error) {
             console.error('Google auth error:', error);
+            // Log the error for debugging
+            await auditService_1.AuditService.logAuthEvent('login', {
+                ipAddress: req.ip || req.connection?.remoteAddress,
+                userAgent: req.get('User-Agent'),
+                success: false,
+                errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            });
             return res.status(500).send('Authentication failed');
         }
     });

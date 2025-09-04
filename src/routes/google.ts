@@ -78,24 +78,11 @@ export function createGoogleAuthRouter(): Router {
         let user = await UserService.findByEmail(email);
         
         if (!user) {
-          // Create new user in our auth system
-          user = await UserService.createUser({
+          // Create new Google user in our auth system
+          user = await UserService.createGoogleUser(
             email,
-            password: '', // Google users don't have password
-            name: payload?.name || payload?.given_name || '',
-            device: {
-              os: 'unknown',
-              model: 'unknown',
-              appVersion: '1.0.0',
-              platform: 'web',
-            },
-            deviceId: session.device_id,
-          });
-          
-          // Mark email as verified for Google users
-          await UserService.updateUser(user.id, {
-            isEmailVerified: true,
-          });
+            payload?.name || payload?.given_name || ''
+          );
         } else {
           // Update last login for existing user
           await UserService.updateUser(user.id, {
@@ -150,6 +137,15 @@ export function createGoogleAuthRouter(): Router {
         return res.send('<html><body>Login successful. You may close this window.</body></html>');
       } catch (error) {
         console.error('Google auth error:', error);
+        
+        // Log the error for debugging
+        await AuditService.logAuthEvent('login', {
+          ipAddress: (req as any).ip || (req as any).connection?.remoteAddress,
+          userAgent: (req as any).get('User-Agent'),
+          success: false,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+        
         return res.status(500).send('Authentication failed');
       }
     }

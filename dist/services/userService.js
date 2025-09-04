@@ -10,13 +10,34 @@ class UserService {
      */
     static async createUser(request) {
         const userId = (0, uuid_1.v4)();
-        const passwordHash = await hashService_1.HashService.hashPassword(request.password);
+        const passwordHash = request.password ? await hashService_1.HashService.hashPassword(request.password) : '';
         const now = new Date();
         const user = {
             email: request.email.toLowerCase().trim(),
             passwordHash,
             name: request.name,
             isEmailVerified: false,
+            createdAt: now,
+            updatedAt: now,
+            failedLoginAttempts: 0,
+        };
+        await firebase_1.db.collection('subsc').doc(userId).set(user);
+        return {
+            id: userId,
+            ...user,
+        };
+    }
+    /**
+     * Create a Google user (without password)
+     */
+    static async createGoogleUser(email, name) {
+        const userId = (0, uuid_1.v4)();
+        const now = new Date();
+        const user = {
+            email: email.toLowerCase().trim(),
+            passwordHash: '', // Google users don't have passwords
+            name: name || '',
+            isEmailVerified: true, // Google users are pre-verified
             createdAt: now,
             updatedAt: now,
             failedLoginAttempts: 0,

@@ -8,17 +8,25 @@ class AuditService {
      * Log an authentication event
      */
     static async logAuthEvent(event, options) {
+        // Filter out undefined values to avoid Firestore errors
         const auditLog = {
             event,
-            userId: options.userId,
-            sessionId: options.sessionId,
-            ipAddress: options.ipAddress,
-            userAgent: options.userAgent,
-            deviceInfo: options.deviceInfo,
             success: options.success,
-            errorMessage: options.errorMessage,
             createdAt: new Date(),
         };
+        // Only add fields that are not undefined
+        if (options.userId !== undefined)
+            auditLog.userId = options.userId;
+        if (options.sessionId !== undefined)
+            auditLog.sessionId = options.sessionId;
+        if (options.ipAddress !== undefined)
+            auditLog.ipAddress = options.ipAddress;
+        if (options.userAgent !== undefined)
+            auditLog.userAgent = options.userAgent;
+        if (options.deviceInfo !== undefined)
+            auditLog.deviceInfo = options.deviceInfo;
+        if (options.errorMessage !== undefined)
+            auditLog.errorMessage = options.errorMessage;
         await firebase_1.db.collection('auditLogs').doc((0, uuid_1.v4)()).set(auditLog);
     }
     /**
