@@ -447,3 +447,5 @@ const soc2Controls = {
 - **Bug Bounty**: security@yourdomain.com
 - **Vulnerability Disclosure**: security@yourdomain.com
 - **General Security**: security@yourdomain.com
+
+
