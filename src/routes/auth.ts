@@ -7,6 +7,10 @@ import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse } from '../types/auth';
 import admin from 'firebase-admin';
+import { randomInt, createHash } from 'crypto';
+import { sendOtpEmail } from '../email';
+import { getJson, setJson } from '../redis';
+import { db } from '../firebase';
 
 export function createAuthRouter(): Router {
   const r = Router();
@@ -355,7 +359,182 @@ export function createAuthRouter(): Router {
     }
   );
 
+  // POST /auth/register/email/start - Send verification code for registration
+  r.post('/register/email/start', 
+    authRateLimits.register,
+    async (req, res) => {
+      try {
+        const { email } = req.body;
+        if (!email) {
+          return res.status(400).json({ 
+            error: 'invalid_request',
+            message: 'Email is required' 
+          });
+        }
+
+        // Check if email is already registered
+        if (await UserService.isEmailRegistered(email)) {
+          return res.status(409).json({ 
+            error: 'email_already_registered',
+            message: 'An account with this email already exists' 
+          });
+        }
+
+        // Rate limiting for email sending
+        const key = `register_otp:rl:${email}`;
+        const rl = (await getJson<{ count: number }>(key)) || { count: 0 };
+        if (rl.count >= 5) {
+          return res.status(429).json({ 
+            error: 'rate_limited',
+            message: 'Too many verification attempts. Please try again later.' 
+          });
+        }
+        rl.count += 1;
+        await setJson(key, rl, 600); // 10 minutes
+
+        // Generate and store OTP
+        const code = (randomInt(0, 999999) + '').padStart(6, '0');
+        const codeHash = sha256(code);
+        await db.collection('registerOtpCodes').add({ 
+          email, 
+          codeHash, 
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+          createdAt: new Date() 
+        });
+
+        // Send email
+        try {
+          await sendOtpEmail(email, code);
+        } catch (emailError) {
+          console.error('Failed to send verification email:', emailError);
+          // Don't fail the request if email sending fails
+        }
+
+        res.json({ 
+          success: true,
+          message: 'Verification code sent to your email' 
+        });
+      } catch (error) {
+        console.error('Send registration OTP error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Failed to send verification code' 
+        });
+      }
+    }
+  );
+
+  // POST /auth/register/email/verify - Verify code and complete registration
+  r.post('/register/email/verify',
+    authRateLimits.register,
+    async (req, res) => {
+      try {
+        const { email, otp, password, name, device, deviceId } = req.body;
+        
+        if (!email || !otp || !password || !device || !deviceId) {
+          return res.status(400).json({ 
+            error: 'invalid_request',
+            message: 'Email, OTP, password, device, and deviceId are required' 
+          });
+        }
+
+        // Verify OTP
+        const recordSnap = await db
+          .collection('registerOtpCodes')
+          .where('email', '==', email)
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+
+        if (recordSnap.empty) {
+          return res.status(400).json({ 
+            error: 'invalid_otp',
+            message: 'Invalid or expired verification code' 
+          });
+        }
+
+        const doc = recordSnap.docs[0];
+        const record = doc.data() as any;
+        
+        if (record.expiresAt.toDate() < new Date()) {
+          await doc.ref.delete(); // Clean up expired code
+          return res.status(400).json({ 
+            error: 'invalid_otp',
+            message: 'Verification code has expired' 
+          });
+        }
+
+        const isMatch = record.codeHash === sha256(otp);
+        if (!isMatch) {
+          return res.status(400).json({ 
+            error: 'invalid_otp',
+            message: 'Invalid verification code' 
+          });
+        }
+
+        // Clean up the OTP code
+        await doc.ref.delete();
+
+        // Check if email is still available (double-check)
+        if (await UserService.isEmailRegistered(email)) {
+          return res.status(409).json({ 
+            error: 'email_already_registered',
+            message: 'An account with this email already exists' 
+          });
+        }
+
+        // Create user
+        const user = await UserService.createUser({ email, password, device, deviceId, name });
+
+        // Create session
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
+        const { session, tokens } = await SessionService.createSession(
+          user.id,
+          device,
+          deviceId,
+          ipAddress,
+          userAgent
+        );
+
+        // Log successful registration
+        await AuditService.logAuthEvent('register', {
+          userId: user.id,
+          sessionId: session.id,
+          ipAddress,
+          userAgent,
+          deviceInfo: device,
+          success: true,
+        });
+
+        const response: AuthResponse = {
+          ...tokens,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+          },
+          deviceId,
+        };
+
+        res.status(201).json(response);
+      } catch (error) {
+        console.error('Verify registration OTP error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Registration verification failed' 
+        });
+      }
+    }
+  );
+
   return r;
+}
+
+// Helper functions
+function sha256(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
 }
 
 
