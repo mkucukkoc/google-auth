@@ -438,12 +438,10 @@ export function createAuthRouter(): Router {
           });
         }
 
-        // Verify OTP
+        // Verify OTP - Get all records for email and sort in memory
         const recordSnap = await db
           .collection('registerOtpCodes')
           .where('email', '==', email)
-          .orderBy('createdAt', 'desc')
-          .limit(1)
           .get();
 
         if (recordSnap.empty) {
@@ -453,7 +451,14 @@ export function createAuthRouter(): Router {
           });
         }
 
-        const doc = recordSnap.docs[0];
+        // Sort by createdAt in memory and get the most recent
+        const sortedDocs = recordSnap.docs.sort((a, b) => {
+          const aTime = a.data().createdAt?.toDate?.() || new Date(0);
+          const bTime = b.data().createdAt?.toDate?.() || new Date(0);
+          return bTime.getTime() - aTime.getTime();
+        });
+
+        const doc = sortedDocs[0];
         const record = doc.data() as any;
         
         if (record.expiresAt.toDate() < new Date()) {
