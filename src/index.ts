@@ -8,6 +8,7 @@ import { config } from './config';
 import { createAuthRouter } from './routes/auth';
 import { createEmailOtpRouter } from './routes/emailOtp';
 import { createGoogleAuthRouter } from './routes/google';
+import { createAppleAuthRouter } from './routes/apple';
 import { createPasswordResetRouter } from './routes/passwordReset';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
@@ -55,6 +56,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', createAuthRouter());
 app.use('/auth/email', createEmailOtpRouter());
 app.use('/auth/google', createGoogleAuthRouter());
+app.use('/auth/apple', createAppleAuthRouter());
 app.use('/auth/password-reset', createPasswordResetRouter());
 
 // Start server
