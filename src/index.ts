@@ -9,6 +9,7 @@ import { createEmailOtpRouter } from './routes/emailOtp';
 import { createGoogleAuthRouter } from './routes/google';
 import { createAppleAuthRouter } from './routes/apple';
 import { createPasswordResetRouter } from './routes/passwordReset';
+import notificationRouter from './routes/notifications';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
@@ -120,6 +121,7 @@ const startServer = async () => {
     app.use('/auth/google', createGoogleAuthRouter());
     app.use('/auth/apple', createAppleAuthRouter());
     app.use('/auth/password-reset', createPasswordResetRouter());
+    app.use('/notifications', notificationRouter);
 
     // 404 handler (must be before error handler)
     app.use(notFound);
