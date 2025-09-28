@@ -322,10 +322,17 @@ export const dbConnection = new DatabaseConnection();
 
 // Database query optimization helpers
 export class QueryOptimizer {
-  private firestore: Firestore;
+  private firestore: Firestore | null = null;
 
   constructor() {
-    this.firestore = databaseManager.getFirestore();
+    // Firestore will be initialized when needed
+  }
+
+  private getFirestore(): Firestore {
+    if (!this.firestore) {
+      this.firestore = databaseManager.getFirestore();
+    }
+    return this.firestore;
   }
 
   // Optimized query with pagination
@@ -336,7 +343,7 @@ export class QueryOptimizer {
     limit: number = 20,
     startAfter?: any
   ) {
-    let query: any = this.firestore.collection(collection);
+    let query: any = this.getFirestore().collection(collection);
 
     // Apply filters
     for (const filter of filters) {
@@ -368,7 +375,7 @@ export class QueryOptimizer {
 
   // Optimized count query
   async countQuery(collection: string, filters: any[] = []): Promise<number> {
-    let query: any = this.firestore.collection(collection);
+    let query: any = this.getFirestore().collection(collection);
 
     for (const filter of filters) {
       query = query.where(filter.field, filter.operator, filter.value);
@@ -385,7 +392,7 @@ export class QueryOptimizer {
     operation: 'sum' | 'avg' | 'min' | 'max',
     filters: any[] = []
   ): Promise<number> {
-    let query: any = this.firestore.collection(collection);
+    let query: any = this.getFirestore().collection(collection);
 
     for (const filter of filters) {
       query = query.where(filter.field, filter.operator, filter.value);

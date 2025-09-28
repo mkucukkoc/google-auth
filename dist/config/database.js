@@ -258,11 +258,18 @@ exports.dbConnection = new DatabaseConnection();
 // Database query optimization helpers
 class QueryOptimizer {
     constructor() {
-        this.firestore = exports.databaseManager.getFirestore();
+        this.firestore = null;
+        // Firestore will be initialized when needed
+    }
+    getFirestore() {
+        if (!this.firestore) {
+            this.firestore = exports.databaseManager.getFirestore();
+        }
+        return this.firestore;
     }
     // Optimized query with pagination
     async paginatedQuery(collection, filters = [], orderBy = { field: 'created_at', direction: 'desc' }, limit = 20, startAfter) {
-        let query = this.firestore.collection(collection);
+        let query = this.getFirestore().collection(collection);
         // Apply filters
         for (const filter of filters) {
             query = query.where(filter.field, filter.operator, filter.value);
@@ -287,7 +294,7 @@ class QueryOptimizer {
     }
     // Optimized count query
     async countQuery(collection, filters = []) {
-        let query = this.firestore.collection(collection);
+        let query = this.getFirestore().collection(collection);
         for (const filter of filters) {
             query = query.where(filter.field, filter.operator, filter.value);
         }
@@ -296,7 +303,7 @@ class QueryOptimizer {
     }
     // Optimized aggregation query
     async aggregateQuery(collection, field, operation, filters = []) {
-        let query = this.firestore.collection(collection);
+        let query = this.getFirestore().collection(collection);
         for (const filter of filters) {
             query = query.where(filter.field, filter.operator, filter.value);
         }
