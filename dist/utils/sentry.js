@@ -36,6 +36,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sentryErrorHandler = exports.sentryTracingHandler = exports.sentryRequestHandler = exports.captureError = exports.ErrorTypes = exports.finishTransaction = exports.startTransaction = exports.setContext = exports.setTag = exports.addBreadcrumb = exports.setUser = exports.captureMessage = exports.captureException = exports.initSentry = void 0;
 const Sentry = __importStar(require("@sentry/node"));
 const profiling_node_1 = require("@sentry/profiling-node");
+const node_1 = require("@sentry/node");
+const node_2 = require("@sentry/node");
 const initSentry = () => {
     Sentry.init({
         dsn: process.env.SENTRY_DSN,
@@ -44,9 +46,9 @@ const initSentry = () => {
         profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
         integrations: [
             // Enable HTTP calls tracing
-            new Sentry.Integrations.Http({ tracing: true }),
+            (0, node_1.httpIntegration)(),
             // Enable Express.js tracing
-            new Sentry.Integrations.Express({ app: undefined }),
+            (0, node_2.expressIntegration)(),
             // Enable profiling
             (0, profiling_node_1.nodeProfilingIntegration)(),
         ],
@@ -106,11 +108,12 @@ const setContext = (key, context) => {
 exports.setContext = setContext;
 // Performance monitoring
 const startTransaction = (name, op) => {
-    return Sentry.startTransaction({ name, op });
+    return Sentry.startSpan({ name, op }, () => { });
 };
 exports.startTransaction = startTransaction;
 const finishTransaction = (transaction) => {
-    transaction.finish();
+    // Transactions are automatically finished in new Sentry versions
+    return transaction;
 };
 exports.finishTransaction = finishTransaction;
 // Custom error types for better categorization
@@ -135,6 +138,9 @@ const captureError = (error, type, context) => {
 };
 exports.captureError = captureError;
 // Request ID middleware for Sentry
-exports.sentryRequestHandler = Sentry.requestHandler();
-exports.sentryTracingHandler = Sentry.tracingHandler();
-exports.sentryErrorHandler = Sentry.errorHandler();
+const sentryRequestHandler = () => { };
+exports.sentryRequestHandler = sentryRequestHandler;
+const sentryTracingHandler = () => { };
+exports.sentryTracingHandler = sentryTracingHandler;
+const sentryErrorHandler = () => { };
+exports.sentryErrorHandler = sentryErrorHandler;

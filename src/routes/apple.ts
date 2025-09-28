@@ -77,7 +77,7 @@ export function createAppleAuthRouter(): Router {
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
         
-        const { access_token, id_token } = tokenResp.data;
+        const { access_token, id_token } = (tokenResp.data as any);
         
         // Decode ID token to get user info
         const decodedToken = jwt.decode(id_token) as any;

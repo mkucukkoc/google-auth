@@ -87,21 +87,19 @@ class AuditService {
 
   // Log authentication events
   public async logAuthEvent(
-    action: 'login' | 'logout' | 'register' | 'password_reset' | 'email_verification',
-    userId: string,
-    success: boolean,
-    details?: any,
-    ipAddress?: string,
-    userAgent?: string
+    action: 'login' | 'logout' | 'register' | 'password_reset' | 'email_verification' | 'password_reset_request' | 'password_reset_success' | 'password_reset_confirm' | 'refresh' | 'reuse_detected' | 'logout_all',
+    details: any,
+    success?: boolean
   ): Promise<void> {
+    const { userId, ipAddress, userAgent, ...otherDetails } = details;
     await this.logEvent({
-      userId,
+      userId: userId || '',
       action,
       resource: 'authentication',
-      details,
+      details: otherDetails,
       ipAddress,
       userAgent,
-      success,
+      success: success !== undefined ? success : true,
     });
   }
 
@@ -125,6 +123,25 @@ class AuditService {
       ipAddress,
       userAgent,
       success,
+    });
+  }
+
+  // Log user actions
+  public async logUserAction(
+    userId: string,
+    action: string,
+    details?: any,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logEvent({
+      userId,
+      action,
+      resource: 'user_action',
+      details,
+      ipAddress,
+      userAgent,
+      success: true,
     });
   }
 
@@ -229,7 +246,7 @@ class AuditService {
       const snapshot = await firestoreQuery.get();
       const events: AuditEvent[] = [];
 
-      snapshot.forEach(doc => {
+      snapshot.forEach((doc: any) => {
         events.push({
           id: doc.id,
           ...doc.data(),
@@ -263,7 +280,7 @@ class AuditService {
       const snapshot = await query.get();
       const events: AuditEvent[] = [];
 
-      snapshot.forEach(doc => {
+      snapshot.forEach((doc: any) => {
         events.push({
           id: doc.id,
           ...doc.data(),
@@ -378,7 +395,7 @@ class AuditService {
       const batch = this.firestore.batch();
       let deletedCount = 0;
 
-      snapshot.forEach(doc => {
+      snapshot.forEach((doc: any) => {
         batch.delete(doc.ref);
         deletedCount++;
       });

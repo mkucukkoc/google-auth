@@ -14,7 +14,7 @@ export const validate = (schema: z.ZodSchema) => {
         res.status(400).json({
           error: 'validation_error',
           message: 'Invalid request data',
-          details: error.errors.map(err => ({
+          details: error.issues.map((err: any) => ({
             field: err.path.join('.'),
             message: err.message,
           })),
@@ -105,7 +105,7 @@ export const validateQuery = (schema: z.ZodSchema) => {
         res.status(400).json({
           error: 'validation_error',
           message: 'Invalid query parameters',
-          details: error.errors.map(err => ({
+          details: error.issues.map((err: any) => ({
             field: err.path.join('.'),
             message: err.message,
           })),
@@ -134,7 +134,7 @@ export const validateParams = (schema: z.ZodSchema) => {
         res.status(400).json({
           error: 'validation_error',
           message: 'Invalid URL parameters',
-          details: error.errors.map(err => ({
+          details: error.issues.map((err: any) => ({
             field: err.path.join('.'),
             message: err.message,
           })),

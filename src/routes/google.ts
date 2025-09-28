@@ -62,11 +62,11 @@ export function createGoogleAuthRouter(): Router {
           }),
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
-        const { access_token } = tokenResp.data;
+        const { access_token } = (tokenResp.data as any);
         const userResp = await axios.get(
           `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${access_token}`
         );
-        const payload = userResp.data;
+        const payload = userResp.data as any;
         const email = payload?.email;
         const emailVerified = payload?.email_verified;
         if (!email) return res.status(400).send('No email');

@@ -14,8 +14,10 @@
   "dependencies": {
     "@sentry/node": "^10.15.0",
     "@sentry/profiling-node": "^10.15.0",
+    "@types/axios": "^0.9.36",
     "@types/socket.io": "^3.0.1",
     "argon2": "^0.44.0",
+    "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",

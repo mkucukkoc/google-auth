@@ -16,7 +16,7 @@ const validate = (schema) => {
                 res.status(400).json({
                     error: 'validation_error',
                     message: 'Invalid request data',
-                    details: error.errors.map(err => ({
+                    details: error.issues.map((err) => ({
                         field: err.path.join('.'),
                         message: err.message,
                     })),
@@ -99,7 +99,7 @@ const validateQuery = (schema) => {
                 res.status(400).json({
                     error: 'validation_error',
                     message: 'Invalid query parameters',
-                    details: error.errors.map(err => ({
+                    details: error.issues.map((err) => ({
                         field: err.path.join('.'),
                         message: err.message,
                     })),
@@ -128,7 +128,7 @@ const validateParams = (schema) => {
                 res.status(400).json({
                     error: 'validation_error',
                     message: 'Invalid URL parameters',
-                    details: error.errors.map(err => ({
+                    details: error.issues.map((err) => ({
                         field: err.path.join('.'),
                         message: err.message,
                     })),

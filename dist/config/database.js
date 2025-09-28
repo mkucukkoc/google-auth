@@ -31,11 +31,11 @@ class DatabaseManager {
             else {
                 // Initialize new app
                 this.app = (0, app_1.initializeApp)({
-                    credential: {
+                    credential: (0, app_1.cert)({
                         projectId: config.projectId,
                         privateKey: config.privateKey.replace(/\\n/g, '\n'),
                         clientEmail: config.clientEmail,
-                    },
+                    }),
                     storageBucket: config.storageBucket,
                     databaseURL: config.databaseURL,
                 });
@@ -204,7 +204,7 @@ class DatabaseConnection {
                 lastError = error;
                 logger_1.logger.warn(`Database operation failed: ${operationName}`, {
                     attempt,
-                    error: error.message,
+                    error: error instanceof Error ? error.message : String(error),
                     willRetry: attempt < this.maxRetries,
                 });
                 if (attempt < this.maxRetries) {
@@ -268,7 +268,7 @@ class QueryOptimizer {
         }
         query = query.limit(limit);
         const snapshot = await query.get();
-        const docs = snapshot.docs.map(doc => ({
+        const docs = snapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
         }));
@@ -294,7 +294,7 @@ class QueryOptimizer {
             query = query.where(filter.field, filter.operator, filter.value);
         }
         const snapshot = await query.get();
-        const values = snapshot.docs.map(doc => doc.data()[field]).filter(val => val !== undefined);
+        const values = snapshot.docs.map((doc) => doc.data()[field]).filter((val) => val !== undefined);
         switch (operation) {
             case 'sum':
                 return values.reduce((sum, val) => sum + val, 0);

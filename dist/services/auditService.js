@@ -39,15 +39,16 @@ class AuditService {
         }
     }
     // Log authentication events
-    async logAuthEvent(action, userId, success, details, ipAddress, userAgent) {
+    async logAuthEvent(action, details, success) {
+        const { userId, ipAddress, userAgent, ...otherDetails } = details;
         await this.logEvent({
-            userId,
+            userId: userId || '',
             action,
             resource: 'authentication',
-            details,
+            details: otherDetails,
             ipAddress,
             userAgent,
-            success,
+            success: success !== undefined ? success : true,
         });
     }
     // Log API events
@@ -61,6 +62,18 @@ class AuditService {
             ipAddress,
             userAgent,
             success,
+        });
+    }
+    // Log user actions
+    async logUserAction(userId, action, details, ipAddress, userAgent) {
+        await this.logEvent({
+            userId,
+            action,
+            resource: 'user_action',
+            details,
+            ipAddress,
+            userAgent,
+            success: true,
         });
     }
     // Log chat events
@@ -134,7 +147,7 @@ class AuditService {
             }
             const snapshot = await firestoreQuery.get();
             const events = [];
-            snapshot.forEach(doc => {
+            snapshot.forEach((doc) => {
                 events.push({
                     id: doc.id,
                     ...doc.data(),
@@ -159,7 +172,7 @@ class AuditService {
             }
             const snapshot = await query.get();
             const events = [];
-            snapshot.forEach(doc => {
+            snapshot.forEach((doc) => {
                 events.push({
                     id: doc.id,
                     ...doc.data(),
@@ -255,7 +268,7 @@ class AuditService {
             }
             const batch = this.firestore.batch();
             let deletedCount = 0;
-            snapshot.forEach(doc => {
+            snapshot.forEach((doc) => {
                 batch.delete(doc.ref);
                 deletedCount++;
             });

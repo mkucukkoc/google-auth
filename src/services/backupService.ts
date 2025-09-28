@@ -147,7 +147,7 @@ class BackupService {
         size: 0,
         collections: [],
         duration,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -226,7 +226,7 @@ class BackupService {
         size: 0,
         collections: [],
         duration,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -442,7 +442,7 @@ class BackupService {
     try {
       await fs.promises.mkdir(dirPath, { recursive: true });
     } catch (error) {
-      if (error.code !== 'EEXIST') {
+      if ((error as any).code !== 'EEXIST') {
         throw error;
       }
     }

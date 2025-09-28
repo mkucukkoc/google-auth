@@ -57,7 +57,7 @@ export class WebSocketService {
         }
 
         // Verify token and get user info
-        const decoded = await authenticateToken({ headers: { authorization: `Bearer ${token}` } } as any, {} as any, () => {});
+        const decoded = await authenticateToken({ headers: { authorization: `Bearer ${token}` } } as any, {} as any, () => {}) as any;
         const user = decoded.user;
 
         if (!user) {

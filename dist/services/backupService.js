@@ -134,7 +134,7 @@ class BackupService {
                 size: 0,
                 collections: [],
                 duration,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
             };
         }
     }
@@ -199,7 +199,7 @@ class BackupService {
                 size: 0,
                 collections: [],
                 duration,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
             };
         }
     }

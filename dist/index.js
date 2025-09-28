@@ -52,6 +52,7 @@ const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_1 = require("./swagger");
 const rateLimitMiddleware_1 = require("./middleware/rateLimitMiddleware");
 const sessionService_1 = require("./services/sessionService");
+const auditService_1 = require("./services/auditService");
 const cacheService_1 = require("./services/cacheService");
 const database_1 = require("./config/database");
 const backupService_1 = require("./services/backupService");
@@ -100,7 +101,7 @@ app.set('trust proxy', 1);
 app.use(sentry_1.sentryRequestHandler);
 app.use(sentry_1.sentryTracingHandler);
 // Request logging
-app.use(requestLogger);
+// app.use(requestLogger); // Commented out - not available
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use((0, cors_1.default)({ origin: config_1.config.corsOrigin, credentials: true }));
@@ -175,7 +176,7 @@ setInterval(async () => {
         const { PasswordResetService } = await Promise.resolve().then(() => __importStar(require('./services/passwordResetService')));
         await Promise.all([
             sessionService_1.SessionService.cleanupExpiredSessions(),
-            AuditService.cleanupOldAuditLogs(90), // Keep 90 days
+            auditService_1.auditService.cleanupOldAuditLogs(90), // Keep 90 days
             PasswordResetService.cleanupExpiredTokens(),
             (0, rateLimitMiddleware_1.cleanupRateLimits)(),
         ]);

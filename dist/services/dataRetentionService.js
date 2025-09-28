@@ -147,7 +147,7 @@ class DataRetentionService {
                     deletedCount: 0,
                     duration: 0,
                     success: false,
-                    error: error.message,
+                    error: error instanceof Error ? error.message : String(error),
                 });
             }
         }
@@ -225,7 +225,7 @@ class DataRetentionService {
                 deletedCount,
                 duration: Date.now() - startTime,
                 success: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
             };
         }
     }
@@ -252,7 +252,7 @@ class DataRetentionService {
                     deletedCount: 0,
                     duration: 0,
                     success: false,
-                    error: error.message,
+                    error: error instanceof Error ? error.message : String(error),
                 });
             }
         }
@@ -303,7 +303,7 @@ class DataRetentionService {
                 deletedCount,
                 duration: Date.now() - startTime,
                 success: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
             };
         }
     }
@@ -359,7 +359,7 @@ class DataRetentionService {
                 deletedCount: archivedCount,
                 duration: Date.now() - startTime,
                 success: false,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
             };
         }
     }

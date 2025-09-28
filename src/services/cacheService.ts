@@ -275,7 +275,7 @@ class CacheService {
         return { connected: false, memory: null, info: null };
       }
 
-      const memory = await this.redis.memory('usage');
+      const memory = await this.redis.memory('STATS');
       const info = await this.redis.info();
 
       return {

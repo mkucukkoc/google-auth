@@ -127,7 +127,7 @@ export const globalErrorHandler = (
 
   // Handle specific error types
   if (err.name === 'ValidationError') error = handleValidationError(err);
-  if (err.code === 11000) error = handleMongoError(err);
+  if ((err as any).code === 11000) error = handleMongoError(err);
   if (err.name === 'JsonWebTokenError') error = handleJWTError();
   if (err.name === 'TokenExpiredError') error = handleJWTExpiredError();
   if (err.message?.includes('rate limit')) error = handleRateLimitError();

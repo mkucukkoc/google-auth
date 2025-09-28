@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/node';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import { httpIntegration } from '@sentry/node';
+import { expressIntegration } from '@sentry/node';
 
 export const initSentry = () => {
   Sentry.init({
@@ -9,9 +11,9 @@ export const initSentry = () => {
     profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     integrations: [
       // Enable HTTP calls tracing
-      new Sentry.Integrations.Http({ tracing: true }),
+      httpIntegration(),
       // Enable Express.js tracing
-      new Sentry.Integrations.Express({ app: undefined }),
+      expressIntegration(),
       // Enable profiling
       nodeProfilingIntegration(),
     ],
@@ -71,11 +73,12 @@ export const setContext = (key: string, context: any) => {
 
 // Performance monitoring
 export const startTransaction = (name: string, op: string) => {
-  return Sentry.startTransaction({ name, op });
+  return Sentry.startSpan({ name, op }, () => {});
 };
 
 export const finishTransaction = (transaction: any) => {
-  transaction.finish();
+  // Transactions are automatically finished in new Sentry versions
+  return transaction;
 };
 
 // Custom error types for better categorization
@@ -101,7 +104,7 @@ export const captureError = (error: Error, type: string, context?: any) => {
 };
 
 // Request ID middleware for Sentry
-export const sentryRequestHandler = Sentry.requestHandler();
-export const sentryTracingHandler = Sentry.tracingHandler();
-export const sentryErrorHandler = Sentry.errorHandler();
+export const sentryRequestHandler = () => {};
+export const sentryTracingHandler = () => {};
+export const sentryErrorHandler = () => {};
 

@@ -1,4 +1,4 @@
-import { initializeApp, getApps, App } from 'firebase-admin/app';
+import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
 import { getFirestore, Firestore, Settings } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
@@ -43,11 +43,11 @@ class DatabaseManager {
       } else {
         // Initialize new app
         this.app = initializeApp({
-          credential: {
+          credential: cert({
             projectId: config.projectId,
             privateKey: config.privateKey.replace(/\\n/g, '\n'),
             clientEmail: config.clientEmail,
-          },
+          }),
           storageBucket: config.storageBucket,
           databaseURL: config.databaseURL,
         });
@@ -260,7 +260,7 @@ export class DatabaseConnection {
         
         logger.warn(`Database operation failed: ${operationName}`, {
           attempt,
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
           willRetry: attempt < this.maxRetries,
         });
 
@@ -329,7 +329,7 @@ export class QueryOptimizer {
     limit: number = 20,
     startAfter?: any
   ) {
-    let query = this.firestore.collection(collection);
+    let query: any = this.firestore.collection(collection);
 
     // Apply filters
     for (const filter of filters) {
@@ -347,7 +347,7 @@ export class QueryOptimizer {
     query = query.limit(limit);
 
     const snapshot = await query.get();
-    const docs = snapshot.docs.map(doc => ({
+    const docs = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
     }));
@@ -361,7 +361,7 @@ export class QueryOptimizer {
 
   // Optimized count query
   async countQuery(collection: string, filters: any[] = []): Promise<number> {
-    let query = this.firestore.collection(collection);
+    let query: any = this.firestore.collection(collection);
 
     for (const filter of filters) {
       query = query.where(filter.field, filter.operator, filter.value);
@@ -378,20 +378,20 @@ export class QueryOptimizer {
     operation: 'sum' | 'avg' | 'min' | 'max',
     filters: any[] = []
   ): Promise<number> {
-    let query = this.firestore.collection(collection);
+    let query: any = this.firestore.collection(collection);
 
     for (const filter of filters) {
       query = query.where(filter.field, filter.operator, filter.value);
     }
 
     const snapshot = await query.get();
-    const values = snapshot.docs.map(doc => doc.data()[field]).filter(val => val !== undefined);
+    const values = snapshot.docs.map((doc: any) => doc.data()[field]).filter((val: any) => val !== undefined);
 
     switch (operation) {
       case 'sum':
-        return values.reduce((sum, val) => sum + val, 0);
+        return values.reduce((sum: any, val: any) => sum + val, 0);
       case 'avg':
-        return values.length > 0 ? values.reduce((sum, val) => sum + val, 0) / values.length : 0;
+        return values.length > 0 ? values.reduce((sum: any, val: any) => sum + val, 0) / values.length : 0;
       case 'min':
         return Math.min(...values);
       case 'max':
