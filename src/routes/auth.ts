@@ -6,6 +6,7 @@ import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
 import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse } from '../types/auth';
+import { StandardResponse, ResponseBuilder } from '../types/response';
 import admin from 'firebase-admin';
 import { randomInt, createHash } from 'crypto';
 import { sendOtpEmail } from '../email';
@@ -34,10 +35,10 @@ export function createAuthRouter(): Router {
             success: false,
             errorMessage: 'Email already registered',
           });
-          return res.status(409).json({ 
-            error: 'email_already_registered',
-            message: 'An account with this email already exists' 
-          });
+          return res.status(409).json(ResponseBuilder.error(
+            'email_already_registered',
+            'An account with this email already exists'
+          ));
         }
 
         // Create user
@@ -73,13 +74,13 @@ export function createAuthRouter(): Router {
           deviceId,
         };
 
-        res.status(201).json(response);
+        res.status(201).json(ResponseBuilder.success(response, 'User registered successfully'));
       } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ 
-          error: 'internal_error',
-          message: 'Registration failed' 
-        });
+        res.status(500).json(ResponseBuilder.error(
+          'internal_error',
+          'Registration failed'
+        ));
       }
     }
   );

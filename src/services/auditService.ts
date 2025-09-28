@@ -1,126 +1,498 @@
-import { db } from '../firebase';
-import { AuditLog, DeviceInfo } from '../types/auth';
-import { v4 as uuidv4 } from 'uuid';
+import { getFirestore } from 'firebase-admin/firestore';
+import { logger } from '../utils/logger';
+import { cacheService } from './cacheService';
 
-export class AuditService {
-  /**
-   * Log an authentication event
-   */
-  static async logAuthEvent(
-    event: AuditLog['event'],
-    options: {
-      userId?: string;
-      sessionId?: string;
-      ipAddress?: string;
-      userAgent?: string;
-      deviceInfo?: DeviceInfo;
-      success: boolean;
-      errorMessage?: string;
-    }
-  ): Promise<void> {
-    // Filter out undefined values to avoid Firestore errors
-    const auditLog: any = {
-      event,
-      success: options.success,
-      createdAt: new Date(),
-    };
+export interface AuditEvent {
+  id?: string;
+  userId?: string;
+  sessionId?: string;
+  action: string;
+  resource: string;
+  resourceId?: string;
+  details?: any;
+  ipAddress?: string;
+  userAgent?: string;
+  timestamp: Date;
+  success: boolean;
+  errorMessage?: string;
+  metadata?: any;
+}
 
-    // Only add fields that are not undefined
-    if (options.userId !== undefined) auditLog.userId = options.userId;
-    if (options.sessionId !== undefined) auditLog.sessionId = options.sessionId;
-    if (options.ipAddress !== undefined) auditLog.ipAddress = options.ipAddress;
-    if (options.userAgent !== undefined) auditLog.userAgent = options.userAgent;
-    if (options.deviceInfo !== undefined) auditLog.deviceInfo = options.deviceInfo;
-    if (options.errorMessage !== undefined) auditLog.errorMessage = options.errorMessage;
+export interface AuditQuery {
+  userId?: string;
+  action?: string;
+  resource?: string;
+  startDate?: Date;
+  endDate?: Date;
+  success?: boolean;
+  limit?: number;
+  offset?: number;
+}
 
-    await db.collection('auditLogs').doc(uuidv4()).set(auditLog);
+export interface AuditStats {
+  totalEvents: number;
+  eventsByAction: Record<string, number>;
+  eventsByResource: Record<string, number>;
+  eventsByUser: Record<string, number>;
+  successRate: number;
+  errorRate: number;
+  timeRange: {
+    start: Date;
+    end: Date;
+  };
+}
+
+class AuditService {
+  private static instance: AuditService;
+  private firestore: any;
+  private collectionName = 'audit_logs';
+
+  private constructor() {
+    this.firestore = getFirestore();
   }
 
-  /**
-   * Get audit logs for a user
-   */
-  static async getUserAuditLogs(
+  public static getInstance(): AuditService {
+    if (!AuditService.instance) {
+      AuditService.instance = new AuditService();
+    }
+    return AuditService.instance;
+  }
+
+  // Log an audit event
+  public async logEvent(event: Omit<AuditEvent, 'timestamp'>): Promise<void> {
+    try {
+      const auditEvent: AuditEvent = {
+        ...event,
+        timestamp: new Date(),
+      };
+
+      // Add to Firestore
+      await this.firestore.collection(this.collectionName).add(auditEvent);
+
+      // Add to cache for quick access
+      await this.cacheRecentEvent(auditEvent);
+
+      logger.info('Audit event logged', {
+        action: event.action,
+        resource: event.resource,
+        userId: event.userId,
+        success: event.success,
+      });
+
+    } catch (error) {
+      logger.error('Failed to log audit event:', error);
+      // Don't throw error to avoid breaking the main flow
+    }
+  }
+
+  // Log authentication events
+  public async logAuthEvent(
+    action: 'login' | 'logout' | 'register' | 'password_reset' | 'email_verification',
     userId: string,
-    limit: number = 50
-  ): Promise<AuditLog[]> {
-    const snapshot = await db
-      .collection('auditLogs')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .limit(limit)
-      .get();
-
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as AuditLog[];
-  }
-
-  /**
-   * Get audit logs for a session
-   */
-  static async getSessionAuditLogs(
-    sessionId: string,
-    limit: number = 20
-  ): Promise<AuditLog[]> {
-    const snapshot = await db
-      .collection('auditLogs')
-      .where('sessionId', '==', sessionId)
-      .orderBy('createdAt', 'desc')
-      .limit(limit)
-      .get();
-
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as AuditLog[];
-  }
-
-  /**
-   * Get failed login attempts for an IP address
-   */
-  static async getFailedLoginAttempts(
-    ipAddress: string,
-    since: Date
-  ): Promise<AuditLog[]> {
-    const snapshot = await db
-      .collection('auditLogs')
-      .where('ipAddress', '==', ipAddress)
-      .where('event', '==', 'login')
-      .where('success', '==', false)
-      .where('createdAt', '>', since)
-      .orderBy('createdAt', 'desc')
-      .get();
-
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as AuditLog[];
-  }
-
-  /**
-   * Clean up old audit logs (older than specified days)
-   */
-  static async cleanupOldAuditLogs(daysToKeep: number = 90): Promise<number> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
-
-    const snapshot = await db
-      .collection('auditLogs')
-      .where('createdAt', '<', cutoffDate)
-      .get();
-
-    const batch = db.batch();
-    snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
+    success: boolean,
+    details?: any,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logEvent({
+      userId,
+      action,
+      resource: 'authentication',
+      details,
+      ipAddress,
+      userAgent,
+      success,
     });
+  }
 
-    if (!snapshot.empty) {
-      await batch.commit();
+  // Log API events
+  public async logApiEvent(
+    action: 'create' | 'read' | 'update' | 'delete' | 'search',
+    resource: string,
+    resourceId: string,
+    userId: string,
+    success: boolean,
+    details?: any,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logEvent({
+      userId,
+      action,
+      resource,
+      resourceId,
+      details,
+      ipAddress,
+      userAgent,
+      success,
+    });
+  }
+
+  // Log chat events
+  public async logChatEvent(
+    action: 'create' | 'update' | 'delete' | 'message_sent' | 'file_uploaded',
+    chatId: string,
+    userId: string,
+    success: boolean,
+    details?: any,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logEvent({
+      userId,
+      action,
+      resource: 'chat',
+      resourceId: chatId,
+      details,
+      ipAddress,
+      userAgent,
+      success,
+    });
+  }
+
+  // Log file events
+  public async logFileEvent(
+    action: 'upload' | 'download' | 'delete' | 'process',
+    fileId: string,
+    userId: string,
+    success: boolean,
+    details?: any,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logEvent({
+      userId,
+      action,
+      resource: 'file',
+      resourceId: fileId,
+      details,
+      ipAddress,
+      userAgent,
+      success,
+    });
+  }
+
+  // Log security events
+  public async logSecurityEvent(
+    action: 'suspicious_activity' | 'rate_limit_exceeded' | 'unauthorized_access' | 'data_breach',
+    userId: string,
+    details: any,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logEvent({
+      userId,
+      action,
+      resource: 'security',
+      details,
+      ipAddress,
+      userAgent,
+      success: false, // Security events are typically failures
+    });
+  }
+
+  // Query audit events
+  public async queryEvents(query: AuditQuery): Promise<AuditEvent[]> {
+    try {
+      let firestoreQuery = this.firestore.collection(this.collectionName);
+
+      // Apply filters
+      if (query.userId) {
+        firestoreQuery = firestoreQuery.where('userId', '==', query.userId);
+      }
+      if (query.action) {
+        firestoreQuery = firestoreQuery.where('action', '==', query.action);
+      }
+      if (query.resource) {
+        firestoreQuery = firestoreQuery.where('resource', '==', query.resource);
+      }
+      if (query.success !== undefined) {
+        firestoreQuery = firestoreQuery.where('success', '==', query.success);
+      }
+      if (query.startDate) {
+        firestoreQuery = firestoreQuery.where('timestamp', '>=', query.startDate);
+      }
+      if (query.endDate) {
+        firestoreQuery = firestoreQuery.where('timestamp', '<=', query.endDate);
+      }
+
+      // Apply ordering and pagination
+      firestoreQuery = firestoreQuery.orderBy('timestamp', 'desc');
+      
+      if (query.offset) {
+        firestoreQuery = firestoreQuery.offset(query.offset);
+      }
+      if (query.limit) {
+        firestoreQuery = firestoreQuery.limit(query.limit);
+      }
+
+      const snapshot = await firestoreQuery.get();
+      const events: AuditEvent[] = [];
+
+      snapshot.forEach(doc => {
+        events.push({
+          id: doc.id,
+          ...doc.data(),
+        });
+      });
+
+      return events;
+
+    } catch (error) {
+      logger.error('Failed to query audit events:', error);
+      return [];
     }
+  }
 
-    return snapshot.size;
+  // Get audit statistics
+  public async getAuditStats(
+    startDate: Date,
+    endDate: Date,
+    userId?: string
+  ): Promise<AuditStats> {
+    try {
+      let query = this.firestore
+        .collection(this.collectionName)
+        .where('timestamp', '>=', startDate)
+        .where('timestamp', '<=', endDate);
+
+      if (userId) {
+        query = query.where('userId', '==', userId);
+      }
+
+      const snapshot = await query.get();
+      const events: AuditEvent[] = [];
+
+      snapshot.forEach(doc => {
+        events.push({
+          id: doc.id,
+          ...doc.data(),
+        });
+      });
+
+      // Calculate statistics
+      const totalEvents = events.length;
+      const successfulEvents = events.filter(e => e.success).length;
+      const failedEvents = totalEvents - successfulEvents;
+
+      const eventsByAction: Record<string, number> = {};
+      const eventsByResource: Record<string, number> = {};
+      const eventsByUser: Record<string, number> = {};
+
+      events.forEach(event => {
+        // Count by action
+        eventsByAction[event.action] = (eventsByAction[event.action] || 0) + 1;
+        
+        // Count by resource
+        eventsByResource[event.resource] = (eventsByResource[event.resource] || 0) + 1;
+        
+        // Count by user
+        if (event.userId) {
+          eventsByUser[event.userId] = (eventsByUser[event.userId] || 0) + 1;
+        }
+      });
+
+      return {
+        totalEvents,
+        eventsByAction,
+        eventsByResource,
+        eventsByUser,
+        successRate: totalEvents > 0 ? (successfulEvents / totalEvents) * 100 : 0,
+        errorRate: totalEvents > 0 ? (failedEvents / totalEvents) * 100 : 0,
+        timeRange: {
+          start: startDate,
+          end: endDate,
+        },
+      };
+
+    } catch (error) {
+      logger.error('Failed to get audit stats:', error);
+      return {
+        totalEvents: 0,
+        eventsByAction: {},
+        eventsByResource: {},
+        eventsByUser: {},
+        successRate: 0,
+        errorRate: 0,
+        timeRange: {
+          start: startDate,
+          end: endDate,
+        },
+      };
+    }
+  }
+
+  // Get user activity summary
+  public async getUserActivitySummary(
+    userId: string,
+    days: number = 30
+  ): Promise<any> {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const events = await this.queryEvents({
+        userId,
+        startDate,
+        endDate,
+        limit: 1000,
+      });
+
+      const summary = {
+        userId,
+        period: { start: startDate, end: endDate },
+        totalEvents: events.length,
+        lastActivity: events.length > 0 ? events[0].timestamp : null,
+        activityByDay: this.groupEventsByDay(events),
+        topActions: this.getTopActions(events),
+        topResources: this.getTopResources(events),
+        successRate: this.calculateSuccessRate(events),
+      };
+
+      return summary;
+
+    } catch (error) {
+      logger.error('Failed to get user activity summary:', error);
+      return null;
+    }
+  }
+
+  // Cleanup old audit logs
+  public async cleanupOldAuditLogs(retentionDays: number): Promise<number> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+      const query = this.firestore
+        .collection(this.collectionName)
+        .where('timestamp', '<', cutoffDate)
+        .limit(1000);
+
+      const snapshot = await query.get();
+      
+      if (snapshot.empty) {
+        return 0;
+      }
+
+      const batch = this.firestore.batch();
+      let deletedCount = 0;
+
+      snapshot.forEach(doc => {
+        batch.delete(doc.ref);
+        deletedCount++;
+      });
+
+      await batch.commit();
+
+      logger.info(`Cleaned up ${deletedCount} old audit logs`);
+      return deletedCount;
+
+    } catch (error) {
+      logger.error('Failed to cleanup old audit logs:', error);
+      return 0;
+    }
+  }
+
+  // Cache recent events for quick access
+  private async cacheRecentEvent(event: AuditEvent): Promise<void> {
+    try {
+      const cacheKey = `audit:recent:${event.userId || 'anonymous'}`;
+      const recentEvents = await cacheService.get<AuditEvent[]>(cacheKey) || [];
+      
+      recentEvents.unshift(event);
+      
+      // Keep only last 50 events
+      const trimmedEvents = recentEvents.slice(0, 50);
+      
+      await cacheService.set(cacheKey, trimmedEvents, 3600); // 1 hour
+    } catch (error) {
+      logger.error('Failed to cache recent event:', error);
+    }
+  }
+
+  // Helper methods
+  private groupEventsByDay(events: AuditEvent[]): Record<string, number> {
+    const grouped: Record<string, number> = {};
+    
+    events.forEach(event => {
+      const day = event.timestamp.toISOString().split('T')[0];
+      grouped[day] = (grouped[day] || 0) + 1;
+    });
+    
+    return grouped;
+  }
+
+  private getTopActions(events: AuditEvent[], limit: number = 5): Array<{ action: string; count: number }> {
+    const actionCounts: Record<string, number> = {};
+    
+    events.forEach(event => {
+      actionCounts[event.action] = (actionCounts[event.action] || 0) + 1;
+    });
+    
+    return Object.entries(actionCounts)
+      .map(([action, count]) => ({ action, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  }
+
+  private getTopResources(events: AuditEvent[], limit: number = 5): Array<{ resource: string; count: number }> {
+    const resourceCounts: Record<string, number> = {};
+    
+    events.forEach(event => {
+      resourceCounts[event.resource] = (resourceCounts[event.resource] || 0) + 1;
+    });
+    
+    return Object.entries(resourceCounts)
+      .map(([resource, count]) => ({ resource, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  }
+
+  private calculateSuccessRate(events: AuditEvent[]): number {
+    if (events.length === 0) return 0;
+    
+    const successfulEvents = events.filter(e => e.success).length;
+    return (successfulEvents / events.length) * 100;
+  }
+
+  // Export audit data
+  public async exportAuditData(
+    startDate: Date,
+    endDate: Date,
+    format: 'json' | 'csv' = 'json'
+  ): Promise<string> {
+    try {
+      const events = await this.queryEvents({
+        startDate,
+        endDate,
+        limit: 10000, // Max export limit
+      });
+
+      if (format === 'json') {
+        return JSON.stringify(events, null, 2);
+      } else {
+        // Convert to CSV
+        const headers = ['id', 'userId', 'action', 'resource', 'resourceId', 'timestamp', 'success', 'ipAddress'];
+        const csvRows = [headers.join(',')];
+        
+        events.forEach(event => {
+          const row = headers.map(header => {
+            const value = event[header as keyof AuditEvent];
+            return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value || '';
+          });
+          csvRows.push(row.join(','));
+        });
+        
+        return csvRows.join('\n');
+      }
+
+    } catch (error) {
+      logger.error('Failed to export audit data:', error);
+      throw error;
+    }
   }
 }
 
-
+// Export singleton instance
+export const auditService = AuditService.getInstance();
