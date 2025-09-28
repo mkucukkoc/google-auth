@@ -229,12 +229,19 @@ export const databaseManager = DatabaseManager.getInstance();
 
 // Database connection wrapper with retry logic
 export class DatabaseConnection {
-  private firestore: Firestore;
+  private firestore: Firestore | null = null;
   private maxRetries: number = 3;
   private retryDelay: number = 1000;
 
   constructor() {
-    this.firestore = databaseManager.getFirestore();
+    // Firestore will be initialized when needed
+  }
+
+  private getFirestore(): Firestore {
+    if (!this.firestore) {
+      this.firestore = databaseManager.getFirestore();
+    }
+    return this.firestore!;
   }
 
   async executeWithRetry<T>(
@@ -282,7 +289,7 @@ export class DatabaseConnection {
   // Batch operations with connection pooling
   async batchWrite(operations: Array<() => Promise<any>>): Promise<any[]> {
     return this.executeWithRetry(async () => {
-      const batch = this.firestore.batch();
+      const batch = this.getFirestore().batch();
       const results: any[] = [];
 
       for (const operation of operations) {
@@ -305,7 +312,7 @@ export class DatabaseConnection {
     updateFunction: (transaction: any) => Promise<T>
   ): Promise<T> {
     return this.executeWithRetry(async () => {
-      return this.firestore.runTransaction(updateFunction);
+      return this.getFirestore().runTransaction(updateFunction);
     }, 'runTransaction');
   }
 }

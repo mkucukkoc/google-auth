@@ -60,155 +60,165 @@ const initializeServices = async () => {
 };
 
 // Initialize services before creating app
-// Initialize services
-initializeServices().catch(err => {
-  logger.error({ error: err }, 'Failed to initialize services');
+let app: express.Application;
+
+const startServer = async () => {
+  try {
+    // Initialize services first
+    await initializeServices();
+    
+    // Create app after services are initialized
+    app = express();
+    
+    // Trust proxy for accurate IP addresses
+    app.set('trust proxy', 1);
+
+    // Request logging
+    // app.use(requestLogger); // Commented out - not available
+
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    app.use(cors({ origin: config.corsOrigin, credentials: true }));
+    app.use(helmet());
+
+    // Global rate limiting
+    const limiter = rateLimit({ 
+      windowMs: 60_000, 
+      max: 100,
+      message: {
+        error: 'rate_limit_exceeded',
+        message: 'Too many requests from this IP, please try again later.'
+      }
+    });
+    app.use(limiter);
+
+    // Swagger documentation
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+    // Health check
+    app.get('/health', (_req, res) => {
+      res.json({ 
+        ok: true, 
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0'
+      });
+    });
+
+    // API Versioning
+    const API_VERSION = process.env.API_VERSION || 'v1';
+
+    // API routes with versioning
+    app.use(`/api/${API_VERSION}/auth`, createAuthRouter());
+    app.use(`/api/${API_VERSION}/auth/email`, createEmailOtpRouter());
+    app.use(`/api/${API_VERSION}/auth/google`, createGoogleAuthRouter());
+    app.use(`/api/${API_VERSION}/auth/apple`, createAppleAuthRouter());
+    app.use(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter());
+
+    // Legacy routes (backward compatibility)
+    app.use('/auth', createAuthRouter());
+    app.use('/auth/email', createEmailOtpRouter());
+    app.use('/auth/google', createGoogleAuthRouter());
+    app.use('/auth/apple', createAppleAuthRouter());
+    app.use('/auth/password-reset', createPasswordResetRouter());
+
+    // 404 handler (must be before error handler)
+    app.use(notFound);
+
+    // Sentry error handler (must be before other error handlers)
+    app.use(sentryErrorHandler);
+
+    // Global error handler (must be last)
+    app.use(globalErrorHandler);
+
+    // Start server
+    const server = app.listen(config.port, () => {
+      logger.info({ port: config.port }, 'Server listening');
+    });
+
+    // Initialize WebSocket
+    initializeWebSocket(server);
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      logger.info('SIGTERM received, shutting down gracefully');
+      server.close(() => {
+        logger.info('Process terminated');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      logger.info('SIGINT received, shutting down gracefully');
+      server.close(() => {
+        logger.info('Process terminated');
+        process.exit(0);
+      });
+    });
+
+    // Error handling setup
+    handleUncaughtException();
+    handleUnhandledRejection();
+
+    // Cleanup tasks (run every hour)
+    setInterval(async () => {
+      try {
+        const { PasswordResetService } = await import('./services/passwordResetService');
+        await Promise.all([
+          SessionService.cleanupExpiredSessions(),
+          auditService.cleanupOldAuditLogs(90), // Keep 90 days
+          PasswordResetService.cleanupExpiredTokens(),
+          cleanupRateLimits(),
+        ]);
+        logger.info('Cleanup tasks completed');
+      } catch (error) {
+        logger.error({ error }, 'Cleanup tasks failed');
+      }
+    }, 60 * 60 * 1000); // 1 hour
+
+    // Data retention cleanup (run daily at 3 AM)
+    setInterval(async () => {
+      try {
+        const results = await dataRetentionService.runRetentionPolicies();
+        const totalDeleted = results.reduce((sum, result) => sum + result.deletedCount, 0);
+        logger.info(`Data retention cleanup completed: ${totalDeleted} documents deleted`);
+      } catch (error) {
+        logger.error('Data retention cleanup failed:', error);
+      }
+    }, 24 * 60 * 60 * 1000); // 24 hours
+
+    // Backup tasks (run daily at 2 AM)
+    setInterval(async () => {
+      try {
+        const backupResult = await backupService.createFullBackup();
+        if (backupResult.success) {
+          logger.info(`Daily backup completed: ${backupResult.backupId}`);
+        } else {
+          logger.error(`Daily backup failed: ${backupResult.error}`);
+        }
+      } catch (error) {
+        logger.error('Backup task failed:', error);
+      }
+    }, 24 * 60 * 60 * 1000); // 24 hours
+
+    // Cleanup old backups (run weekly)
+    setInterval(async () => {
+      try {
+        const deletedCount = await backupService.cleanupOldBackups();
+        logger.info(`Backup cleanup completed: ${deletedCount} old backups deleted`);
+      } catch (error) {
+        logger.error('Backup cleanup failed:', error);
+      }
+    }, 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  } catch (error) {
+    logger.error('Server startup failed:', error);
+    process.exit(1);
+  }
+};
+
+// Start the server
+startServer().catch(err => {
+  logger.error({ error: err }, 'Failed to start server');
   process.exit(1);
 });
-
-const app = express();
-
-// Trust proxy for accurate IP addresses
-app.set('trust proxy', 1);
-
-// Sentry request handler (must be first)
-app.use(sentryRequestHandler);
-app.use(sentryTracingHandler);
-
-// Request logging
-// app.use(requestLogger); // Commented out - not available
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
-app.use(helmet());
-
-// Global rate limiting
-const limiter = rateLimit({ 
-  windowMs: 60_000, 
-  max: 100,
-  message: {
-    error: 'rate_limit_exceeded',
-    message: 'Too many requests from this IP, please try again later.'
-  }
-});
-app.use(limiter);
-
-// Swagger documentation
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ 
-    ok: true, 
-    timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '1.0.0'
-  });
-});
-
-// API Versioning
-const API_VERSION = process.env.API_VERSION || 'v1';
-
-// API routes with versioning
-app.use(`/api/${API_VERSION}/auth`, createAuthRouter());
-app.use(`/api/${API_VERSION}/auth/email`, createEmailOtpRouter());
-app.use(`/api/${API_VERSION}/auth/google`, createGoogleAuthRouter());
-app.use(`/api/${API_VERSION}/auth/apple`, createAppleAuthRouter());
-app.use(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter());
-
-// Legacy routes (backward compatibility)
-app.use('/auth', createAuthRouter());
-app.use('/auth/email', createEmailOtpRouter());
-app.use('/auth/google', createGoogleAuthRouter());
-app.use('/auth/apple', createAppleAuthRouter());
-app.use('/auth/password-reset', createPasswordResetRouter());
-
-// Start server
-const server = app.listen(config.port, () => {
-  logger.info({ port: config.port }, 'Server listening');
-});
-
-// Initialize WebSocket
-initializeWebSocket(server);
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    logger.info('Process terminated');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    logger.info('Process terminated');
-    process.exit(0);
-  });
-});
-
-// Error handling setup
-handleUncaughtException();
-handleUnhandledRejection();
-
-// 404 handler (must be before error handler)
-app.use(notFound);
-
-// Sentry error handler (must be before other error handlers)
-app.use(sentryErrorHandler);
-
-// Global error handler (must be last)
-app.use(globalErrorHandler);
-
-// Cleanup tasks (run every hour)
-setInterval(async () => {
-  try {
-    const { PasswordResetService } = await import('./services/passwordResetService');
-    await Promise.all([
-      SessionService.cleanupExpiredSessions(),
-      auditService.cleanupOldAuditLogs(90), // Keep 90 days
-      PasswordResetService.cleanupExpiredTokens(),
-      cleanupRateLimits(),
-    ]);
-    logger.info('Cleanup tasks completed');
-  } catch (error) {
-    logger.error({ error }, 'Cleanup tasks failed');
-  }
-}, 60 * 60 * 1000); // 1 hour
-
-// Data retention cleanup (run daily at 3 AM)
-setInterval(async () => {
-  try {
-    const results = await dataRetentionService.runRetentionPolicies();
-    const totalDeleted = results.reduce((sum, result) => sum + result.deletedCount, 0);
-    logger.info(`Data retention cleanup completed: ${totalDeleted} documents deleted`);
-  } catch (error) {
-    logger.error('Data retention cleanup failed:', error);
-  }
-}, 24 * 60 * 60 * 1000); // 24 hours
-
-// Backup tasks (run daily at 2 AM)
-setInterval(async () => {
-  try {
-    const backupResult = await backupService.createFullBackup();
-    if (backupResult.success) {
-      logger.info(`Daily backup completed: ${backupResult.backupId}`);
-    } else {
-      logger.error(`Daily backup failed: ${backupResult.error}`);
-    }
-  } catch (error) {
-    logger.error('Backup task failed:', error);
-  }
-}, 24 * 60 * 60 * 1000); // 24 hours
-
-// Cleanup old backups (run weekly)
-setInterval(async () => {
-  try {
-    const deletedCount = await backupService.cleanupOldBackups();
-    logger.info(`Backup cleanup completed: ${deletedCount} old backups deleted`);
-  } catch (error) {
-    logger.error('Backup cleanup failed:', error);
-  }
-}, 7 * 24 * 60 * 60 * 1000); // 7 days
 
