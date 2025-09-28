@@ -3,7 +3,7 @@ import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { SessionService } from './sessionService';
-import { AuditService } from './auditService';
+import { auditService } from './auditService';
 
 export interface SocketUser {
   userId: string;
@@ -188,7 +188,7 @@ export class WebSocketService {
         this.io.to(`chat:${chatId}`).emit('chat:message', message);
 
         // Log message for audit
-        await AuditService.logUserAction(user.id, 'chat_message', {
+        await auditService.logUserAction(user.id, 'chat_message', {
           chatId,
           messageId: message.id,
           messageType: type,

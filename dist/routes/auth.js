@@ -11,7 +11,12 @@ const auditService_1 = require("../services/auditService");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
+const response_1 = require("../types/response");
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
+const crypto_1 = require("crypto");
+const email_1 = require("../email");
+const redis_1 = require("../redis");
+const firebase_1 = require("../firebase");
 function createAuthRouter() {
     const r = (0, express_1.Router)();
     // POST /auth/register
@@ -22,24 +27,21 @@ function createAuthRouter() {
             const userAgent = req.get('User-Agent');
             // Check if email is already registered
             if (await userService_1.UserService.isEmailRegistered(email)) {
-                await auditService_1.AuditService.logAuthEvent('register', {
+                await auditService_1.auditService.logAuthEvent('register', {
                     ipAddress,
                     userAgent,
                     deviceInfo: device,
                     success: false,
                     errorMessage: 'Email already registered',
                 });
-                return res.status(409).json({
-                    error: 'email_already_registered',
-                    message: 'An account with this email already exists'
-                });
+                return res.status(409).json(response_1.ResponseBuilder.error('email_already_registered', 'An account with this email already exists'));
             }
             // Create user
             const user = await userService_1.UserService.createUser({ email, password, device, deviceId, name });
             // Create session
             const { session, tokens } = await sessionService_1.SessionService.createSession(user.id, device, deviceId, ipAddress, userAgent);
             // Log successful registration
-            await auditService_1.AuditService.logAuthEvent('register', {
+            await auditService_1.auditService.logAuthEvent('register', {
                 userId: user.id,
                 sessionId: session.id,
                 ipAddress,
@@ -57,14 +59,11 @@ function createAuthRouter() {
                 },
                 deviceId,
             };
-            res.status(201).json(response);
+            res.status(201).json(response_1.ResponseBuilder.success(response, 'User registered successfully'));
         }
         catch (error) {
             console.error('Registration error:', error);
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Registration failed'
-            });
+            res.status(500).json(response_1.ResponseBuilder.error('internal_error', 'Registration failed'));
         }
     });
     // POST /auth/login
@@ -76,7 +75,7 @@ function createAuthRouter() {
             // Find user
             const user = await userService_1.UserService.findByEmail(email);
             if (!user) {
-                await auditService_1.AuditService.logAuthEvent('login', {
+                await auditService_1.auditService.logAuthEvent('login', {
                     ipAddress,
                     userAgent,
                     deviceInfo: device,
@@ -90,7 +89,7 @@ function createAuthRouter() {
             }
             // Check if user is locked
             if (userService_1.UserService.isUserLocked(user)) {
-                await auditService_1.AuditService.logAuthEvent('login', {
+                await auditService_1.auditService.logAuthEvent('login', {
                     userId: user.id,
                     ipAddress,
                     userAgent,
@@ -107,7 +106,7 @@ function createAuthRouter() {
             const isValidPassword = await userService_1.UserService.verifyPassword(user, password);
             if (!isValidPassword) {
                 await userService_1.UserService.incrementFailedAttempts(user.id);
-                await auditService_1.AuditService.logAuthEvent('login', {
+                await auditService_1.auditService.logAuthEvent('login', {
                     userId: user.id,
                     ipAddress,
                     userAgent,
@@ -134,7 +133,7 @@ function createAuthRouter() {
             // Create session
             const { session, tokens } = await sessionService_1.SessionService.createSession(user.id, device, deviceId, ipAddress, userAgent);
             // Log successful login
-            await auditService_1.AuditService.logAuthEvent('login', {
+            await auditService_1.auditService.logAuthEvent('login', {
                 userId: user.id,
                 sessionId: session.id,
                 ipAddress,
@@ -171,7 +170,7 @@ function createAuthRouter() {
             try {
                 const result = await sessionService_1.SessionService.verifyAndRotateRefreshToken(sessionId, refreshToken, deviceId);
                 if (!result) {
-                    await auditService_1.AuditService.logAuthEvent('refresh', {
+                    await auditService_1.auditService.logAuthEvent('refresh', {
                         sessionId,
                         ipAddress,
                         userAgent,
@@ -184,7 +183,7 @@ function createAuthRouter() {
                     });
                 }
                 // Log successful refresh
-                await auditService_1.AuditService.logAuthEvent('refresh', {
+                await auditService_1.auditService.logAuthEvent('refresh', {
                     userId: result.session.userId,
                     sessionId: result.session.id,
                     ipAddress,
@@ -195,7 +194,7 @@ function createAuthRouter() {
             }
             catch (error) {
                 if (error.message === 'REUSE_DETECTED') {
-                    await auditService_1.AuditService.logAuthEvent('reuse_detected', {
+                    await auditService_1.auditService.logAuthEvent('reuse_detected', {
                         sessionId,
                         ipAddress,
                         userAgent,
@@ -226,7 +225,7 @@ function createAuthRouter() {
             const userAgent = req.get('User-Agent');
             const success = await sessionService_1.SessionService.revokeSession(sessionId);
             if (success) {
-                await auditService_1.AuditService.logAuthEvent('logout', {
+                await auditService_1.auditService.logAuthEvent('logout', {
                     sessionId,
                     ipAddress,
                     userAgent,
@@ -250,7 +249,7 @@ function createAuthRouter() {
             const ipAddress = req.ip || req.connection?.remoteAddress;
             const userAgent = req.get('User-Agent');
             await sessionService_1.SessionService.revokeAllUserSessions(authReq.user.id);
-            await auditService_1.AuditService.logAuthEvent('logout_all', {
+            await auditService_1.auditService.logAuthEvent('logout_all', {
                 userId: authReq.user.id,
                 ipAddress,
                 userAgent,
@@ -295,5 +294,154 @@ function createAuthRouter() {
             });
         }
     });
+    // POST /auth/register/email/start - Send verification code for registration
+    r.post('/register/email/start', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
+        try {
+            const { email } = req.body;
+            if (!email) {
+                return res.status(400).json({
+                    error: 'invalid_request',
+                    message: 'Email is required'
+                });
+            }
+            // Check if email is already registered
+            if (await userService_1.UserService.isEmailRegistered(email)) {
+                return res.status(409).json({
+                    error: 'email_already_registered',
+                    message: 'An account with this email already exists'
+                });
+            }
+            // Rate limiting for email sending
+            const key = `register_otp:rl:${email}`;
+            const rl = (await (0, redis_1.getJson)(key)) || { count: 0 };
+            if (rl.count >= 5) {
+                return res.status(429).json({
+                    error: 'rate_limited',
+                    message: 'Too many verification attempts. Please try again later.'
+                });
+            }
+            rl.count += 1;
+            await (0, redis_1.setJson)(key, rl, 600); // 10 minutes
+            // Generate and store OTP
+            const code = ((0, crypto_1.randomInt)(0, 999999) + '').padStart(6, '0');
+            const codeHash = sha256(code);
+            await firebase_1.db.collection('registerOtpCodes').add({
+                email,
+                codeHash,
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+                createdAt: new Date()
+            });
+            // Send email
+            try {
+                await (0, email_1.sendOtpEmail)(email, code);
+            }
+            catch (emailError) {
+                console.error('Failed to send verification email:', emailError);
+                // Don't fail the request if email sending fails
+            }
+            res.json({
+                success: true,
+                message: 'Verification code sent to your email'
+            });
+        }
+        catch (error) {
+            console.error('Send registration OTP error:', error);
+            res.status(500).json({
+                error: 'internal_error',
+                message: 'Failed to send verification code'
+            });
+        }
+    });
+    // POST /auth/register/email/verify - Verify code and complete registration
+    r.post('/register/email/verify', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
+        try {
+            const { email, otp, password, name, device, deviceId } = req.body;
+            if (!email || !otp || !password || !device || !deviceId) {
+                return res.status(400).json({
+                    error: 'invalid_request',
+                    message: 'Email, OTP, password, device, and deviceId are required'
+                });
+            }
+            // Verify OTP - Get all records for email and sort in memory
+            const recordSnap = await firebase_1.db
+                .collection('registerOtpCodes')
+                .where('email', '==', email)
+                .get();
+            if (recordSnap.empty) {
+                return res.status(400).json({
+                    error: 'invalid_otp',
+                    message: 'Invalid or expired verification code'
+                });
+            }
+            // Sort by createdAt in memory and get the most recent
+            const sortedDocs = recordSnap.docs.sort((a, b) => {
+                const aTime = a.data().createdAt?.toDate?.() || new Date(0);
+                const bTime = b.data().createdAt?.toDate?.() || new Date(0);
+                return bTime.getTime() - aTime.getTime();
+            });
+            const doc = sortedDocs[0];
+            const record = doc.data();
+            if (record.expiresAt.toDate() < new Date()) {
+                await doc.ref.delete(); // Clean up expired code
+                return res.status(400).json({
+                    error: 'invalid_otp',
+                    message: 'Verification code has expired'
+                });
+            }
+            const isMatch = record.codeHash === sha256(otp);
+            if (!isMatch) {
+                return res.status(400).json({
+                    error: 'invalid_otp',
+                    message: 'Invalid verification code'
+                });
+            }
+            // Clean up the OTP code
+            await doc.ref.delete();
+            // Check if email is still available (double-check)
+            if (await userService_1.UserService.isEmailRegistered(email)) {
+                return res.status(409).json({
+                    error: 'email_already_registered',
+                    message: 'An account with this email already exists'
+                });
+            }
+            // Create user
+            const user = await userService_1.UserService.createUser({ email, password, device, deviceId, name });
+            // Create session
+            const ipAddress = req.ip || req.connection?.remoteAddress;
+            const userAgent = req.get('User-Agent');
+            const { session, tokens } = await sessionService_1.SessionService.createSession(user.id, device, deviceId, ipAddress, userAgent);
+            // Log successful registration
+            await auditService_1.auditService.logAuthEvent('register', {
+                userId: user.id,
+                sessionId: session.id,
+                ipAddress,
+                userAgent,
+                deviceInfo: device,
+                success: true,
+            });
+            const response = {
+                ...tokens,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    avatar: user.avatar,
+                },
+                deviceId,
+            };
+            res.status(201).json(response);
+        }
+        catch (error) {
+            console.error('Verify registration OTP error:', error);
+            res.status(500).json({
+                error: 'internal_error',
+                message: 'Registration verification failed'
+            });
+        }
+    });
     return r;
+}
+// Helper functions
+function sha256(input) {
+    return (0, crypto_1.createHash)('sha256').update(input).digest('hex');
 }

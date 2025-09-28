@@ -1,7 +1,7 @@
 import { db } from '../firebase';
 import { HashService } from './hashService';
 import { UserService } from './userService';
-import { AuditService } from './auditService';
+import { auditService } from './auditService';
 import { randomBytes } from 'crypto';
 import { config } from '../config';
 import { v4 as uuidv4 } from 'uuid';
@@ -51,7 +51,7 @@ export class PasswordResetService {
     await db.collection('passwordResetTokens').doc(tokenId).set(resetToken);
 
     // Log the reset request
-    await AuditService.logAuthEvent('password_reset_request', {
+    await auditService.logAuthEvent('password_reset_request', {
       userId: user.id,
       ipAddress,
       userAgent,
@@ -108,7 +108,7 @@ export class PasswordResetService {
     await SessionService.revokeAllUserSessions(resetToken.userId);
 
     // Log successful password reset
-    await AuditService.logAuthEvent('password_reset_success', {
+    await auditService.logAuthEvent('password_reset_success', {
       userId: resetToken.userId,
       ipAddress,
       userAgent,

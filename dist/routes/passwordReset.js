@@ -41,7 +41,7 @@ function createPasswordResetRouter() {
             const userAgent = req.get('User-Agent');
             const success = await passwordResetService_1.PasswordResetService.verifyAndConsumeToken(token, password, ipAddress, userAgent);
             if (!success) {
-                await auditService_1.AuditService.logAuthEvent('password_reset_confirm', {
+                await auditService_1.auditService.logAuthEvent('password_reset_confirm', {
                     ipAddress,
                     userAgent,
                     success: false,

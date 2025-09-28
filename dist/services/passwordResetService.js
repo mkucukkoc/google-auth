@@ -67,7 +67,7 @@ class PasswordResetService {
         };
         await firebase_1.db.collection('passwordResetTokens').doc(tokenId).set(resetToken);
         // Log the reset request
-        await auditService_1.AuditService.logAuthEvent('password_reset_request', {
+        await auditService_1.auditService.logAuthEvent('password_reset_request', {
             userId: user.id,
             ipAddress,
             userAgent,
@@ -109,7 +109,7 @@ class PasswordResetService {
         const { SessionService } = await Promise.resolve().then(() => __importStar(require('./sessionService')));
         await SessionService.revokeAllUserSessions(resetToken.userId);
         // Log successful password reset
-        await auditService_1.AuditService.logAuthEvent('password_reset_success', {
+        await auditService_1.auditService.logAuthEvent('password_reset_success', {
             userId: resetToken.userId,
             ipAddress,
             userAgent,

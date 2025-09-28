@@ -40,28 +40,71 @@ require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
-const pino_1 = __importDefault(require("pino"));
-const pino_http_1 = __importDefault(require("pino-http"));
+const sentry_1 = require("./utils/sentry");
 const config_1 = require("./config");
 const auth_1 = require("./routes/auth");
 const emailOtp_1 = require("./routes/emailOtp");
 const google_1 = require("./routes/google");
+const apple_1 = require("./routes/apple");
 const passwordReset_1 = require("./routes/passwordReset");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_1 = require("./swagger");
 const rateLimitMiddleware_1 = require("./middleware/rateLimitMiddleware");
 const sessionService_1 = require("./services/sessionService");
-const auditService_1 = require("./services/auditService");
+const cacheService_1 = require("./services/cacheService");
+const database_1 = require("./config/database");
+const backupService_1 = require("./services/backupService");
+const dataRetentionService_1 = require("./services/dataRetentionService");
+const websocketService_1 = require("./services/websocketService");
+const errorHandler_1 = require("./middleware/errorHandler");
+const logger_1 = require("./utils/logger");
+// Initialize Sentry first
+(0, sentry_1.initSentry)();
+// Initialize database and cache
+const initializeServices = async () => {
+    try {
+        // Initialize database
+        await database_1.databaseManager.initialize({
+            projectId: process.env.FIREBASE_PROJECT_ID || '',
+            privateKey: process.env.FIREBASE_PRIVATE_KEY || '',
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
+            maxConnections: 100,
+            maxIdleTime: 300000,
+            connectionTimeout: 30000,
+            requestTimeout: 60000,
+        });
+        // Test cache connection
+        const cacheConnected = await cacheService_1.cacheService.ping();
+        if (!cacheConnected) {
+            logger_1.logger.warn('Cache service not available, continuing without cache');
+        }
+        logger_1.logger.info('All services initialized successfully');
+    }
+    catch (error) {
+        logger_1.logger.error('Service initialization failed:', error);
+        process.exit(1);
+    }
+};
+// Initialize services before creating app
+// Initialize services
+initializeServices().catch(err => {
+    logger_1.logger.error({ error: err }, 'Failed to initialize services');
+    process.exit(1);
+});
 const app = (0, express_1.default)();
-const logger = (0, pino_1.default)({ level: process.env.LOG_LEVEL || 'info' });
 // Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
+// Sentry request handler (must be first)
+app.use(sentry_1.sentryRequestHandler);
+app.use(sentry_1.sentryTracingHandler);
+// Request logging
+app.use(requestLogger);
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use((0, cors_1.default)({ origin: config_1.config.corsOrigin, credentials: true }));
 app.use((0, helmet_1.default)());
-app.use((0, pino_http_1.default)({ logger }));
 // Global rate limiting
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 60000,
@@ -82,43 +125,99 @@ app.get('/health', (_req, res) => {
         version: process.env.npm_package_version || '1.0.0'
     });
 });
-// API routes
+// API Versioning
+const API_VERSION = process.env.API_VERSION || 'v1';
+// API routes with versioning
+app.use(`/api/${API_VERSION}/auth`, (0, auth_1.createAuthRouter)());
+app.use(`/api/${API_VERSION}/auth/email`, (0, emailOtp_1.createEmailOtpRouter)());
+app.use(`/api/${API_VERSION}/auth/google`, (0, google_1.createGoogleAuthRouter)());
+app.use(`/api/${API_VERSION}/auth/apple`, (0, apple_1.createAppleAuthRouter)());
+app.use(`/api/${API_VERSION}/auth/password-reset`, (0, passwordReset_1.createPasswordResetRouter)());
+// Legacy routes (backward compatibility)
 app.use('/auth', (0, auth_1.createAuthRouter)());
 app.use('/auth/email', (0, emailOtp_1.createEmailOtpRouter)());
 app.use('/auth/google', (0, google_1.createGoogleAuthRouter)());
+app.use('/auth/apple', (0, apple_1.createAppleAuthRouter)());
 app.use('/auth/password-reset', (0, passwordReset_1.createPasswordResetRouter)());
 // Start server
 const server = app.listen(config_1.config.port, () => {
-    logger.info({ port: config_1.config.port }, 'Server listening');
+    logger_1.logger.info({ port: config_1.config.port }, 'Server listening');
 });
+// Initialize WebSocket
+(0, websocketService_1.initializeWebSocket)(server);
 // Graceful shutdown
 process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down gracefully');
+    logger_1.logger.info('SIGTERM received, shutting down gracefully');
     server.close(() => {
-        logger.info('Process terminated');
+        logger_1.logger.info('Process terminated');
         process.exit(0);
     });
 });
 process.on('SIGINT', () => {
-    logger.info('SIGINT received, shutting down gracefully');
+    logger_1.logger.info('SIGINT received, shutting down gracefully');
     server.close(() => {
-        logger.info('Process terminated');
+        logger_1.logger.info('Process terminated');
         process.exit(0);
     });
 });
+// Error handling setup
+(0, errorHandler_1.handleUncaughtException)();
+(0, errorHandler_1.handleUnhandledRejection)();
+// 404 handler (must be before error handler)
+app.use(errorHandler_1.notFound);
+// Sentry error handler (must be before other error handlers)
+app.use(sentry_1.sentryErrorHandler);
+// Global error handler (must be last)
+app.use(errorHandler_1.globalErrorHandler);
 // Cleanup tasks (run every hour)
 setInterval(async () => {
     try {
         const { PasswordResetService } = await Promise.resolve().then(() => __importStar(require('./services/passwordResetService')));
         await Promise.all([
             sessionService_1.SessionService.cleanupExpiredSessions(),
-            auditService_1.AuditService.cleanupOldAuditLogs(90), // Keep 90 days
+            AuditService.cleanupOldAuditLogs(90), // Keep 90 days
             PasswordResetService.cleanupExpiredTokens(),
             (0, rateLimitMiddleware_1.cleanupRateLimits)(),
         ]);
-        logger.info('Cleanup tasks completed');
+        logger_1.logger.info('Cleanup tasks completed');
     }
     catch (error) {
-        logger.error({ error }, 'Cleanup tasks failed');
+        logger_1.logger.error({ error }, 'Cleanup tasks failed');
     }
 }, 60 * 60 * 1000); // 1 hour
+// Data retention cleanup (run daily at 3 AM)
+setInterval(async () => {
+    try {
+        const results = await dataRetentionService_1.dataRetentionService.runRetentionPolicies();
+        const totalDeleted = results.reduce((sum, result) => sum + result.deletedCount, 0);
+        logger_1.logger.info(`Data retention cleanup completed: ${totalDeleted} documents deleted`);
+    }
+    catch (error) {
+        logger_1.logger.error('Data retention cleanup failed:', error);
+    }
+}, 24 * 60 * 60 * 1000); // 24 hours
+// Backup tasks (run daily at 2 AM)
+setInterval(async () => {
+    try {
+        const backupResult = await backupService_1.backupService.createFullBackup();
+        if (backupResult.success) {
+            logger_1.logger.info(`Daily backup completed: ${backupResult.backupId}`);
+        }
+        else {
+            logger_1.logger.error(`Daily backup failed: ${backupResult.error}`);
+        }
+    }
+    catch (error) {
+        logger_1.logger.error('Backup task failed:', error);
+    }
+}, 24 * 60 * 60 * 1000); // 24 hours
+// Cleanup old backups (run weekly)
+setInterval(async () => {
+    try {
+        const deletedCount = await backupService_1.backupService.cleanupOldBackups();
+        logger_1.logger.info(`Backup cleanup completed: ${deletedCount} old backups deleted`);
+    }
+    catch (error) {
+        logger_1.logger.error('Backup cleanup failed:', error);
+    }
+}, 7 * 24 * 60 * 60 * 1000); // 7 days

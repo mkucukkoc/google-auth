@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { UserService } from '../services/userService';
 import { SessionService } from '../services/sessionService';
-import { AuditService } from '../services/auditService';
+import { auditService } from '../services/auditService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
 import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
@@ -28,7 +28,7 @@ export function createAuthRouter(): Router {
 
         // Check if email is already registered
         if (await UserService.isEmailRegistered(email)) {
-          await AuditService.logAuthEvent('register', {
+          await auditService.logAuthEvent('register', {
             ipAddress,
             userAgent,
             deviceInfo: device,
@@ -54,7 +54,7 @@ export function createAuthRouter(): Router {
         );
 
         // Log successful registration
-        await AuditService.logAuthEvent('register', {
+        await auditService.logAuthEvent('register', {
           userId: user.id,
           sessionId: session.id,
           ipAddress,
@@ -98,7 +98,7 @@ export function createAuthRouter(): Router {
         // Find user
         const user = await UserService.findByEmail(email);
         if (!user) {
-          await AuditService.logAuthEvent('login', {
+          await auditService.logAuthEvent('login', {
             ipAddress,
             userAgent,
             deviceInfo: device,
@@ -113,7 +113,7 @@ export function createAuthRouter(): Router {
 
         // Check if user is locked
         if (UserService.isUserLocked(user)) {
-          await AuditService.logAuthEvent('login', {
+          await auditService.logAuthEvent('login', {
             userId: user.id,
             ipAddress,
             userAgent,
@@ -131,7 +131,7 @@ export function createAuthRouter(): Router {
         const isValidPassword = await UserService.verifyPassword(user, password);
         if (!isValidPassword) {
           await UserService.incrementFailedAttempts(user.id);
-          await AuditService.logAuthEvent('login', {
+          await auditService.logAuthEvent('login', {
             userId: user.id,
             ipAddress,
             userAgent,
@@ -167,7 +167,7 @@ export function createAuthRouter(): Router {
         );
 
         // Log successful login
-        await AuditService.logAuthEvent('login', {
+        await auditService.logAuthEvent('login', {
           userId: user.id,
           sessionId: session.id,
           ipAddress,
@@ -216,7 +216,7 @@ export function createAuthRouter(): Router {
           );
 
           if (!result) {
-            await AuditService.logAuthEvent('refresh', {
+            await auditService.logAuthEvent('refresh', {
               sessionId,
               ipAddress,
               userAgent,
@@ -230,7 +230,7 @@ export function createAuthRouter(): Router {
           }
 
           // Log successful refresh
-          await AuditService.logAuthEvent('refresh', {
+          await auditService.logAuthEvent('refresh', {
             userId: result.session.userId,
             sessionId: result.session.id,
             ipAddress,
@@ -241,7 +241,7 @@ export function createAuthRouter(): Router {
           res.json(result.tokens);
         } catch (error: any) {
           if (error.message === 'REUSE_DETECTED') {
-            await AuditService.logAuthEvent('reuse_detected', {
+            await auditService.logAuthEvent('reuse_detected', {
               sessionId,
               ipAddress,
               userAgent,
@@ -278,7 +278,7 @@ export function createAuthRouter(): Router {
         const success = await SessionService.revokeSession(sessionId);
 
         if (success) {
-          await AuditService.logAuthEvent('logout', {
+          await auditService.logAuthEvent('logout', {
             sessionId,
             ipAddress,
             userAgent,
@@ -309,7 +309,7 @@ export function createAuthRouter(): Router {
 
         await SessionService.revokeAllUserSessions(authReq.user!.id);
 
-        await AuditService.logAuthEvent('logout_all', {
+        await auditService.logAuthEvent('logout_all', {
           userId: authReq.user!.id,
           ipAddress,
           userAgent,
@@ -504,7 +504,7 @@ export function createAuthRouter(): Router {
         );
 
         // Log successful registration
-        await AuditService.logAuthEvent('register', {
+        await auditService.logAuthEvent('register', {
           userId: user.id,
           sessionId: session.id,
           ipAddress,

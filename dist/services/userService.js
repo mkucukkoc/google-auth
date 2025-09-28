@@ -86,6 +86,43 @@ class UserService {
         };
     }
     /**
+     * Create a new Apple user
+     */
+    static async createAppleUser(email, name) {
+        const userId = (0, uuid_1.v4)();
+        const now = new Date();
+        const normalizedEmail = email.toLowerCase().trim();
+        // Create user in Firebase Authentication
+        let firebaseUser;
+        try {
+            firebaseUser = await firebase_admin_1.default.auth().createUser({
+                uid: userId,
+                email: normalizedEmail,
+                displayName: name || '',
+                emailVerified: true, // Apple users are pre-verified
+            });
+            console.log('Firebase Apple user created:', firebaseUser.uid);
+        }
+        catch (error) {
+            console.error('Firebase Apple user creation failed:', error);
+            throw new Error('Failed to create Firebase Apple user');
+        }
+        const user = {
+            email: normalizedEmail,
+            passwordHash: '', // Apple users don't have passwords
+            name: name || '',
+            isEmailVerified: true, // Apple users are pre-verified
+            createdAt: now,
+            updatedAt: now,
+            failedLoginAttempts: 0,
+        };
+        await firebase_1.db.collection('subsc').doc(userId).set(user);
+        return {
+            id: userId,
+            ...user,
+        };
+    }
+    /**
      * Find user by email
      */
     static async findByEmail(email) {

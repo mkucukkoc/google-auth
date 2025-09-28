@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PasswordResetService } from '../services/passwordResetService';
 import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
-import { AuditService } from '../services/auditService';
+import { auditService } from '../services/auditService';
 
 export function createPasswordResetRouter(): Router {
   const r = Router();
@@ -61,7 +61,7 @@ export function createPasswordResetRouter(): Router {
         );
 
         if (!success) {
-          await AuditService.logAuthEvent('password_reset_confirm', {
+          await auditService.logAuthEvent('password_reset_confirm', {
             ipAddress,
             userAgent,
             success: false,

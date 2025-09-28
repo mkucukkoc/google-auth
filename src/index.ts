@@ -14,19 +14,17 @@ import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
 import { cleanupRateLimits } from './middleware/rateLimitMiddleware';
 import { SessionService } from './services/sessionService';
-import { AuditService } from './services/auditService';
+import { auditService } from './services/auditService';
 import { cacheService } from './services/cacheService';
 import { databaseManager } from './config/database';
 import { backupService } from './services/backupService';
 import { dataRetentionService } from './services/dataRetentionService';
-import { auditService } from './services/auditService';
 import { initializeWebSocket } from './services/websocketService';
 import { 
   globalErrorHandler, 
   notFound, 
   handleUnhandledRejection, 
-  handleUncaughtException,
-  requestLogger 
+  handleUncaughtException
 } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 
@@ -62,7 +60,11 @@ const initializeServices = async () => {
 };
 
 // Initialize services before creating app
-await initializeServices();
+// Initialize services
+initializeServices().catch(err => {
+  logger.error({ error: err }, 'Failed to initialize services');
+  process.exit(1);
+});
 
 const app = express();
 
@@ -74,7 +76,7 @@ app.use(sentryRequestHandler);
 app.use(sentryTracingHandler);
 
 // Request logging
-app.use(requestLogger);
+// app.use(requestLogger); // Commented out - not available
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -165,7 +167,7 @@ setInterval(async () => {
     const { PasswordResetService } = await import('./services/passwordResetService');
     await Promise.all([
       SessionService.cleanupExpiredSessions(),
-      AuditService.cleanupOldAuditLogs(90), // Keep 90 days
+      auditService.cleanupOldAuditLogs(90), // Keep 90 days
       PasswordResetService.cleanupExpiredTokens(),
       cleanupRateLimits(),
     ]);

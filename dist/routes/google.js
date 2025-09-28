@@ -85,7 +85,7 @@ function createGoogleAuthRouter() {
             };
             const { session: newSession, tokens } = await sessionService_1.SessionService.createSession(user.id, deviceInfo, session.device_id, ipAddress, userAgent);
             // Log successful Google auth
-            await auditService_1.AuditService.logAuthEvent('login', {
+            await auditService_1.auditService.logAuthEvent('login', {
                 userId: user.id,
                 sessionId: newSession.id,
                 ipAddress,
@@ -114,7 +114,7 @@ function createGoogleAuthRouter() {
         catch (error) {
             console.error('Google auth error:', error);
             // Log the error for debugging
-            await auditService_1.AuditService.logAuthEvent('login', {
+            await auditService_1.auditService.logAuthEvent('login', {
                 ipAddress: req.ip || req.connection?.remoteAddress,
                 userAgent: req.get('User-Agent'),
                 success: false,

@@ -1,99 +1,352 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuditService = void 0;
-const firebase_1 = require("../firebase");
-const uuid_1 = require("uuid");
+exports.auditService = void 0;
+const firestore_1 = require("firebase-admin/firestore");
+const logger_1 = require("../utils/logger");
+const cacheService_1 = require("./cacheService");
 class AuditService {
-    /**
-     * Log an authentication event
-     */
-    static async logAuthEvent(event, options) {
-        // Filter out undefined values to avoid Firestore errors
-        const auditLog = {
-            event,
-            success: options.success,
-            createdAt: new Date(),
-        };
-        // Only add fields that are not undefined
-        if (options.userId !== undefined)
-            auditLog.userId = options.userId;
-        if (options.sessionId !== undefined)
-            auditLog.sessionId = options.sessionId;
-        if (options.ipAddress !== undefined)
-            auditLog.ipAddress = options.ipAddress;
-        if (options.userAgent !== undefined)
-            auditLog.userAgent = options.userAgent;
-        if (options.deviceInfo !== undefined)
-            auditLog.deviceInfo = options.deviceInfo;
-        if (options.errorMessage !== undefined)
-            auditLog.errorMessage = options.errorMessage;
-        await firebase_1.db.collection('auditLogs').doc((0, uuid_1.v4)()).set(auditLog);
+    constructor() {
+        this.collectionName = 'audit_logs';
+        this.firestore = (0, firestore_1.getFirestore)();
     }
-    /**
-     * Get audit logs for a user
-     */
-    static async getUserAuditLogs(userId, limit = 50) {
-        const snapshot = await firebase_1.db
-            .collection('auditLogs')
-            .where('userId', '==', userId)
-            .orderBy('createdAt', 'desc')
-            .limit(limit)
-            .get();
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
-    }
-    /**
-     * Get audit logs for a session
-     */
-    static async getSessionAuditLogs(sessionId, limit = 20) {
-        const snapshot = await firebase_1.db
-            .collection('auditLogs')
-            .where('sessionId', '==', sessionId)
-            .orderBy('createdAt', 'desc')
-            .limit(limit)
-            .get();
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
-    }
-    /**
-     * Get failed login attempts for an IP address
-     */
-    static async getFailedLoginAttempts(ipAddress, since) {
-        const snapshot = await firebase_1.db
-            .collection('auditLogs')
-            .where('ipAddress', '==', ipAddress)
-            .where('event', '==', 'login')
-            .where('success', '==', false)
-            .where('createdAt', '>', since)
-            .orderBy('createdAt', 'desc')
-            .get();
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
-    }
-    /**
-     * Clean up old audit logs (older than specified days)
-     */
-    static async cleanupOldAuditLogs(daysToKeep = 90) {
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
-        const snapshot = await firebase_1.db
-            .collection('auditLogs')
-            .where('createdAt', '<', cutoffDate)
-            .get();
-        const batch = firebase_1.db.batch();
-        snapshot.docs.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        if (!snapshot.empty) {
-            await batch.commit();
+    static getInstance() {
+        if (!AuditService.instance) {
+            AuditService.instance = new AuditService();
         }
-        return snapshot.size;
+        return AuditService.instance;
+    }
+    // Log an audit event
+    async logEvent(event) {
+        try {
+            const auditEvent = {
+                ...event,
+                timestamp: new Date(),
+            };
+            // Add to Firestore
+            await this.firestore.collection(this.collectionName).add(auditEvent);
+            // Add to cache for quick access
+            await this.cacheRecentEvent(auditEvent);
+            logger_1.logger.info('Audit event logged', {
+                action: event.action,
+                resource: event.resource,
+                userId: event.userId,
+                success: event.success,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to log audit event:', error);
+            // Don't throw error to avoid breaking the main flow
+        }
+    }
+    // Log authentication events
+    async logAuthEvent(action, userId, success, details, ipAddress, userAgent) {
+        await this.logEvent({
+            userId,
+            action,
+            resource: 'authentication',
+            details,
+            ipAddress,
+            userAgent,
+            success,
+        });
+    }
+    // Log API events
+    async logApiEvent(action, resource, resourceId, userId, success, details, ipAddress, userAgent) {
+        await this.logEvent({
+            userId,
+            action,
+            resource,
+            resourceId,
+            details,
+            ipAddress,
+            userAgent,
+            success,
+        });
+    }
+    // Log chat events
+    async logChatEvent(action, chatId, userId, success, details, ipAddress, userAgent) {
+        await this.logEvent({
+            userId,
+            action,
+            resource: 'chat',
+            resourceId: chatId,
+            details,
+            ipAddress,
+            userAgent,
+            success,
+        });
+    }
+    // Log file events
+    async logFileEvent(action, fileId, userId, success, details, ipAddress, userAgent) {
+        await this.logEvent({
+            userId,
+            action,
+            resource: 'file',
+            resourceId: fileId,
+            details,
+            ipAddress,
+            userAgent,
+            success,
+        });
+    }
+    // Log security events
+    async logSecurityEvent(action, userId, details, ipAddress, userAgent) {
+        await this.logEvent({
+            userId,
+            action,
+            resource: 'security',
+            details,
+            ipAddress,
+            userAgent,
+            success: false, // Security events are typically failures
+        });
+    }
+    // Query audit events
+    async queryEvents(query) {
+        try {
+            let firestoreQuery = this.firestore.collection(this.collectionName);
+            // Apply filters
+            if (query.userId) {
+                firestoreQuery = firestoreQuery.where('userId', '==', query.userId);
+            }
+            if (query.action) {
+                firestoreQuery = firestoreQuery.where('action', '==', query.action);
+            }
+            if (query.resource) {
+                firestoreQuery = firestoreQuery.where('resource', '==', query.resource);
+            }
+            if (query.success !== undefined) {
+                firestoreQuery = firestoreQuery.where('success', '==', query.success);
+            }
+            if (query.startDate) {
+                firestoreQuery = firestoreQuery.where('timestamp', '>=', query.startDate);
+            }
+            if (query.endDate) {
+                firestoreQuery = firestoreQuery.where('timestamp', '<=', query.endDate);
+            }
+            // Apply ordering and pagination
+            firestoreQuery = firestoreQuery.orderBy('timestamp', 'desc');
+            if (query.offset) {
+                firestoreQuery = firestoreQuery.offset(query.offset);
+            }
+            if (query.limit) {
+                firestoreQuery = firestoreQuery.limit(query.limit);
+            }
+            const snapshot = await firestoreQuery.get();
+            const events = [];
+            snapshot.forEach(doc => {
+                events.push({
+                    id: doc.id,
+                    ...doc.data(),
+                });
+            });
+            return events;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to query audit events:', error);
+            return [];
+        }
+    }
+    // Get audit statistics
+    async getAuditStats(startDate, endDate, userId) {
+        try {
+            let query = this.firestore
+                .collection(this.collectionName)
+                .where('timestamp', '>=', startDate)
+                .where('timestamp', '<=', endDate);
+            if (userId) {
+                query = query.where('userId', '==', userId);
+            }
+            const snapshot = await query.get();
+            const events = [];
+            snapshot.forEach(doc => {
+                events.push({
+                    id: doc.id,
+                    ...doc.data(),
+                });
+            });
+            // Calculate statistics
+            const totalEvents = events.length;
+            const successfulEvents = events.filter(e => e.success).length;
+            const failedEvents = totalEvents - successfulEvents;
+            const eventsByAction = {};
+            const eventsByResource = {};
+            const eventsByUser = {};
+            events.forEach(event => {
+                // Count by action
+                eventsByAction[event.action] = (eventsByAction[event.action] || 0) + 1;
+                // Count by resource
+                eventsByResource[event.resource] = (eventsByResource[event.resource] || 0) + 1;
+                // Count by user
+                if (event.userId) {
+                    eventsByUser[event.userId] = (eventsByUser[event.userId] || 0) + 1;
+                }
+            });
+            return {
+                totalEvents,
+                eventsByAction,
+                eventsByResource,
+                eventsByUser,
+                successRate: totalEvents > 0 ? (successfulEvents / totalEvents) * 100 : 0,
+                errorRate: totalEvents > 0 ? (failedEvents / totalEvents) * 100 : 0,
+                timeRange: {
+                    start: startDate,
+                    end: endDate,
+                },
+            };
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get audit stats:', error);
+            return {
+                totalEvents: 0,
+                eventsByAction: {},
+                eventsByResource: {},
+                eventsByUser: {},
+                successRate: 0,
+                errorRate: 0,
+                timeRange: {
+                    start: startDate,
+                    end: endDate,
+                },
+            };
+        }
+    }
+    // Get user activity summary
+    async getUserActivitySummary(userId, days = 30) {
+        try {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            const events = await this.queryEvents({
+                userId,
+                startDate,
+                endDate,
+                limit: 1000,
+            });
+            const summary = {
+                userId,
+                period: { start: startDate, end: endDate },
+                totalEvents: events.length,
+                lastActivity: events.length > 0 ? events[0].timestamp : null,
+                activityByDay: this.groupEventsByDay(events),
+                topActions: this.getTopActions(events),
+                topResources: this.getTopResources(events),
+                successRate: this.calculateSuccessRate(events),
+            };
+            return summary;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get user activity summary:', error);
+            return null;
+        }
+    }
+    // Cleanup old audit logs
+    async cleanupOldAuditLogs(retentionDays) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+            const query = this.firestore
+                .collection(this.collectionName)
+                .where('timestamp', '<', cutoffDate)
+                .limit(1000);
+            const snapshot = await query.get();
+            if (snapshot.empty) {
+                return 0;
+            }
+            const batch = this.firestore.batch();
+            let deletedCount = 0;
+            snapshot.forEach(doc => {
+                batch.delete(doc.ref);
+                deletedCount++;
+            });
+            await batch.commit();
+            logger_1.logger.info(`Cleaned up ${deletedCount} old audit logs`);
+            return deletedCount;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to cleanup old audit logs:', error);
+            return 0;
+        }
+    }
+    // Cache recent events for quick access
+    async cacheRecentEvent(event) {
+        try {
+            const cacheKey = `audit:recent:${event.userId || 'anonymous'}`;
+            const recentEvents = await cacheService_1.cacheService.get(cacheKey) || [];
+            recentEvents.unshift(event);
+            // Keep only last 50 events
+            const trimmedEvents = recentEvents.slice(0, 50);
+            await cacheService_1.cacheService.set(cacheKey, trimmedEvents, 3600); // 1 hour
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to cache recent event:', error);
+        }
+    }
+    // Helper methods
+    groupEventsByDay(events) {
+        const grouped = {};
+        events.forEach(event => {
+            const day = event.timestamp.toISOString().split('T')[0];
+            grouped[day] = (grouped[day] || 0) + 1;
+        });
+        return grouped;
+    }
+    getTopActions(events, limit = 5) {
+        const actionCounts = {};
+        events.forEach(event => {
+            actionCounts[event.action] = (actionCounts[event.action] || 0) + 1;
+        });
+        return Object.entries(actionCounts)
+            .map(([action, count]) => ({ action, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, limit);
+    }
+    getTopResources(events, limit = 5) {
+        const resourceCounts = {};
+        events.forEach(event => {
+            resourceCounts[event.resource] = (resourceCounts[event.resource] || 0) + 1;
+        });
+        return Object.entries(resourceCounts)
+            .map(([resource, count]) => ({ resource, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, limit);
+    }
+    calculateSuccessRate(events) {
+        if (events.length === 0)
+            return 0;
+        const successfulEvents = events.filter(e => e.success).length;
+        return (successfulEvents / events.length) * 100;
+    }
+    // Export audit data
+    async exportAuditData(startDate, endDate, format = 'json') {
+        try {
+            const events = await this.queryEvents({
+                startDate,
+                endDate,
+                limit: 10000, // Max export limit
+            });
+            if (format === 'json') {
+                return JSON.stringify(events, null, 2);
+            }
+            else {
+                // Convert to CSV
+                const headers = ['id', 'userId', 'action', 'resource', 'resourceId', 'timestamp', 'success', 'ipAddress'];
+                const csvRows = [headers.join(',')];
+                events.forEach(event => {
+                    const row = headers.map(header => {
+                        const value = event[header];
+                        return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value || '';
+                    });
+                    csvRows.push(row.join(','));
+                });
+                return csvRows.join('\n');
+            }
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to export audit data:', error);
+            throw error;
+        }
     }
 }
-exports.AuditService = AuditService;
+// Export singleton instance
+exports.auditService = AuditService.getInstance();

@@ -17,6 +17,13 @@ exports.config = {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
         redirectUri: process.env.GOOGLE_REDIRECT_URI || 'https://google-auth-e4er.onrender.com/auth/google/callback',
     },
+    apple: {
+        clientId: process.env.APPLE_CLIENT_ID || '',
+        teamId: process.env.APPLE_TEAM_ID || '',
+        keyId: process.env.APPLE_KEY_ID || '',
+        privateKey: process.env.APPLE_PRIVATE_KEY || '',
+        redirectUri: process.env.APPLE_REDIRECT_URI || 'https://google-auth-e4er.onrender.com/auth/apple/callback',
+    },
     security: {
         maxFailedAttempts: Number(process.env.MAX_FAILED_ATTEMPTS || 5),
         lockoutDurationMinutes: Number(process.env.LOCKOUT_DURATION_MINUTES || 30),

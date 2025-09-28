@@ -8,7 +8,7 @@ import { db } from '../firebase';
 import { TokenService } from '../services/tokenService';
 import { UserService } from '../services/userService';
 import { SessionService } from '../services/sessionService';
-import { AuditService } from '../services/auditService';
+import { auditService } from '../services/auditService';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import admin from 'firebase-admin';
 
@@ -107,7 +107,7 @@ export function createGoogleAuthRouter(): Router {
         );
 
         // Log successful Google auth
-        await AuditService.logAuthEvent('login', {
+        await auditService.logAuthEvent('login', {
           userId: user.id,
           sessionId: newSession.id,
           ipAddress,
@@ -139,7 +139,7 @@ export function createGoogleAuthRouter(): Router {
         console.error('Google auth error:', error);
         
         // Log the error for debugging
-        await AuditService.logAuthEvent('login', {
+        await auditService.logAuthEvent('login', {
           ipAddress: (req as any).ip || (req as any).connection?.remoteAddress,
           userAgent: (req as any).get('User-Agent'),
           success: false,
