@@ -8,6 +8,13 @@ import { logger } from '../utils/logger';
 
 export function createChatRouter(): Router {
   const r = Router();
+  
+  console.log('[ChatRouter] Creating chat router with routes:');
+  console.log('[ChatRouter] - POST /send');
+  console.log('[ChatRouter] - POST /tts');
+  console.log('[ChatRouter] - GET /history');
+  console.log('[ChatRouter] - GET /history/:chatId');
+  console.log('[ChatRouter] - DELETE /history/:chatId');
 
   // POST /chat/send - ChatGPT'ye mesaj gönder
   r.post('/send',
@@ -17,6 +24,14 @@ export function createChatRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as AuthRequest;
       const { messages, chatId, hasImage, imageFileUrl } = req.body;
+
+      console.log('[ChatRouter] /send endpoint called:', {
+        userId: authReq.user?.id,
+        chatId,
+        messageCount: messages?.length,
+        hasImage,
+        body: req.body
+      });
 
       try {
         logger.info({ 
@@ -35,9 +50,17 @@ export function createChatRouter(): Router {
           imageFileUrl
         };
 
+        console.log('[ChatRouter] Calling ChatService.sendMessage...');
         const result = await ChatService.sendMessage(chatRequest);
+        console.log('[ChatRouter] ChatService.sendMessage result:', {
+          success: result.success,
+          hasData: !!result.data,
+          error: result.error
+        });
 
         if (result.success && result.data) {
+          console.log('[ChatRouter] Processing successful result...');
+          
           // Mesajı Firestore'a kaydet
           await ChatService.saveMessageToFirestore(
             authReq.user!.id,
@@ -69,8 +92,10 @@ export function createChatRouter(): Router {
             operation: 'chatSend' 
           }, 'Chat message processed successfully');
 
+          console.log('[ChatRouter] Sending response:', result);
           res.json(result);
         } else {
+          console.log('[ChatRouter] Processing failed result...');
           logger.error({ 
             userId: authReq.user!.id, 
             chatId,
@@ -78,10 +103,18 @@ export function createChatRouter(): Router {
             operation: 'chatSend' 
           }, 'Chat message processing failed');
 
+          console.log('[ChatRouter] Sending error response:', result);
           res.status(400).json(result);
         }
 
       } catch (error: any) {
+        console.log('[ChatRouter] Error caught:', {
+          error: error.message,
+          stack: error.stack,
+          userId: authReq.user?.id,
+          chatId
+        });
+        
         logger.error({ 
           err: error, 
           userId: authReq.user!.id, 
@@ -101,6 +134,7 @@ export function createChatRouter(): Router {
           }
         );
 
+        console.log('[ChatRouter] Sending error response...');
         res.status(500).json({
           error: 'internal_error',
           message: 'Failed to process chat message'
