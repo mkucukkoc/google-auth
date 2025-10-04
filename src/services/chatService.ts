@@ -474,13 +474,21 @@ export class ChatService {
     }, 'All tool calls completed, preparing follow-up request');
 
     // Tool cevaplarını modele geri gönder
+    // Önce orijinal mesajları, sonra assistant'ın tool call'ını, sonra tool cevaplarını ekle
+    const followUpMessages = [
+      ...this.formatMessages(request.messages, request.imageFileUrl),
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCalls
+      },
+      ...toolResponses
+    ];
+
     const followUpResponse = await this.callOpenAI(
       requestId,
       request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID,
-      [
-        ...this.formatMessages(request.messages, request.imageFileUrl),
-        ...toolResponses
-      ],
+      followUpMessages,
       this.getAgentFunctions()
     );
 
