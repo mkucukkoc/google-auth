@@ -233,10 +233,8 @@ function createChatRouter() {
             }, 'Get chat messages request received');
             // Firestore'dan mesajları getir
             const { db } = require('../firebase');
-            const { collection, getDocs, query, orderBy, where } = require('firebase/firestore');
-            const messagesRef = collection(db, 'users', authReq.user.id, 'chats', chatId, 'messages');
-            const q = query(messagesRef, orderBy('timestamp', 'asc'));
-            const snapshot = await getDocs(q);
+            const messagesRef = db.collection('users').doc(authReq.user.id).collection('chats').doc(chatId).collection('messages');
+            const snapshot = await messagesRef.orderBy('timestamp', 'asc').get();
             const messages = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()

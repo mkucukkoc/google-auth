@@ -2,7 +2,6 @@ import axios from 'axios';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, orderBy, query, setDoc, doc, updateDoc, getDoc, onSnapshot, where, limit } from 'firebase/firestore';
 import admin from 'firebase-admin';
 
 export interface ChatMessage {
@@ -199,7 +198,7 @@ export class ChatService {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: reply.content.trim(),
-          timestamp: serverTimestamp()
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
         };
 
         logger.info({ 
@@ -501,7 +500,7 @@ export class ChatService {
         finalMessage: {
           role: 'assistant',
           content: followUpMessage.content.trim(),
-          timestamp: serverTimestamp()
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
         }
       };
     }
@@ -636,11 +635,11 @@ export class ChatService {
         operation: 'saveMessage' 
       }, 'Starting message save to Firestore');
 
-      const messagesRef = collection(db as any, 'users', userId, 'chats', chatId, 'messages');
+      const messagesRef = db.collection('users').doc(userId).collection('chats').doc(chatId).collection('messages');
       
       const messageData = {
         ...message,
-        timestamp: serverTimestamp()
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       };
 
       logger.debug({
@@ -657,7 +656,7 @@ export class ChatService {
         operation: 'firestoreSave'
       }, 'Preparing message data for Firestore');
 
-      await addDoc(messagesRef, messageData);
+      await messagesRef.add(messageData);
 
       const processingTime = Date.now() - startTime;
       logger.info({ 

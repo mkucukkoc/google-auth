@@ -8,7 +8,7 @@ const axios_1 = __importDefault(require("axios"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
 const firebase_1 = require("../firebase");
-const firestore_1 = require("firebase/firestore");
+const firebase_admin_1 = __importDefault(require("firebase-admin"));
 class ChatService {
     /**
      * ChatGPT'ye mesaj gönder ve cevap al
@@ -159,7 +159,7 @@ class ChatService {
                 const assistantMessage = {
                     role: 'assistant',
                     content: reply.content.trim(),
-                    timestamp: (0, firestore_1.serverTimestamp)()
+                    timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
                 };
                 logger_1.logger.info({
                     requestId,
@@ -424,7 +424,7 @@ class ChatService {
                 finalMessage: {
                     role: 'assistant',
                     content: followUpMessage.content.trim(),
-                    timestamp: (0, firestore_1.serverTimestamp)()
+                    timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
                 }
             };
         }
@@ -548,10 +548,10 @@ class ChatService {
                 hasTimestamp: !!message.timestamp,
                 operation: 'saveMessage'
             }, 'Starting message save to Firestore');
-            const messagesRef = (0, firestore_1.collection)(firebase_1.db, 'users', userId, 'chats', chatId, 'messages');
+            const messagesRef = firebase_1.db.collection('users').doc(userId).collection('chats').doc(chatId).collection('messages');
             const messageData = {
                 ...message,
-                timestamp: (0, firestore_1.serverTimestamp)()
+                timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
             };
             logger_1.logger.debug({
                 requestId,
@@ -566,7 +566,7 @@ class ChatService {
                 },
                 operation: 'firestoreSave'
             }, 'Preparing message data for Firestore');
-            await (0, firestore_1.addDoc)(messagesRef, messageData);
+            await messagesRef.add(messageData);
             const processingTime = Date.now() - startTime;
             logger_1.logger.info({
                 requestId,
