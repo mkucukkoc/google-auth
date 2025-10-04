@@ -303,5 +303,241 @@ exports.swaggerSpec = {
                 },
             },
         },
+        // Chat Endpoints
+        '/api/v1/chat/send': {
+            post: {
+                summary: 'Send message to ChatGPT',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    messages: {
+                                        type: 'array',
+                                        items: {
+                                            type: 'object',
+                                            properties: {
+                                                role: { type: 'string', enum: ['user', 'assistant', 'system'] },
+                                                content: { type: 'string' },
+                                                timestamp: { type: 'string' },
+                                                fileName: { type: 'string' },
+                                                fileUrl: { type: 'string' }
+                                            }
+                                        }
+                                    },
+                                    chatId: { type: 'string' },
+                                    hasImage: { type: 'boolean' },
+                                    imageFileUrl: { type: 'string' }
+                                },
+                                required: ['messages', 'chatId']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'Message sent successfully' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/api/v1/chat/tts': {
+            post: {
+                summary: 'Text-to-Speech conversion',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    messages: {
+                                        type: 'array',
+                                        items: {
+                                            type: 'object',
+                                            properties: {
+                                                role: { type: 'string' },
+                                                content: { type: 'string' }
+                                            }
+                                        }
+                                    }
+                                },
+                                required: ['messages']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'TTS audio generated' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/api/v1/chat/messages/{chatId}': {
+            get: {
+                summary: 'Get chat messages',
+                security: [{ BearerAuth: [] }],
+                parameters: [
+                    {
+                        in: 'path',
+                        name: 'chatId',
+                        required: true,
+                        schema: { type: 'string' }
+                    }
+                ],
+                responses: {
+                    200: { description: 'Chat messages retrieved' },
+                    401: { description: 'Unauthorized' },
+                    404: { description: 'Chat not found' }
+                }
+            }
+        },
+        // PDFRead Endpoints
+        '/api/v1/pdfread/summarize': {
+            post: {
+                summary: 'Summarize PDF document',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    file: {
+                                        type: 'string',
+                                        format: 'binary'
+                                    }
+                                },
+                                required: ['file']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'PDF summarized successfully' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/api/v1/pdfread/ask-question': {
+            post: {
+                summary: 'Ask question about PDF',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    file: {
+                                        type: 'string',
+                                        format: 'binary'
+                                    },
+                                    question: {
+                                        type: 'string'
+                                    }
+                                },
+                                required: ['file', 'question']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'Question answered successfully' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/api/v1/pdfread/pdf-to-word': {
+            post: {
+                summary: 'Convert PDF to Word document',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    file: {
+                                        type: 'string',
+                                        format: 'binary'
+                                    }
+                                },
+                                required: ['file']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'PDF converted to Word successfully' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/api/v1/pdfread/generate/doc': {
+            post: {
+                summary: 'Generate Word document',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    prompt: { type: 'string' },
+                                    fileName: { type: 'string' }
+                                },
+                                required: ['prompt']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'Document generated successfully' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        },
+        '/api/v1/pdfread/analyze-image': {
+            post: {
+                summary: 'Analyze image with AI',
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    file: {
+                                        type: 'string',
+                                        format: 'binary'
+                                    }
+                                },
+                                required: ['file']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: { description: 'Image analyzed successfully' },
+                    401: { description: 'Unauthorized' },
+                    400: { description: 'Bad request' }
+                }
+            }
+        }
     },
 };
