@@ -42,8 +42,33 @@ class TokenService {
                 tokenLength: token.length,
                 tokenPreview: token.substring(0, 20) + '...',
                 issuer: config_1.config.jwt.iss,
-                audience: config_1.config.jwt.aud
+                audience: config_1.config.jwt.aud,
+                secretLength: this.secret.length,
+                secretPreview: Array.from(this.secret).slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('')
             });
+            // First, try to decode without verification to see what's in the token
+            try {
+                const parts = token.split('.');
+                if (parts.length === 3) {
+                    const header = JSON.parse(Buffer.from(parts[0], 'base64').toString());
+                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+                    console.log('[TokenService] Token decode (no verification):', {
+                        header,
+                        payload: {
+                            sub: payload.sub,
+                            sid: payload.sid,
+                            jti: payload.jti,
+                            iat: payload.iat,
+                            exp: payload.exp,
+                            iss: payload.iss,
+                            aud: payload.aud
+                        }
+                    });
+                }
+            }
+            catch (decodeError) {
+                console.log('[TokenService] Token decode failed:', decodeError);
+            }
             const { payload } = await (0, jose_1.jwtVerify)(token, this.secret, {
                 issuer: config_1.config.jwt.iss,
                 audience: config_1.config.jwt.aud,
