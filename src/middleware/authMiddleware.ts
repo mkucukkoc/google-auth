@@ -37,7 +37,8 @@ export async function authenticateToken(
       token: token.substring(0, 20) + '...',
       tokenLength: token.length,
       endpoint: req.path,
-      method: req.method
+      method: req.method,
+      fullToken: token // DEBUG: Show full token
     }, 'Verifying access token');
     
     const decoded = await TokenService.verifyAccessToken(token);
