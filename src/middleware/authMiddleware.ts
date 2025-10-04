@@ -39,7 +39,8 @@ export async function authenticateToken(
       endpoint: req.path,
       method: req.method,
       fullToken: token, // DEBUG: Show full token
-      tokenParts: token.split('.')
+      tokenParts: token.split('.'),
+      authorizationHeader: req.headers.authorization
     }, 'Verifying access token');
     
     const decoded = await TokenService.verifyAccessToken(token);
