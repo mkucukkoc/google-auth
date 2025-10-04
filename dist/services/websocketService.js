@@ -3,7 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getWebSocketService = exports.initializeWebSocket = exports.WebSocketService = void 0;
 const socket_io_1 = require("socket.io");
 const logger_1 = require("../utils/logger");
-const authMiddleware_1 = require("../middleware/authMiddleware");
+const tokenService_1 = require("./tokenService");
+const userService_1 = require("./userService");
 const auditService_1 = require("./auditService");
 class WebSocketService {
     constructor(httpServer) {
@@ -28,13 +29,22 @@ class WebSocketService {
                 if (!token) {
                     return next(new Error('Authentication token required'));
                 }
-                // Verify token and get user info
-                const decoded = await (0, authMiddleware_1.authenticateToken)({ headers: { authorization: `Bearer ${token}` } }, {}, () => { });
-                const user = decoded.user;
-                if (!user) {
+                // Verify token directly without Express middleware
+                const decoded = await this.verifyToken(token);
+                if (!decoded) {
                     return next(new Error('Invalid token'));
                 }
-                socket.data.user = user;
+                // Get user information
+                const user = await this.getUserById(decoded.sub);
+                if (!user) {
+                    return next(new Error('User not found'));
+                }
+                socket.data.user = {
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    avatar: user.avatar,
+                };
                 next();
             }
             catch (error) {
@@ -42,6 +52,26 @@ class WebSocketService {
                 next(new Error('Authentication failed'));
             }
         });
+    }
+    async verifyToken(token) {
+        try {
+            const decoded = await tokenService_1.TokenService.verifyAccessToken(token);
+            return decoded;
+        }
+        catch (error) {
+            logger_1.logger.error({ error }, 'Token verification failed');
+            return null;
+        }
+    }
+    async getUserById(userId) {
+        try {
+            const user = await userService_1.UserService.findById(userId);
+            return user;
+        }
+        catch (error) {
+            logger_1.logger.error({ error, userId }, 'Failed to get user by ID');
+            return null;
+        }
     }
     setupEventHandlers() {
         this.io.on('connection', (socket) => {

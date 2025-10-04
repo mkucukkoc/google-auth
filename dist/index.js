@@ -47,6 +47,7 @@ const emailOtp_1 = require("./routes/emailOtp");
 const google_1 = require("./routes/google");
 const apple_1 = require("./routes/apple");
 const passwordReset_1 = require("./routes/passwordReset");
+const notifications_1 = __importDefault(require("./routes/notifications"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_1 = require("./swagger");
@@ -138,6 +139,7 @@ const startServer = async () => {
         app.use('/auth/google', (0, google_1.createGoogleAuthRouter)());
         app.use('/auth/apple', (0, apple_1.createAppleAuthRouter)());
         app.use('/auth/password-reset', (0, passwordReset_1.createPasswordResetRouter)());
+        app.use('/notifications', notifications_1.default);
         // 404 handler (must be before error handler)
         app.use(errorHandler_1.notFound);
         // Sentry error handler (must be before other error handlers)

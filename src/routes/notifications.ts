@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { pushNotificationService } from '../services/pushNotificationService';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { validationMiddleware } from '../middleware/validationMiddleware';
+import { authenticateToken } from '../middleware/authMiddleware';
+import { validate } from '../middleware/validationMiddleware';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -11,16 +11,14 @@ const router = Router();
 const saveTokenSchema = z.object({
   expoPushToken: z.string().min(1, 'Expo push token is required'),
   deviceId: z.string().min(1, 'Device ID is required'),
-  platform: z.enum(['ios', 'android', 'web'], {
-    errorMap: () => ({ message: 'Platform must be ios, android, or web' })
-  }),
+  platform: z.enum(['ios', 'android', 'web']),
 });
 
 const sendNotificationSchema = z.object({
   userIds: z.array(z.string()).optional(),
   title: z.string().min(1, 'Title is required'),
   body: z.string().min(1, 'Body is required'),
-  data: z.record(z.any()).optional(),
+  data: z.record(z.string(), z.any()).optional(),
   sound: z.string().optional(),
   badge: z.number().optional(),
   priority: z.enum(['default', 'normal', 'high']).optional(),
@@ -32,7 +30,7 @@ const sendBulkNotificationSchema = z.object({
   expoPushTokens: z.array(z.string()).min(1, 'At least one push token is required'),
   title: z.string().min(1, 'Title is required'),
   body: z.string().min(1, 'Body is required'),
-  data: z.record(z.any()).optional(),
+  data: z.record(z.string(), z.any()).optional(),
   sound: z.string().optional(),
   badge: z.number().optional(),
   priority: z.enum(['default', 'normal', 'high']).optional(),
@@ -42,12 +40,12 @@ const sendBulkNotificationSchema = z.object({
 
 // Save user push token
 router.post('/tokens', 
-  authMiddleware,
-  validationMiddleware(saveTokenSchema),
+    authenticateToken,
+  validate(saveTokenSchema),
   async (req: Request, res: Response) => {
     try {
       const { expoPushToken, deviceId, platform } = req.body;
-      const userId = req.user?.uid;
+      const userId = (req as any).user?.id;
 
       if (!userId) {
         return res.status(401).json({
@@ -85,11 +83,11 @@ router.post('/tokens',
 
 // Deactivate user push token
 router.delete('/tokens/:deviceId',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { deviceId } = req.params;
-      const userId = req.user?.uid;
+      const userId = (req as any).user?.id;
 
       if (!userId) {
         return res.status(401).json({
@@ -122,12 +120,12 @@ router.delete('/tokens/:deviceId',
 
 // Send notification to specific users
 router.post('/send',
-  authMiddleware,
-  validationMiddleware(sendNotificationSchema),
+    authenticateToken,
+  validate(sendNotificationSchema),
   async (req: Request, res: Response) => {
     try {
       const { userIds, ...notification } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -176,12 +174,12 @@ router.post('/send',
 
 // Send notification to specific push tokens
 router.post('/send/bulk',
-  authMiddleware,
-  validationMiddleware(sendBulkNotificationSchema),
+    authenticateToken,
+  validate(sendBulkNotificationSchema),
   async (req: Request, res: Response) => {
     try {
       const { expoPushTokens, ...notification } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -225,11 +223,11 @@ router.post('/send/bulk',
 
 // Send chat message notification
 router.post('/chat/message',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { chatId, recipientIds, senderName, messagePreview, messageId } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -290,11 +288,11 @@ router.post('/chat/message',
 
 // Send payment notification
 router.post('/payment',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { userId, type, amount, subscriptionId, reason } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -378,11 +376,11 @@ router.post('/payment',
 
 // Send subscription expiring notification
 router.post('/subscription/expiring',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { userId, daysLeft, subscriptionId } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -442,11 +440,11 @@ router.post('/subscription/expiring',
 
 // Send system notification
 router.post('/system',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { title, body, data, userIds } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -513,10 +511,10 @@ router.post('/system',
 
 // Get push notification statistics
 router.get('/stats',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -546,11 +544,11 @@ router.get('/stats',
 
 // Cleanup inactive tokens
 router.post('/cleanup',
-  authMiddleware,
+    authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { daysInactive = 30 } = req.body;
-      const senderId = req.user?.uid;
+      const senderId = (req as any).user?.id;
 
       if (!senderId) {
         return res.status(401).json({
@@ -582,3 +580,4 @@ router.post('/cleanup',
 );
 
 export default router;
+

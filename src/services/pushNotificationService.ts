@@ -15,12 +15,13 @@ export interface PushNotificationData {
 }
 
 export interface UserPushToken {
+  id?: string;
   userId: string;
   expoPushToken: string;
   deviceId: string;
   platform: 'ios' | 'android' | 'web';
   isActive: boolean;
-  lastUsed: Date;
+  lastUsed?: Date;
   createdAt: Date;
 }
 
@@ -76,7 +77,7 @@ class PushNotificationService {
       await this.expo.sendPushNotificationsAsync([testMessage]);
     } catch (error) {
       // Expected to fail with invalid token, but connection should work
-      if (error.message.includes('InvalidPushTokenError')) {
+      if (error instanceof Error && error.message.includes('InvalidPushTokenError')) {
         logger.info('Expo connection test successful');
         return;
       }
@@ -273,7 +274,7 @@ class PushNotificationService {
       
       if (existingToken) {
         // Update existing token
-        await this.updateUserPushToken(existingToken.id, tokenData);
+        await this.updateUserPushToken(existingToken.id as string, tokenData);
         logger.info('User push token updated:', { userId, deviceId });
       } else {
         // Create new token
@@ -295,7 +296,7 @@ class PushNotificationService {
       const token = await this.getUserPushTokenByDevice(userId, deviceId);
       
       if (token) {
-        await this.updateUserPushToken(token.id, { isActive: false });
+        await this.updateUserPushToken(token.id as string, { isActive: false });
         logger.info('User push token deactivated:', { userId, deviceId });
       }
     } catch (error) {
@@ -317,8 +318,8 @@ class PushNotificationService {
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        lastUsed: doc.data().lastUsed.toDate(),
-        createdAt: doc.data().createdAt.toDate(),
+        lastUsed: doc.data().lastUsed?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
       })) as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get user push tokens:', error);
@@ -339,8 +340,8 @@ class PushNotificationService {
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        lastUsed: doc.data().lastUsed.toDate(),
-        createdAt: doc.data().createdAt.toDate(),
+        lastUsed: doc.data().lastUsed?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
       })) as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get users push tokens:', error);
@@ -360,8 +361,8 @@ class PushNotificationService {
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        lastUsed: doc.data().lastUsed.toDate(),
-        createdAt: doc.data().createdAt.toDate(),
+        lastUsed: doc.data().lastUsed?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
       })) as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get all active push tokens:', error);
@@ -391,8 +392,8 @@ class PushNotificationService {
       return {
         id: doc.id,
         ...doc.data(),
-        lastUsed: doc.data().lastUsed.toDate(),
-        createdAt: doc.data().createdAt.toDate(),
+        lastUsed: doc.data().lastUsed?.toDate(),
+        createdAt: doc.data().createdAt?.toDate(),
       } as UserPushToken;
     } catch (error) {
       logger.error('Failed to get user push token by device:', error);
@@ -500,3 +501,4 @@ class PushNotificationService {
 }
 
 export const pushNotificationService = PushNotificationService.getInstance();
+

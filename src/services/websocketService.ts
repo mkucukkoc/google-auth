@@ -1,7 +1,8 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger';
-import { authenticateToken } from '../middleware/authMiddleware';
+import { TokenService } from './tokenService';
+import { UserService } from './userService';
 import { SessionService } from './sessionService';
 import { auditService } from './auditService';
 
@@ -56,21 +57,52 @@ export class WebSocketService {
           return next(new Error('Authentication token required'));
         }
 
-        // Verify token and get user info
-        const decoded = await authenticateToken({ headers: { authorization: `Bearer ${token}` } } as any, {} as any, () => {}) as any;
-        const user = decoded.user;
-
-        if (!user) {
+        // Verify token directly without Express middleware
+        const decoded = await this.verifyToken(token);
+        
+        if (!decoded) {
           return next(new Error('Invalid token'));
         }
 
-        socket.data.user = user;
+        // Get user information
+        const user = await this.getUserById(decoded.sub);
+        
+        if (!user) {
+          return next(new Error('User not found'));
+        }
+
+        socket.data.user = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatar: user.avatar,
+        };
         next();
       } catch (error) {
         logger.error({ error }, 'WebSocket authentication failed');
         next(new Error('Authentication failed'));
       }
     });
+  }
+
+  private async verifyToken(token: string): Promise<any> {
+    try {
+      const decoded = await TokenService.verifyAccessToken(token);
+      return decoded;
+    } catch (error) {
+      logger.error({ error }, 'Token verification failed');
+      return null;
+    }
+  }
+
+  private async getUserById(userId: string): Promise<any> {
+    try {
+      const user = await UserService.findById(userId);
+      return user;
+    } catch (error) {
+      logger.error({ error, userId }, 'Failed to get user by ID');
+      return null;
+    }
   }
 
   private setupEventHandlers() {
