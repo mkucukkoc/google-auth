@@ -7,6 +7,7 @@ exports.PDFReadService = void 0;
 const axios_1 = __importDefault(require("axios"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
+const config_1 = require("../config");
 class PDFReadService {
     /**
      * PDF dosyasını özetler
@@ -740,5 +741,5 @@ class PDFReadService {
     }
 }
 exports.PDFReadService = PDFReadService;
-PDFReadService.PDFREAD_BASE_URL = process.env.PDFREAD_BASE_URL || 'https://avenia.onrender.com';
-PDFReadService.PDFREAD_API_KEY = process.env.PDFREAD_API_KEY;
+PDFReadService.PDFREAD_BASE_URL = config_1.config.api.pdfRead.baseUrl;
+PDFReadService.PDFREAD_API_KEY = config_1.config.api.pdfRead.apiKey;

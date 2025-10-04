@@ -29,4 +29,20 @@ exports.config = {
         lockoutDurationMinutes: Number(process.env.LOCKOUT_DURATION_MINUTES || 30),
         passwordResetTokenTtlHours: Number(process.env.PASSWORD_RESET_TTL_HOURS || 1),
     },
+    api: {
+        baseUrl: process.env.API_BASE_URL || 'https://google-auth-e4er.onrender.com',
+        pdfRead: {
+            baseUrl: process.env.PDFREAD_BASE_URL || 'https://google-auth-e4er.onrender.com',
+            apiKey: process.env.PDFREAD_API_KEY || '',
+        },
+        openai: {
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: process.env.OPENAI_API_KEY || '',
+            fineTunedModelId: process.env.FINE_TUNED_MODEL_ID || 'gpt-3.5-turbo',
+            assistantId: process.env.ASSISTANT_ID || '',
+        },
+        tts: {
+            baseUrl: process.env.TTS_BASE_URL || 'https://google-auth-e4er.onrender.com',
+        },
+    },
 };
