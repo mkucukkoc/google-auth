@@ -101,10 +101,59 @@ export class SessionService {
       return null;
     }
 
-    // Check if session is revoked or expired
-    if (session.revokedAt || session.expiresAt < new Date()) {
+    // Check if session is revoked
+    if (session.revokedAt) {
+      console.log('[SessionService] Session is revoked:', sessionId);
       return null;
     }
+
+    // Check if session is expired (but allow refresh if it's only slightly expired)
+    const now = new Date();
+    
+    // Handle Firestore Timestamp objects
+    let sessionExpiresAt: Date;
+    if (session.expiresAt && typeof session.expiresAt === 'object' && 'toDate' in session.expiresAt) {
+      // Firestore Timestamp
+      sessionExpiresAt = (session.expiresAt as any).toDate();
+    } else if (session.expiresAt instanceof Date) {
+      // Regular Date
+      sessionExpiresAt = session.expiresAt;
+    } else {
+      // Fallback
+      sessionExpiresAt = new Date(session.expiresAt);
+    }
+    
+    const sessionExpired = sessionExpiresAt < now;
+    const timeSinceExpiry = now.getTime() - sessionExpiresAt.getTime();
+    const maxRefreshWindow = 5 * 60 * 1000; // 5 minutes
+
+    if (sessionExpired && timeSinceExpiry > maxRefreshWindow) {
+      console.log('[SessionService] Session expired too long ago:', {
+        sessionId,
+        expiredAt: sessionExpiresAt,
+        now: now,
+        timeSinceExpiry: timeSinceExpiry,
+        maxRefreshWindow: maxRefreshWindow
+      });
+      return null;
+    }
+
+    if (sessionExpired) {
+      console.log('[SessionService] Session expired but within refresh window, allowing refresh:', {
+        sessionId,
+        expiredAt: sessionExpiresAt,
+        now: now,
+        timeSinceExpiry: timeSinceExpiry
+      });
+    }
+
+    console.log('[SessionService] Session validation successful:', {
+      sessionId,
+      expiresAt: sessionExpiresAt,
+      now: now,
+      isExpired: sessionExpired,
+      timeUntilExpiry: sessionExpiresAt.getTime() - now.getTime()
+    });
 
     // Check device ID if provided
     if (deviceId && session.deviceId !== deviceId) {
