@@ -66,6 +66,13 @@ const errorHandler_1 = require("./middleware/errorHandler");
 const logger_1 = require("./utils/logger");
 // Initialize Sentry first
 (0, sentry_1.initSentry)();
+// Test logger configuration
+logger_1.logger.info({
+    environment: process.env.NODE_ENV,
+    isRender: process.env.RENDER === 'true',
+    logLevel: process.env.LOG_LEVEL || 'info',
+    message: 'Logger initialized successfully'
+}, 'Server starting up with logger configuration');
 // Initialize database and cache
 const initializeServices = async () => {
     try {
@@ -108,19 +115,6 @@ const startServer = async () => {
         app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
         app.use((0, cors_1.default)({ origin: config_1.config.corsOrigin, credentials: true }));
         app.use((0, helmet_1.default)());
-        // Debug middleware to log all requests
-        app.use((req, res, next) => {
-            console.log(`[Server] Incoming request: ${req.method} ${req.path}`, {
-                originalUrl: req.originalUrl,
-                baseUrl: req.baseUrl,
-                url: req.url,
-                headers: {
-                    authorization: req.headers.authorization ? 'Bearer ***' : 'none',
-                    'content-type': req.headers['content-type']
-                }
-            });
-            next();
-        });
         // Global rate limiting
         const limiter = (0, express_rate_limit_1.default)({
             windowMs: 60000,
@@ -144,7 +138,6 @@ const startServer = async () => {
         // API Versioning
         const API_VERSION = process.env.API_VERSION || 'v1';
         // API routes with versioning
-        console.log(`[Server] Setting up API routes with version: ${API_VERSION}`);
         app.use(`/api/${API_VERSION}/auth`, (0, auth_1.createAuthRouter)());
         app.use(`/api/${API_VERSION}/auth/email`, (0, emailOtp_1.createEmailOtpRouter)());
         app.use(`/api/${API_VERSION}/auth/google`, (0, google_1.createGoogleAuthRouter)());
@@ -152,7 +145,6 @@ const startServer = async () => {
         app.use(`/api/${API_VERSION}/auth/password-reset`, (0, passwordReset_1.createPasswordResetRouter)());
         app.use(`/api/${API_VERSION}/pdfread`, (0, pdfRead_1.createPDFReadRouter)());
         app.use(`/api/${API_VERSION}/pdfread`, (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
-        console.log(`[Server] Setting up chat router at /api/${API_VERSION}/chat`);
         app.use(`/api/${API_VERSION}/chat`, (0, chat_1.createChatRouter)());
         // Legacy routes (backward compatibility)
         app.use('/auth', (0, auth_1.createAuthRouter)());

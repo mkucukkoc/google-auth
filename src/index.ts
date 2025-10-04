@@ -35,6 +35,14 @@ import { logger } from './utils/logger';
 // Initialize Sentry first
 initSentry();
 
+// Test logger configuration
+logger.info({
+  environment: process.env.NODE_ENV,
+  isRender: process.env.RENDER === 'true',
+  logLevel: process.env.LOG_LEVEL || 'info',
+  message: 'Logger initialized successfully'
+}, 'Server starting up with logger configuration');
+
 // Initialize database and cache
 const initializeServices = async () => {
   try {
@@ -85,20 +93,6 @@ const startServer = async () => {
     app.use(cors({ origin: config.corsOrigin, credentials: true }));
     app.use(helmet());
 
-    // Debug middleware to log all requests
-    app.use((req, res, next) => {
-      console.log(`[Server] Incoming request: ${req.method} ${req.path}`, {
-        originalUrl: req.originalUrl,
-        baseUrl: req.baseUrl,
-        url: req.url,
-        headers: {
-          authorization: req.headers.authorization ? 'Bearer ***' : 'none',
-          'content-type': req.headers['content-type']
-        }
-      });
-      next();
-    });
-
     // Global rate limiting
     const limiter = rateLimit({ 
       windowMs: 60_000, 
@@ -126,7 +120,6 @@ const startServer = async () => {
     const API_VERSION = process.env.API_VERSION || 'v1';
 
     // API routes with versioning
-    console.log(`[Server] Setting up API routes with version: ${API_VERSION}`);
     app.use(`/api/${API_VERSION}/auth`, createAuthRouter());
     app.use(`/api/${API_VERSION}/auth/email`, createEmailOtpRouter());
     app.use(`/api/${API_VERSION}/auth/google`, createGoogleAuthRouter());
@@ -134,7 +127,6 @@ const startServer = async () => {
     app.use(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter());
     app.use(`/api/${API_VERSION}/pdfread`, createPDFReadRouter());
     app.use(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter());
-    console.log(`[Server] Setting up chat router at /api/${API_VERSION}/chat`);
     app.use(`/api/${API_VERSION}/chat`, createChatRouter());
 
     // Legacy routes (backward compatibility)

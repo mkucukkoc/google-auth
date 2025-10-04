@@ -2,6 +2,7 @@ import pino from 'pino';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
+const isRender = process.env.RENDER === 'true'; // Render'da çalışıp çalışmadığını kontrol et
 
 // Base logger configuration
 const baseConfig = {
@@ -48,20 +49,29 @@ const developmentLogger = pino({
   },
 });
 
-// Production logger (JSON format)
+// Production logger (JSON format to console for Render)
 const productionLogger = pino({
   ...baseConfig,
-  transport: isProduction ? {
-    target: 'pino/file',
+  // Render'da console'a yaz, dosyaya değil
+  transport: undefined,
+});
+
+// Render logger (console'a yaz, pretty format)
+const renderLogger = pino({
+  ...baseConfig,
+  level: 'debug', // Render'da daha detaylı loglar
+  transport: {
+    target: 'pino-pretty',
     options: {
-      destination: './logs/app.log',
-      mkdir: true,
+      colorize: false, // Render'da renk yok
+      translateTime: 'SYS:standard',
+      ignore: 'pid,hostname',
     },
-  } : undefined,
+  },
 });
 
 // Choose logger based on environment
-export const logger = isDevelopment ? developmentLogger : productionLogger;
+export const logger = isRender ? renderLogger : (isDevelopment ? developmentLogger : productionLogger);
 
 // Request logging middleware
 export const requestLogger = (req: any, res: any, next: any) => {
