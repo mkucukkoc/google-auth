@@ -594,8 +594,28 @@ export class ChatService {
   private static getFunctionMap(): Record<string, Function> {
     return {
       summarize_pdf: async (args: any) => {
-        // PDF özetleme implementasyonu
-        return { message: 'PDF özetlendi', data: 'Özet içeriği...' };
+        // Gerçek PDF özetleme implementasyonu
+        const { PDFService } = await import('./pdfService');
+        const result = await PDFService.extractAndSummarizePDF({
+          fileUrl: args.fileUrl,
+          userId: 'system', // Chat context'ten alınabilir
+          chatId: 'system'  // Chat context'ten alınabilir
+        });
+        
+        if (result.success) {
+          return { 
+            message: 'PDF başarıyla özetlendi', 
+            data: result.data?.summary || 'Özet oluşturulamadı',
+            pageCount: result.data?.pageCount || 0,
+            wordCount: result.data?.wordCount || 0
+          };
+        } else {
+          return { 
+            message: 'PDF özetleme hatası', 
+            data: result.error?.message || 'Bilinmeyen hata',
+            error: true
+          };
+        }
       },
       ask_pdf_question: async (args: any) => {
         // PDF soru-cevap implementasyonu

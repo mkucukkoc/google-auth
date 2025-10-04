@@ -11,6 +11,7 @@ import { createAppleAuthRouter } from './routes/apple';
 import { createPasswordResetRouter } from './routes/passwordReset';
 import { createPDFReadRouter } from './routes/pdfRead';
 import { createPDFReadExtendedRouter } from './routes/pdfReadExtended';
+import { createPDFSummaryRouter } from './routes/pdfSummary';
 import { createChatRouter } from './routes/chat';
 import notificationRouter from './routes/notifications';
 import rateLimit from 'express-rate-limit';
@@ -131,6 +132,7 @@ const startServer = async () => {
     app.use(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter());
     app.use(`/api/${API_VERSION}/pdfread`, createPDFReadRouter());
     app.use(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter());
+    app.use(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter());
     app.use(`/api/${API_VERSION}/chat`, createChatRouter());
 
     // Legacy routes (backward compatibility)
@@ -141,6 +143,7 @@ const startServer = async () => {
     app.use('/auth/password-reset', createPasswordResetRouter());
     app.use('/pdfread', createPDFReadRouter());
     app.use('/pdfread', createPDFReadExtendedRouter());
+    app.use('/pdf', createPDFSummaryRouter());
     app.use('/notifications', notificationRouter);
 
     // 404 handler (must be before error handler)

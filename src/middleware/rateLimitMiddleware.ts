@@ -74,6 +74,30 @@ export const authRateLimits = {
     standardHeaders: true,
     legacyHeaders: false,
   }),
+
+  // PDF summary rate limiting - moderate (PDF processing is resource intensive)
+  pdfSummary: rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10, // 10 PDF summaries per hour
+    message: {
+      error: 'rate_limit_exceeded',
+      message: 'Too many PDF summary requests. Please try again later.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  }),
+
+  // PDF history rate limiting - more permissive
+  pdfHistory: rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 30, // 30 history requests per window
+    message: {
+      error: 'rate_limit_exceeded',
+      message: 'Too many PDF history requests. Please try again later.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  }),
 };
 
 // Cleanup function for rate limit stores
