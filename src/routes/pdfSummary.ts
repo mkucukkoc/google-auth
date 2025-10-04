@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PDFService } from '../services/pdfService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
-import { validate } from '../middleware/validationMiddleware';
-import { pdfSummarySchemas } from '../validation/schemas';
+import { validate, pdfSummarySchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
@@ -81,6 +80,8 @@ export function createPDFSummaryRouter(): Router {
         await auditService.logEvent({
           userId,
           action: 'pdf_summarized',
+          resource: 'pdf_summary',
+          success: true,
           details: {
             chatId,
             fileUrl,

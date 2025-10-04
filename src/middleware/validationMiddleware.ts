@@ -177,6 +177,16 @@ export const chatSchemas = {
 };
 
 /**
+ * Validation schemas for PDF summary endpoints
+ */
+export const pdfSummarySchemas = {
+  summarize: z.object({
+    fileUrl: z.string().url('Geçerli bir dosya URL\'si giriniz'),
+    chatId: z.string().uuid('Geçerli bir chat ID giriniz'),
+  }),
+};
+
+/**
  * Query parameter validation
  */
 export const validateQuery = (schema: z.ZodSchema) => {

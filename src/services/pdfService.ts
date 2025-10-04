@@ -114,7 +114,7 @@ export class PDFService {
         maxContentLength: 25 * 1024 * 1024, // 25MB limit
       } as any);
 
-      const buffer = Buffer.from(response.data);
+      const buffer = Buffer.from(response.data as ArrayBuffer);
       
       logger.info({
         requestId,
