@@ -47,14 +47,34 @@ export class TokenService {
    */
   static async verifyAccessToken(token: string): Promise<AccessTokenClaims> {
     try {
+      console.log('[TokenService] verifyAccessToken START:', {
+        tokenLength: token.length,
+        tokenPreview: token.substring(0, 20) + '...',
+        issuer: config.jwt.iss,
+        audience: config.jwt.aud
+      });
+
       const { payload } = await jwtVerify(token, this.secret, {
         issuer: config.jwt.iss,
         audience: config.jwt.aud,
         algorithms: ['HS256'],
       });
 
+      console.log('[TokenService] verifyAccessToken SUCCESS:', {
+        userId: payload.sub,
+        sessionId: payload.sid,
+        jti: payload.jti,
+        iat: payload.iat,
+        exp: payload.exp
+      });
+
       return payload as unknown as AccessTokenClaims;
     } catch (error) {
+      console.log('[TokenService] verifyAccessToken ERROR:', {
+        error: error instanceof Error ? error.message : String(error),
+        tokenLength: token.length,
+        tokenPreview: token.substring(0, 20) + '...'
+      });
       throw new Error('Invalid or expired token');
     }
   }

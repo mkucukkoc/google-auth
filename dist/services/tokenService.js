@@ -38,14 +38,32 @@ class TokenService {
      */
     static async verifyAccessToken(token) {
         try {
+            console.log('[TokenService] verifyAccessToken START:', {
+                tokenLength: token.length,
+                tokenPreview: token.substring(0, 20) + '...',
+                issuer: config_1.config.jwt.iss,
+                audience: config_1.config.jwt.aud
+            });
             const { payload } = await (0, jose_1.jwtVerify)(token, this.secret, {
                 issuer: config_1.config.jwt.iss,
                 audience: config_1.config.jwt.aud,
                 algorithms: ['HS256'],
             });
+            console.log('[TokenService] verifyAccessToken SUCCESS:', {
+                userId: payload.sub,
+                sessionId: payload.sid,
+                jti: payload.jti,
+                iat: payload.iat,
+                exp: payload.exp
+            });
             return payload;
         }
         catch (error) {
+            console.log('[TokenService] verifyAccessToken ERROR:', {
+                error: error instanceof Error ? error.message : String(error),
+                tokenLength: token.length,
+                tokenPreview: token.substring(0, 20) + '...'
+            });
             throw new Error('Invalid or expired token');
         }
     }

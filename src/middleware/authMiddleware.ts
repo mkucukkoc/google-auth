@@ -33,11 +33,22 @@ export async function authenticateToken(
     }
 
     // Verify the token
-    logger.info({ token: token.substring(0, 20) + '...' }, 'Verifying access token');
+    logger.info({ 
+      token: token.substring(0, 20) + '...',
+      tokenLength: token.length,
+      endpoint: req.path,
+      method: req.method
+    }, 'Verifying access token');
+    
     const decoded = await TokenService.verifyAccessToken(token);
     
     if (!decoded) {
-      logger.warn({ token: token.substring(0, 20) + '...' }, 'Token verification failed');
+      logger.warn({ 
+        token: token.substring(0, 20) + '...',
+        tokenLength: token.length,
+        endpoint: req.path,
+        method: req.method
+      }, 'Token verification failed');
       res.status(401).json({
         error: 'invalid_token',
         message: 'Invalid or expired access token'
@@ -45,7 +56,11 @@ export async function authenticateToken(
       return;
     }
     
-    logger.info({ userId: decoded.sub }, 'Token verified successfully');
+    logger.info({ 
+      userId: decoded.sub,
+      endpoint: req.path,
+      method: req.method
+    }, 'Token verified successfully');
 
     // Get user information
     const user = await UserService.findById(decoded.sub);

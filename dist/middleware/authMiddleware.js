@@ -20,17 +20,31 @@ async function authenticateToken(req, res, next) {
             return;
         }
         // Verify the token
-        logger_1.logger.info({ token: token.substring(0, 20) + '...' }, 'Verifying access token');
+        logger_1.logger.info({
+            token: token.substring(0, 20) + '...',
+            tokenLength: token.length,
+            endpoint: req.path,
+            method: req.method
+        }, 'Verifying access token');
         const decoded = await tokenService_1.TokenService.verifyAccessToken(token);
         if (!decoded) {
-            logger_1.logger.warn({ token: token.substring(0, 20) + '...' }, 'Token verification failed');
+            logger_1.logger.warn({
+                token: token.substring(0, 20) + '...',
+                tokenLength: token.length,
+                endpoint: req.path,
+                method: req.method
+            }, 'Token verification failed');
             res.status(401).json({
                 error: 'invalid_token',
                 message: 'Invalid or expired access token'
             });
             return;
         }
-        logger_1.logger.info({ userId: decoded.sub }, 'Token verified successfully');
+        logger_1.logger.info({
+            userId: decoded.sub,
+            endpoint: req.path,
+            method: req.method
+        }, 'Token verified successfully');
         // Get user information
         const user = await userService_1.UserService.findById(decoded.sub);
         if (!user) {
