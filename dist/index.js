@@ -64,6 +64,7 @@ const dataRetentionService_1 = require("./services/dataRetentionService");
 const websocketService_1 = require("./services/websocketService");
 const errorHandler_1 = require("./middleware/errorHandler");
 const logger_1 = require("./utils/logger");
+const redis_1 = require("./redis");
 // Initialize Sentry first
 (0, sentry_1.initSentry)();
 // Test logger configuration
@@ -76,6 +77,8 @@ logger_1.logger.info({
 // Initialize database and cache
 const initializeServices = async () => {
     try {
+        // Initialize Redis first
+        await (0, redis_1.initializeRedis)();
         // Initialize database
         await database_1.databaseManager.initialize({
             projectId: process.env.FIREBASE_PROJECT_ID || '',

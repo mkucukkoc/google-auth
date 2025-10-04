@@ -8,7 +8,12 @@ export const config = {
     accessTtlMin: Number(process.env.JWT_ACCESS_TTL_MIN || 15),
   },
   refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 60),
-  redisUrl: process.env.REDIS_URL || 'redis://red-d2nf9m7diees73cjdo40:6379',
+  redis: {
+    url: process.env.REDIS_URL || 'redis://red-d2nf9m7diees73cjdo40:6379',
+    password: process.env.REDIS_PASSWORD || '',
+    host: process.env.REDIS_HOST || 'red-d2nf9m7diees73cjdo40',
+    port: Number(process.env.REDIS_PORT || 6379),
+  },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',

@@ -31,6 +31,7 @@ import {
   handleUncaughtException
 } from './middleware/errorHandler';
 import { logger } from './utils/logger';
+import { initializeRedis } from './redis';
 
 // Initialize Sentry first
 initSentry();
@@ -46,6 +47,9 @@ logger.info({
 // Initialize database and cache
 const initializeServices = async () => {
   try {
+    // Initialize Redis first
+    await initializeRedis();
+
     // Initialize database
     await databaseManager.initialize({
       projectId: process.env.FIREBASE_PROJECT_ID || '',
