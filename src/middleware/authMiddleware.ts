@@ -43,9 +43,22 @@ export async function authenticateToken(
       authorizationHeader: req.headers.authorization
     }, 'Verifying access token');
     
+    console.log('[authMiddleware] Token verification START:', {
+      tokenLength: token.length,
+      tokenPreview: token.substring(0, 20) + '...',
+      endpoint: req.path,
+      method: req.method
+    });
+    
     const decoded = await TokenService.verifyAccessToken(token);
     
+    console.log('[authMiddleware] Token verification RESULT:', {
+      hasDecoded: !!decoded,
+      decoded: decoded
+    });
+    
     if (!decoded) {
+      console.log('[authMiddleware] Token verification FAILED');
       logger.warn({ 
         token: token.substring(0, 20) + '...',
         tokenLength: token.length,
@@ -58,6 +71,8 @@ export async function authenticateToken(
       });
       return;
     }
+    
+    console.log('[authMiddleware] Token verification SUCCESS');
     
     logger.info({ 
       userId: decoded.sub,

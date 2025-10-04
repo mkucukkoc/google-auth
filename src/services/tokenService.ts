@@ -79,6 +79,13 @@ export class TokenService {
         console.log('[TokenService] Token decode failed:', decodeError);
       }
 
+      console.log('[TokenService] Attempting JWT verification with:', {
+        issuer: config.jwt.iss,
+        audience: config.jwt.aud,
+        algorithms: ['HS256'],
+        secretLength: this.secret.length
+      });
+
       const { payload } = await jwtVerify(token, this.secret, {
         issuer: config.jwt.iss,
         audience: config.jwt.aud,
@@ -97,8 +104,10 @@ export class TokenService {
     } catch (error) {
       console.log('[TokenService] verifyAccessToken ERROR:', {
         error: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : 'Unknown',
         tokenLength: token.length,
-        tokenPreview: token.substring(0, 20) + '...'
+        tokenPreview: token.substring(0, 20) + '...',
+        stack: error instanceof Error ? error.stack : undefined
       });
       throw new Error('Invalid or expired token');
     }
