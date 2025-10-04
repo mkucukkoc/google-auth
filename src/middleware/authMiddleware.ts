@@ -101,15 +101,35 @@ export async function authenticateToken(
     }
 
     // Verify session is still active
+    console.log('[authMiddleware] Checking session:', {
+      sessionId: decoded.sid,
+      userId: decoded.sub
+    });
+    
     const session = await SessionService.findById(decoded.sid);
+    console.log('[authMiddleware] Session check result:', {
+      hasSession: !!session,
+      sessionId: session?.id,
+      revokedAt: session?.revokedAt,
+      expiresAt: session?.expiresAt,
+      now: new Date(),
+      isExpired: session ? session.expiresAt < new Date() : 'N/A'
+    });
     
     if (!session || session.revokedAt || session.expiresAt < new Date()) {
+      console.log('[authMiddleware] Session validation failed:', {
+        hasSession: !!session,
+        isRevoked: !!session?.revokedAt,
+        isExpired: session ? session.expiresAt < new Date() : 'N/A'
+      });
       res.status(401).json({
         error: 'session_expired',
         message: 'Session has expired or been revoked'
       });
       return;
     }
+    
+    console.log('[authMiddleware] Session validation successful');
 
     // Add user to request object
     (req as AuthRequest).user = {
