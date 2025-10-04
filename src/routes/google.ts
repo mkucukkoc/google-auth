@@ -19,25 +19,62 @@ export function createGoogleAuthRouter(): Router {
   r.post('/start', 
     authRateLimits.general,
     async (req, res) => {
-      const { device_id } = req.body || {};
-      if (!device_id) return res.status(400).json({ error: 'invalid_request' });
-      const id = uuidv4();
-      await setJson(`gls:${id}`, { device_id }, 600);
-      const params = new URLSearchParams({
-        client_id: config.google.clientId,
-        redirect_uri: config.google.redirectUri,
-        response_type: 'code',
-        scope: 'openid email profile',
-        state: id,
-      });
-      return res.json({ url: `https://accounts.google.com/o/oauth2/auth?${params}` });
+      try {
+        console.log('[GoogleAuth] /start endpoint called:', {
+          body: req.body,
+          headers: req.headers
+        });
+        
+        const { device_id } = req.body || {};
+        if (!device_id) {
+          console.log('[GoogleAuth] Missing device_id');
+          return res.status(400).json({ error: 'invalid_request' });
+        }
+        
+        const id = uuidv4();
+        console.log('[GoogleAuth] Generated state ID:', id);
+        
+        await setJson(`gls:${id}`, { device_id }, 600);
+        console.log('[GoogleAuth] Stored session in Redis');
+        
+        const params = new URLSearchParams({
+          client_id: config.google.clientId,
+          redirect_uri: config.google.redirectUri,
+          response_type: 'code',
+          scope: 'openid email profile',
+          state: id,
+        });
+        
+        const authUrl = `https://accounts.google.com/o/oauth2/auth?${params}`;
+        console.log('[GoogleAuth] Generated auth URL:', authUrl);
+        
+        return res.json({ url: authUrl });
+      } catch (error) {
+        console.log('[GoogleAuth] /start error:', error);
+        logger.error({ error }, 'Google auth start error');
+        return res.status(500).json({ error: 'internal_error' });
+      }
     }
   );
 
   r.get('/status/:id', async (req, res) => {
-    const session = await getJson<any>(`gls:${req.params.id}`);
-    if (!session || !session.ready) return res.json({ ready: false });
-    return res.json(session);
+    try {
+      console.log('[GoogleAuth] /status endpoint called for ID:', req.params.id);
+      const session = await getJson<any>(`gls:${req.params.id}`);
+      console.log('[GoogleAuth] Retrieved session:', session);
+      
+      if (!session || !session.ready) {
+        console.log('[GoogleAuth] Session not ready');
+        return res.json({ ready: false });
+      }
+      
+      console.log('[GoogleAuth] Session ready, returning data');
+      return res.json(session);
+    } catch (error) {
+      console.log('[GoogleAuth] /status error:', error);
+      logger.error({ error }, 'Google auth status check error');
+      return res.status(500).json({ error: 'internal_error' });
+    }
   });
 
   r.get('/callback', 
