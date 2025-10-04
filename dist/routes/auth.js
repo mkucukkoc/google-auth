@@ -17,6 +17,7 @@ const crypto_1 = require("crypto");
 const email_1 = require("../email");
 const redis_1 = require("../redis");
 const firebase_1 = require("../firebase");
+const logger_1 = require("../utils/logger");
 function createAuthRouter() {
     const r = (0, express_1.Router)();
     // POST /auth/register
@@ -62,7 +63,7 @@ function createAuthRouter() {
             res.status(201).json(response_1.ResponseBuilder.success(response, 'User registered successfully'));
         }
         catch (error) {
-            console.error('Registration error:', error);
+            logger_1.logger.error({ err: error, email: req.body.email, operation: 'register' }, 'Registration error');
             res.status(500).json(response_1.ResponseBuilder.error('internal_error', 'Registration failed'));
         }
     });
@@ -124,10 +125,10 @@ function createAuthRouter() {
             // Verify Firebase authentication user exists
             try {
                 const firebaseUser = await firebase_admin_1.default.auth().getUser(user.id);
-                console.log('Firebase user verified for login:', firebaseUser.uid, firebaseUser.email);
+                logger_1.logger.info({ userId: firebaseUser.uid, email: firebaseUser.email, operation: 'firebaseVerification' }, 'Firebase user verified for login');
             }
             catch (error) {
-                console.error('Firebase user verification failed during login:', error);
+                logger_1.logger.warn({ err: error, userId: user.id, operation: 'firebaseVerification' }, 'Firebase user verification failed during login');
                 // Continue with login even if Firebase verification fails
             }
             // Create session
@@ -154,7 +155,7 @@ function createAuthRouter() {
             res.json(response);
         }
         catch (error) {
-            console.error('Login error:', error);
+            logger_1.logger.error({ err: error, email: req.body.email, operation: 'login' }, 'Login error');
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Login failed'
@@ -210,7 +211,7 @@ function createAuthRouter() {
             }
         }
         catch (error) {
-            console.error('Refresh error:', error);
+            logger_1.logger.error({ err: error, operation: 'refresh' }, 'Refresh error');
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Token refresh failed'

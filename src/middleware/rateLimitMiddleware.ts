@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit';
+import { logger } from '../utils/logger';
 
 // Rate limiting configurations for different auth endpoints
 export const authRateLimits = {
@@ -80,7 +81,7 @@ export function cleanupRateLimits(): void {
   // This is a placeholder - express-rate-limit handles cleanup automatically
   // In a production environment, you might want to implement custom cleanup
   // for distributed rate limiting scenarios
-  console.log('Rate limit cleanup completed');
+  logger.info({ operation: 'rateLimitCleanup' }, 'Rate limit cleanup completed');
 }
 
 

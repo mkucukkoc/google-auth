@@ -6,6 +6,7 @@ exports.requireAdmin = requireAdmin;
 const tokenService_1 = require("../services/tokenService");
 const userService_1 = require("../services/userService");
 const sessionService_1 = require("../services/sessionService");
+const logger_1 = require("../utils/logger");
 // JWT token authentication middleware
 async function authenticateToken(req, res, next) {
     try {
@@ -63,7 +64,7 @@ async function authenticateToken(req, res, next) {
         next();
     }
     catch (error) {
-        console.error('Authentication error:', error);
+        logger_1.logger.error({ err: error, operation: 'authentication' }, 'Authentication error');
         res.status(500).json({
             error: 'internal_error',
             message: 'Authentication failed'
@@ -96,7 +97,7 @@ async function optionalAuth(req, res, next) {
     }
     catch (error) {
         // For optional auth, we don't fail on error, just continue without user
-        console.warn('Optional auth error:', error);
+        logger_1.logger.warn({ err: error, operation: 'optionalAuth' }, 'Optional auth error');
         next();
     }
 }

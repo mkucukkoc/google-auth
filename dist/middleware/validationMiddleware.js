@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateParams = exports.validateQuery = exports.authSchemas = exports.validate = void 0;
+exports.validateParams = exports.validateQuery = exports.chatSchemas = exports.pdfReadSchemas = exports.authSchemas = exports.validate = void 0;
 const zod_1 = require("zod");
 /**
  * Validation middleware factory
@@ -83,6 +83,77 @@ exports.authSchemas = {
     verify2FA: zod_1.z.object({
         code: zod_1.z.string().min(6, '2FA code must be at least 6 characters'),
         backupCode: zod_1.z.string().optional(),
+    }),
+};
+/**
+ * Validation schemas for PDFRead endpoints
+ */
+exports.pdfReadSchemas = {
+    askQuestion: zod_1.z.object({
+        pdfText: zod_1.z.string().min(1, 'PDF text is required').max(100000, 'PDF text too long'),
+        question: zod_1.z.string().min(1, 'Question is required').max(1000, 'Question too long'),
+    }),
+    analyzeImage: zod_1.z.object({
+        imageBase64: zod_1.z.string().min(1, 'Image base64 is required'),
+    }),
+    generateDoc: zod_1.z.object({
+        prompt: zod_1.z.string().min(1, 'Prompt is required').max(5000, 'Prompt too long'),
+    }),
+    speechToText: zod_1.z.object({
+        audioBase64: zod_1.z.string().min(1, 'Audio base64 is required'),
+    }),
+    textToSpeech: zod_1.z.object({
+        messages: zod_1.z.array(zod_1.z.object({
+            role: zod_1.z.string(),
+            content: zod_1.z.string()
+        })).min(1, 'At least one message is required'),
+    }),
+    analyzeVideo: zod_1.z.object({
+        videoBase64: zod_1.z.string().min(1, 'Video base64 is required'),
+    }),
+    askWithEmbeddings: zod_1.z.object({
+        question: zod_1.z.string().min(1, 'Question is required').max(1000, 'Question too long'),
+        chatId: zod_1.z.string().min(1, 'Chat ID is required'),
+    }),
+    searchDocs: zod_1.z.object({
+        query: zod_1.z.string().min(1, 'Query is required').max(500, 'Query too long'),
+        chatId: zod_1.z.string().min(1, 'Chat ID is required'),
+    }),
+    summarizeUrl: zod_1.z.object({
+        url: zod_1.z.string().url('Invalid URL format'),
+    }),
+    exportChat: zod_1.z.object({
+        chatId: zod_1.z.string().min(1, 'Chat ID is required'),
+        format: zod_1.z.string().optional().default('pdf'),
+    }),
+};
+/**
+ * Validation schemas for chat endpoints
+ */
+exports.chatSchemas = {
+    sendMessage: zod_1.z.object({
+        messages: zod_1.z.array(zod_1.z.object({
+            role: zod_1.z.enum(['user', 'assistant', 'system']),
+            content: zod_1.z.string().min(1, 'Message content is required'),
+            timestamp: zod_1.z.any().optional(),
+            fileName: zod_1.z.string().optional(),
+            fileUrl: zod_1.z.string().optional(),
+        })).min(1, 'At least one message is required'),
+        chatId: zod_1.z.string().min(1, 'Chat ID is required'),
+        hasImage: zod_1.z.boolean().optional().default(false),
+        imageFileUrl: zod_1.z.string().optional(),
+    }),
+    textToSpeech: zod_1.z.object({
+        messages: zod_1.z.array(zod_1.z.object({
+            role: zod_1.z.enum(['user', 'assistant', 'system']),
+            content: zod_1.z.string().min(1, 'Message content is required'),
+            timestamp: zod_1.z.any().optional(),
+            fileName: zod_1.z.string().optional(),
+            fileUrl: zod_1.z.string().optional(),
+        })).min(1, 'At least one message is required'),
+    }),
+    createChat: zod_1.z.object({
+        title: zod_1.z.string().optional(),
     }),
 };
 /**

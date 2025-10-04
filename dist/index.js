@@ -47,6 +47,9 @@ const emailOtp_1 = require("./routes/emailOtp");
 const google_1 = require("./routes/google");
 const apple_1 = require("./routes/apple");
 const passwordReset_1 = require("./routes/passwordReset");
+const pdfRead_1 = require("./routes/pdfRead");
+const pdfReadExtended_1 = require("./routes/pdfReadExtended");
+const chat_1 = require("./routes/chat");
 const notifications_1 = __importDefault(require("./routes/notifications"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
@@ -133,12 +136,17 @@ const startServer = async () => {
         app.use(`/api/${API_VERSION}/auth/google`, (0, google_1.createGoogleAuthRouter)());
         app.use(`/api/${API_VERSION}/auth/apple`, (0, apple_1.createAppleAuthRouter)());
         app.use(`/api/${API_VERSION}/auth/password-reset`, (0, passwordReset_1.createPasswordResetRouter)());
+        app.use(`/api/${API_VERSION}/pdfread`, (0, pdfRead_1.createPDFReadRouter)());
+        app.use(`/api/${API_VERSION}/pdfread`, (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
+        app.use(`/api/${API_VERSION}/chat`, (0, chat_1.createChatRouter)());
         // Legacy routes (backward compatibility)
         app.use('/auth', (0, auth_1.createAuthRouter)());
         app.use('/auth/email', (0, emailOtp_1.createEmailOtpRouter)());
         app.use('/auth/google', (0, google_1.createGoogleAuthRouter)());
         app.use('/auth/apple', (0, apple_1.createAppleAuthRouter)());
         app.use('/auth/password-reset', (0, passwordReset_1.createPasswordResetRouter)());
+        app.use('/pdfread', (0, pdfRead_1.createPDFReadRouter)());
+        app.use('/pdfread', (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
         app.use('/notifications', notifications_1.default);
         // 404 handler (must be before error handler)
         app.use(errorHandler_1.notFound);

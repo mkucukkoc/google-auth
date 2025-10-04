@@ -12,6 +12,7 @@ import { randomInt, createHash } from 'crypto';
 import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
 import { db } from '../firebase';
+import { logger } from '../utils/logger';
 
 export function createAuthRouter(): Router {
   const r = Router();
@@ -76,7 +77,7 @@ export function createAuthRouter(): Router {
 
         res.status(201).json(ResponseBuilder.success(response, 'User registered successfully'));
       } catch (error) {
-        console.error('Registration error:', error);
+        logger.error({ err: error, email: req.body.email, operation: 'register' }, 'Registration error');
         res.status(500).json(ResponseBuilder.error(
           'internal_error',
           'Registration failed'
@@ -151,9 +152,9 @@ export function createAuthRouter(): Router {
         // Verify Firebase authentication user exists
         try {
           const firebaseUser = await admin.auth().getUser(user.id);
-          console.log('Firebase user verified for login:', firebaseUser.uid, firebaseUser.email);
+          logger.info({ userId: firebaseUser.uid, email: firebaseUser.email, operation: 'firebaseVerification' }, 'Firebase user verified for login');
         } catch (error) {
-          console.error('Firebase user verification failed during login:', error);
+          logger.warn({ err: error, userId: user.id, operation: 'firebaseVerification' }, 'Firebase user verification failed during login');
           // Continue with login even if Firebase verification fails
         }
 
@@ -189,7 +190,7 @@ export function createAuthRouter(): Router {
 
         res.json(response);
       } catch (error) {
-        console.error('Login error:', error);
+        logger.error({ err: error, email: req.body.email, operation: 'login' }, 'Login error');
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Login failed' 
@@ -256,7 +257,7 @@ export function createAuthRouter(): Router {
           throw error;
         }
       } catch (error) {
-        console.error('Refresh error:', error);
+        logger.error({ err: error, operation: 'refresh' }, 'Refresh error');
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Token refresh failed' 

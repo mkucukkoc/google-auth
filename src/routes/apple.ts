@@ -11,6 +11,7 @@ import { SessionService } from '../services/sessionService';
 import { auditService } from '../services/auditService';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import admin from 'firebase-admin';
+import { logger } from '../utils/logger';
 import * as jwt from 'jsonwebtoken';
 
 export function createAppleAuthRouter(): Router {
@@ -148,7 +149,7 @@ export function createAppleAuthRouter(): Router {
         
         return res.send('<html><body>Login successful. You may close this window.</body></html>');
       } catch (error) {
-        console.error('Apple auth error:', error);
+        logger.error({ err: error, operation: 'appleAuth' }, 'Apple auth error');
         
         // Log the error for debugging
         await auditService.logAuthEvent('login', {

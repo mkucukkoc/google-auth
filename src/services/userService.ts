@@ -3,6 +3,7 @@ import { HashService } from './hashService';
 import { User, RegisterRequest } from '../types/auth';
 import { v4 as uuidv4 } from 'uuid';
 import admin from 'firebase-admin';
+import { logger } from '../utils/logger';
 
 export class UserService {
   /**
@@ -24,9 +25,9 @@ export class UserService {
         emailVerified: false,
         password: request.password,
       });
-      console.log('Firebase user created:', firebaseUser.uid);
+      logger.info({ userId: firebaseUser.uid, email: request.email, operation: 'firebaseUserCreation' }, 'Firebase user created');
     } catch (error) {
-      console.error('Firebase user creation failed:', error);
+      logger.error({ err: error, email: request.email, operation: 'firebaseUserCreation' }, 'Firebase user creation failed');
       throw new Error('Failed to create Firebase user');
     }
 
@@ -65,9 +66,9 @@ export class UserService {
         displayName: name || '',
         emailVerified: true, // Google users are pre-verified
       });
-      console.log('Firebase Google user created:', firebaseUser.uid);
+      logger.info({ userId: firebaseUser.uid, email: normalizedEmail, operation: 'firebaseGoogleUserCreation' }, 'Firebase Google user created');
     } catch (error) {
-      console.error('Firebase Google user creation failed:', error);
+      logger.error({ err: error, email: normalizedEmail, operation: 'firebaseGoogleUserCreation' }, 'Firebase Google user creation failed');
       throw new Error('Failed to create Firebase Google user');
     }
 
@@ -106,9 +107,9 @@ export class UserService {
         displayName: name || '',
         emailVerified: true, // Apple users are pre-verified
       });
-      console.log('Firebase Apple user created:', firebaseUser.uid);
+      logger.info({ userId: firebaseUser.uid, email: normalizedEmail, operation: 'firebaseAppleUserCreation' }, 'Firebase Apple user created');
     } catch (error) {
-      console.error('Firebase Apple user creation failed:', error);
+      logger.error({ err: error, email: normalizedEmail, operation: 'firebaseAppleUserCreation' }, 'Firebase Apple user creation failed');
       throw new Error('Failed to create Firebase Apple user');
     }
 

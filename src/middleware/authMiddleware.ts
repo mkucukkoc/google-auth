@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { TokenService } from '../services/tokenService';
 import { UserService } from '../services/userService';
 import { SessionService } from '../services/sessionService';
+import { logger } from '../utils/logger';
 
 // Extend Request interface to include user
 export interface AuthRequest extends Request {
@@ -83,7 +84,7 @@ export async function authenticateToken(
 
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
+    logger.error({ err: error, operation: 'authentication' }, 'Authentication error');
     res.status(500).json({
       error: 'internal_error',
       message: 'Authentication failed'
@@ -125,7 +126,7 @@ export async function optionalAuth(
     next();
   } catch (error) {
     // For optional auth, we don't fail on error, just continue without user
-    console.warn('Optional auth error:', error);
+    logger.warn({ err: error, operation: 'optionalAuth' }, 'Optional auth error');
     next();
   }
 }

@@ -93,6 +93,90 @@ export const authSchemas = {
 };
 
 /**
+ * Validation schemas for PDFRead endpoints
+ */
+export const pdfReadSchemas = {
+  askQuestion: z.object({
+    pdfText: z.string().min(1, 'PDF text is required').max(100000, 'PDF text too long'),
+    question: z.string().min(1, 'Question is required').max(1000, 'Question too long'),
+  }),
+
+  analyzeImage: z.object({
+    imageBase64: z.string().min(1, 'Image base64 is required'),
+  }),
+
+  generateDoc: z.object({
+    prompt: z.string().min(1, 'Prompt is required').max(5000, 'Prompt too long'),
+  }),
+
+  speechToText: z.object({
+    audioBase64: z.string().min(1, 'Audio base64 is required'),
+  }),
+
+  textToSpeech: z.object({
+    messages: z.array(z.object({
+      role: z.string(),
+      content: z.string()
+    })).min(1, 'At least one message is required'),
+  }),
+
+  analyzeVideo: z.object({
+    videoBase64: z.string().min(1, 'Video base64 is required'),
+  }),
+
+  askWithEmbeddings: z.object({
+    question: z.string().min(1, 'Question is required').max(1000, 'Question too long'),
+    chatId: z.string().min(1, 'Chat ID is required'),
+  }),
+
+  searchDocs: z.object({
+    query: z.string().min(1, 'Query is required').max(500, 'Query too long'),
+    chatId: z.string().min(1, 'Chat ID is required'),
+  }),
+
+  summarizeUrl: z.object({
+    url: z.string().url('Invalid URL format'),
+  }),
+
+  exportChat: z.object({
+    chatId: z.string().min(1, 'Chat ID is required'),
+    format: z.string().optional().default('pdf'),
+  }),
+};
+
+/**
+ * Validation schemas for chat endpoints
+ */
+export const chatSchemas = {
+  sendMessage: z.object({
+    messages: z.array(z.object({
+      role: z.enum(['user', 'assistant', 'system']),
+      content: z.string().min(1, 'Message content is required'),
+      timestamp: z.any().optional(),
+      fileName: z.string().optional(),
+      fileUrl: z.string().optional(),
+    })).min(1, 'At least one message is required'),
+    chatId: z.string().min(1, 'Chat ID is required'),
+    hasImage: z.boolean().optional().default(false),
+    imageFileUrl: z.string().optional(),
+  }),
+  
+  textToSpeech: z.object({
+    messages: z.array(z.object({
+      role: z.enum(['user', 'assistant', 'system']),
+      content: z.string().min(1, 'Message content is required'),
+      timestamp: z.any().optional(),
+      fileName: z.string().optional(),
+      fileUrl: z.string().optional(),
+    })).min(1, 'At least one message is required'),
+  }),
+  
+  createChat: z.object({
+    title: z.string().optional(),
+  }),
+};
+
+/**
  * Query parameter validation
  */
 export const validateQuery = (schema: z.ZodSchema) => {

@@ -47,6 +47,7 @@ const sessionService_1 = require("../services/sessionService");
 const auditService_1 = require("../services/auditService");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
+const logger_1 = require("../utils/logger");
 const jwt = __importStar(require("jsonwebtoken"));
 function createAppleAuthRouter() {
     const r = (0, express_1.Router)();
@@ -152,7 +153,7 @@ function createAppleAuthRouter() {
             return res.send('<html><body>Login successful. You may close this window.</body></html>');
         }
         catch (error) {
-            console.error('Apple auth error:', error);
+            logger_1.logger.error({ err: error, operation: 'appleAuth' }, 'Apple auth error');
             // Log the error for debugging
             await auditService_1.auditService.logAuthEvent('login', {
                 ipAddress: req.ip || req.connection?.remoteAddress,

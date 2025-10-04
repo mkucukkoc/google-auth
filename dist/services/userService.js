@@ -8,6 +8,7 @@ const firebase_1 = require("../firebase");
 const hashService_1 = require("./hashService");
 const uuid_1 = require("uuid");
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
+const logger_1 = require("../utils/logger");
 class UserService {
     /**
      * Create a new user
@@ -27,10 +28,10 @@ class UserService {
                 emailVerified: false,
                 password: request.password,
             });
-            console.log('Firebase user created:', firebaseUser.uid);
+            logger_1.logger.info({ userId: firebaseUser.uid, email: request.email, operation: 'firebaseUserCreation' }, 'Firebase user created');
         }
         catch (error) {
-            console.error('Firebase user creation failed:', error);
+            logger_1.logger.error({ err: error, email: request.email, operation: 'firebaseUserCreation' }, 'Firebase user creation failed');
             throw new Error('Failed to create Firebase user');
         }
         const user = {
@@ -64,10 +65,10 @@ class UserService {
                 displayName: name || '',
                 emailVerified: true, // Google users are pre-verified
             });
-            console.log('Firebase Google user created:', firebaseUser.uid);
+            logger_1.logger.info({ userId: firebaseUser.uid, email: normalizedEmail, operation: 'firebaseGoogleUserCreation' }, 'Firebase Google user created');
         }
         catch (error) {
-            console.error('Firebase Google user creation failed:', error);
+            logger_1.logger.error({ err: error, email: normalizedEmail, operation: 'firebaseGoogleUserCreation' }, 'Firebase Google user creation failed');
             throw new Error('Failed to create Firebase Google user');
         }
         const user = {
@@ -101,10 +102,10 @@ class UserService {
                 displayName: name || '',
                 emailVerified: true, // Apple users are pre-verified
             });
-            console.log('Firebase Apple user created:', firebaseUser.uid);
+            logger_1.logger.info({ userId: firebaseUser.uid, email: normalizedEmail, operation: 'firebaseAppleUserCreation' }, 'Firebase Apple user created');
         }
         catch (error) {
-            console.error('Firebase Apple user creation failed:', error);
+            logger_1.logger.error({ err: error, email: normalizedEmail, operation: 'firebaseAppleUserCreation' }, 'Firebase Apple user creation failed');
             throw new Error('Failed to create Firebase Apple user');
         }
         const user = {

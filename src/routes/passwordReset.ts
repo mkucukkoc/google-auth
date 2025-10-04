@@ -3,6 +3,7 @@ import { PasswordResetService } from '../services/passwordResetService';
 import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
+import { logger } from '../utils/logger';
 
 export function createPasswordResetRouter(): Router {
   const r = Router();
@@ -34,7 +35,7 @@ export function createPasswordResetRouter(): Router {
         //   await EmailService.sendPasswordResetEmail(email, result.token);
         // }
       } catch (error) {
-        console.error('Password reset request error:', error);
+        logger.error({ err: error, email: req.body.email, operation: 'passwordResetRequest' }, 'Password reset request error');
         res.status(500).json({
           error: 'internal_error',
           message: 'Password reset request failed',
@@ -78,7 +79,7 @@ export function createPasswordResetRouter(): Router {
           message: 'Password has been reset successfully. Please log in with your new password.',
         });
       } catch (error) {
-        console.error('Password reset confirm error:', error);
+        logger.error({ err: error, operation: 'passwordResetConfirm' }, 'Password reset confirm error');
         res.status(500).json({
           error: 'internal_error',
           message: 'Password reset failed',

@@ -6,6 +6,7 @@ const passwordResetService_1 = require("../services/passwordResetService");
 const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const auditService_1 = require("../services/auditService");
+const logger_1 = require("../utils/logger");
 function createPasswordResetRouter() {
     const r = (0, express_1.Router)();
     // POST /auth/password-reset/request
@@ -26,7 +27,7 @@ function createPasswordResetRouter() {
             // }
         }
         catch (error) {
-            console.error('Password reset request error:', error);
+            logger_1.logger.error({ err: error, email: req.body.email, operation: 'passwordResetRequest' }, 'Password reset request error');
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Password reset request failed',
@@ -57,7 +58,7 @@ function createPasswordResetRouter() {
             });
         }
         catch (error) {
-            console.error('Password reset confirm error:', error);
+            logger_1.logger.error({ err: error, operation: 'passwordResetConfirm' }, 'Password reset confirm error');
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Password reset failed',

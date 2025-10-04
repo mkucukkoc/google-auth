@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authRateLimits = void 0;
 exports.cleanupRateLimits = cleanupRateLimits;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const logger_1 = require("../utils/logger");
 // Rate limiting configurations for different auth endpoints
 exports.authRateLimits = {
     // Registration rate limiting - more restrictive
@@ -80,5 +81,5 @@ function cleanupRateLimits() {
     // This is a placeholder - express-rate-limit handles cleanup automatically
     // In a production environment, you might want to implement custom cleanup
     // for distributed rate limiting scenarios
-    console.log('Rate limit cleanup completed');
+    logger_1.logger.info({ operation: 'rateLimitCleanup' }, 'Rate limit cleanup completed');
 }
