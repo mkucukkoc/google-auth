@@ -112,7 +112,7 @@ export class PDFService {
         responseType: 'arraybuffer',
         timeout: 30000, // 30 saniye timeout
         maxContentLength: 25 * 1024 * 1024, // 25MB limit
-      });
+      } as any);
 
       const buffer = Buffer.from(response.data);
       
@@ -148,7 +148,7 @@ export class PDFService {
         operation: 'textExtraction'
       }, 'Extracting text from PDF');
 
-      const pdfData = await pdf(buffer, {
+      const pdfData = await (pdf as any)(buffer, {
         // PDF parsing seçenekleri
         max: 0, // Tüm sayfaları işle
         version: 'v1.10.100', // PDF.js versiyonu
@@ -215,7 +215,7 @@ export class PDFService {
         timeout: 60000 // 60 saniye timeout
       });
 
-      const summary = openaiResponse.data.choices?.[0]?.message?.content?.trim();
+      const summary = (openaiResponse.data as any).choices?.[0]?.message?.content?.trim();
       
       if (!summary) {
         throw new Error('OpenAI\'dan özet alınamadı');
@@ -249,7 +249,7 @@ export class PDFService {
       const response = await axios.head(fileUrl, {
         timeout: 10000,
         maxContentLength: 25 * 1024 * 1024
-      });
+      } as any);
 
       const contentType = response.headers['content-type'];
       const contentLength = parseInt(response.headers['content-length'] || '0');

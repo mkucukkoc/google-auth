@@ -357,5 +357,6 @@ export const schemas = {
   file: fileSchemas,
   api: apiSchemas,
   settings: settingsSchemas,
+  pdfSummary: pdfSummarySchemas,
 };
 

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { PDFService } from '../services/pdfService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
-import { validate, pdfSummarySchemas } from '../middleware/validationMiddleware';
+import { validate } from '../middleware/validationMiddleware';
+import { pdfSummarySchemas } from '../validation/schemas';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
@@ -86,9 +87,7 @@ export function createPDFSummaryRouter(): Router {
             pageCount: result.data!.pageCount,
             wordCount: result.data!.wordCount,
             summaryLength: result.data!.summary.length
-          },
-          ip: req.ip,
-          userAgent: req.get('User-Agent') || 'Unknown'
+          }
         });
 
         const processingTime = Date.now() - startTime;
