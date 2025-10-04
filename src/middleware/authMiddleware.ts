@@ -33,15 +33,19 @@ export async function authenticateToken(
     }
 
     // Verify the token
+    logger.info({ token: token.substring(0, 20) + '...' }, 'Verifying access token');
     const decoded = await TokenService.verifyAccessToken(token);
     
     if (!decoded) {
+      logger.warn({ token: token.substring(0, 20) + '...' }, 'Token verification failed');
       res.status(401).json({
         error: 'invalid_token',
         message: 'Invalid or expired access token'
       });
       return;
     }
+    
+    logger.info({ userId: decoded.sub }, 'Token verified successfully');
 
     // Get user information
     const user = await UserService.findById(decoded.sub);
