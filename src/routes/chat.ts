@@ -22,26 +22,28 @@ export function createChatRouter(): Router {
     authRateLimits.general,
     validate(chatSchemas.sendMessage),
     async (req: Request, res: Response) => {
+      const requestId = Math.random().toString(36).substring(7);
+      const startTime = Date.now();
       const authReq = req as AuthRequest;
       const { messages, chatId, hasImage, imageFileUrl } = req.body;
 
-      console.log('[ChatRouter] /send endpoint called:', {
+      logger.info({
+        requestId,
+        operation: 'chatSend',
         userId: authReq.user?.id,
         chatId,
         messageCount: messages?.length,
         hasImage,
-        body: req.body
-      });
+        imageFileUrl: imageFileUrl ? 'provided' : 'none',
+        userAgent: req.headers['user-agent'],
+        ip: req.ip,
+        headers: {
+          contentType: req.headers['content-type'],
+          accept: req.headers.accept
+        }
+      }, 'Chat send request received');
 
       try {
-        logger.info({ 
-          userId: authReq.user!.id, 
-          chatId, 
-          messageCount: messages.length,
-          hasImage,
-          operation: 'chatSend' 
-        }, 'Chat send request received');
-
         const chatRequest: ChatRequest = {
           messages,
           chatId,
@@ -50,31 +52,94 @@ export function createChatRouter(): Router {
           imageFileUrl
         };
 
-        console.log('[ChatRouter] Calling ChatService.sendMessage...');
+        logger.debug({
+          requestId,
+          operation: 'chatSend',
+          userId: authReq.user!.id,
+          chatId,
+          chatRequest: {
+            messageCount: chatRequest.messages.length,
+            hasImage: chatRequest.hasImage,
+            imageFileUrl: chatRequest.imageFileUrl ? 'provided' : 'none'
+          }
+        }, 'Calling ChatService.sendMessage');
+
         const result = await ChatService.sendMessage(chatRequest);
-        console.log('[ChatRouter] ChatService.sendMessage result:', {
+        
+        logger.info({
+          requestId,
+          operation: 'chatSend',
+          userId: authReq.user!.id,
+          chatId,
           success: result.success,
           hasData: !!result.data,
-          error: result.error
-        });
+          error: result.error,
+          processingTimeMs: Date.now() - startTime
+        }, 'ChatService.sendMessage completed');
 
         if (result.success && result.data) {
-          console.log('[ChatRouter] Processing successful result...');
+          logger.debug({
+            requestId,
+            operation: 'chatSend',
+            userId: authReq.user!.id,
+            chatId,
+            messageRole: result.data.message.role,
+            messageLength: result.data.message.content?.length || 0,
+            hasChatTitle: !!result.data.chatTitle
+          }, 'Processing successful result');
           
           // Mesajı Firestore'a kaydet
+          logger.debug({
+            requestId,
+            operation: 'chatSend',
+            userId: authReq.user!.id,
+            chatId,
+            messageRole: result.data.message.role
+          }, 'Saving message to Firestore');
+          
           await ChatService.saveMessageToFirestore(
             authReq.user!.id,
             chatId,
             result.data.message
           );
 
+          logger.info({
+            requestId,
+            operation: 'chatSend',
+            userId: authReq.user!.id,
+            chatId,
+            messageRole: result.data.message.role
+          }, 'Message saved to Firestore successfully');
+
           // Chat başlığı oluştur (sadece ilk assistant mesajında)
           if (result.data.message.role === 'assistant') {
+            logger.debug({
+              requestId,
+              operation: 'chatSend',
+              userId: authReq.user!.id,
+              chatId,
+              messageContent: result.data.message.content?.substring(0, 100) + '...'
+            }, 'Generating chat title for assistant message');
+            
             const title = await ChatService.generateChatTitle(result.data.message.content);
-            // Chat başlığını güncelle (burada implement edilecek)
+            
+            logger.info({
+              requestId,
+              operation: 'chatSend',
+              userId: authReq.user!.id,
+              chatId,
+              generatedTitle: title
+            }, 'Chat title generated successfully');
           }
 
           // Audit log
+          logger.debug({
+            requestId,
+            operation: 'chatSend',
+            userId: authReq.user!.id,
+            chatId
+          }, 'Logging user action to audit service');
+          
           await auditService.logUserAction(
             authReq.user!.id,
             'chat_send',
@@ -86,41 +151,43 @@ export function createChatRouter(): Router {
             }
           );
 
+          const totalProcessingTime = Date.now() - startTime;
           logger.info({ 
+            requestId,
             userId: authReq.user!.id, 
             chatId,
+            messageCount: messages.length,
+            hasImage,
+            processingTimeMs: totalProcessingTime,
             operation: 'chatSend' 
           }, 'Chat message processed successfully');
 
-          console.log('[ChatRouter] Sending response:', result);
           res.json(result);
         } else {
-          console.log('[ChatRouter] Processing failed result...');
           logger.error({ 
+            requestId,
             userId: authReq.user!.id, 
             chatId,
             error: result.error,
+            processingTimeMs: Date.now() - startTime,
             operation: 'chatSend' 
           }, 'Chat message processing failed');
 
-          console.log('[ChatRouter] Sending error response:', result);
           res.status(400).json(result);
         }
 
       } catch (error: any) {
-        console.log('[ChatRouter] Error caught:', {
-          error: error.message,
-          stack: error.stack,
-          userId: authReq.user?.id,
-          chatId
-        });
-        
+        const totalProcessingTime = Date.now() - startTime;
         logger.error({ 
+          requestId,
           err: error, 
           userId: authReq.user!.id, 
           chatId,
+          messageCount: messages?.length,
+          hasImage,
+          processingTimeMs: totalProcessingTime,
           operation: 'chatSend' 
-        }, 'Chat send error');
+        }, 'Chat send error occurred');
 
         await auditService.logUserAction(
           authReq.user!.id,
@@ -134,7 +201,6 @@ export function createChatRouter(): Router {
           }
         );
 
-        console.log('[ChatRouter] Sending error response...');
         res.status(500).json({
           error: 'internal_error',
           message: 'Failed to process chat message'
