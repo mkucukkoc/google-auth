@@ -307,10 +307,10 @@ export class ChatService {
           contentType: Array.isArray(msg.content) ? 'multimodal' : 'text',
           contentLength: Array.isArray(msg.content) ? 
             msg.content.reduce((total: number, part: any) => total + (part.text?.length || 0), 0) : 
-            msg.content.length,
+            (msg.content?.length || 0),
           contentPreview: Array.isArray(msg.content) ? 
             msg.content.map((part: any) => part.text || `[${part.type}]`).join(' ').substring(0, 100) + '...' :
-            msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : ''),
+            (msg.content ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '') : 'null'),
           hasImage: Array.isArray(msg.content) && msg.content.some((part: any) => part.type === 'image_url')
         })),
         tools: requestData.tools.map(tool => ({
