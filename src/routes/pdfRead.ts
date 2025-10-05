@@ -176,7 +176,7 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
-        const { imageBase64 } = req.body;
+        const { imageBase64, user_id, chat_id } = req.body;
 
         const result = await PDFReadService.analyzeImage(imageBase64);
 

@@ -341,7 +341,7 @@ export function createPDFReadExtendedRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
-        const { videoBase64 } = req.body;
+        const { videoBase64, user_id, chat_id } = req.body;
 
         const result = await PDFReadService.analyzeVideo(videoBase64);
 
@@ -901,6 +901,43 @@ export function createPDFReadExtendedRouter(): Router {
         res.status(500).json({
           error: 'internal_error',
           message: 'Failed to export chat'
+        });
+      }
+    }
+  );
+
+  // POST /pdfread/audio-isolation
+  r.post('/audio-isolation',
+    authRateLimits.general,
+    authenticateToken,
+    validate(pdfReadSchemas.audioIsolation),
+    async (req: Request, res: Response) => {
+      const authReq = req as unknown as AuthRequest;
+      try {
+        const { audioBase64 } = req.body;
+
+        const result = await PDFReadService.audioIsolation(audioBase64);
+
+        // Log the action
+        await auditService.logUserAction(
+          authReq.user!.id,
+          'pdf_audio_isolation',
+          {
+            audioSize: audioBase64.length,
+            success: result.success
+          }
+        );
+
+        if (result.success) {
+          res.json(result);
+        } else {
+          res.status(400).json(result);
+        }
+      } catch (error) {
+        logger.error({ err: error, userId: authReq.user!.id, operation: 'audioIsolation' }, 'Audio isolation error');
+        res.status(500).json({
+          error: 'internal_error',
+          message: 'Failed to process audio isolation'
         });
       }
     }

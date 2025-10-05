@@ -509,6 +509,31 @@ export class PDFReadService {
   }
 
   /**
+   * Audio isolation (Ses izolasyonu)
+   */
+  static async audioIsolation(audioBase64: string): Promise<StandardResponse<any>> {
+    try {
+      const response = await axios.post(`${this.PDFREAD_BASE_URL}/audio-isolation`, {
+        base64: audioBase64
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+        },
+        timeout: 60000
+      });
+
+      return ResponseBuilder.success(response.data, 'Audio isolation completed successfully');
+    } catch (error: any) {
+      logger.error({ err: error, audioSize: audioBase64.length, operation: 'audioIsolation' }, 'Audio isolation error');
+      return ResponseBuilder.error(
+        'audio_isolation_failed',
+        error.response?.data?.detail || 'Failed to process audio isolation'
+      );
+    }
+  }
+
+  /**
    * Video üretir
    */
   static async generateVideo(prompt: string): Promise<StandardResponse<any>> {

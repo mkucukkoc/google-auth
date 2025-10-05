@@ -103,6 +103,8 @@ export const pdfReadSchemas = {
 
   analyzeImage: z.object({
     imageBase64: z.string().min(1, 'Image base64 is required'),
+    user_id: z.string().optional(),
+    chat_id: z.string().optional(),
   }),
 
   generateDoc: z.object({
@@ -122,6 +124,12 @@ export const pdfReadSchemas = {
 
   analyzeVideo: z.object({
     videoBase64: z.string().min(1, 'Video base64 is required'),
+    user_id: z.string().optional(),
+    chat_id: z.string().optional(),
+  }),
+
+  audioIsolation: z.object({
+    audioBase64: z.string().min(1, 'Audio base64 is required'),
   }),
 
   askWithEmbeddings: z.object({
