@@ -68,6 +68,21 @@ export class ChatService {
         operation: 'frontendMessagesReceived'
       }, 'Frontend messages received and logged');
 
+      // AI detection kontrolü
+      const isAIDetectionRequest = this.isAIDetectionRequest(request.messages);
+      
+      if (isAIDetectionRequest && request.hasImage) {
+        logger.info({ 
+          requestId,
+          userId: request.userId,
+          chatId: request.chatId,
+          operation: 'aiDetectionRequest' 
+        }, 'AI detection request detected, redirecting to AI or Not API');
+        
+        // AI detection için özel işlem
+        return await this.handleAIDetectionRequest(request, requestId);
+      }
+
       // Model seçimi
       const modelToUse = request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
       
@@ -340,7 +355,7 @@ export class ChatService {
 
     // Request size kontrolü
     const requestSize = JSON.stringify(requestData).length;
-    const maxRequestSize = 100000; // 100KB limit
+    const maxRequestSize = 200000; // 200KB limit
     
     if (requestSize > maxRequestSize) {
       logger.warn({
@@ -353,10 +368,25 @@ export class ChatService {
       
       // Mesajları kısalt
       const truncatedMessages = messages.map(msg => {
-        if (typeof msg.content === 'string' && msg.content.length > 5000) {
+        if (typeof msg.content === 'string' && msg.content.length > 3000) {
           return {
             ...msg,
-            content: msg.content.substring(0, 5000) + '... [truncated]'
+            content: msg.content.substring(0, 3000) + '... [truncated]'
+          };
+        } else if (Array.isArray(msg.content)) {
+          // Multimodal content için text kısmını kısalt
+          const truncatedContent = msg.content.map(part => {
+            if (part.type === 'text' && part.text && part.text.length > 3000) {
+              return {
+                ...part,
+                text: part.text.substring(0, 3000) + '... [truncated]'
+              };
+            }
+            return part;
+          });
+          return {
+            ...msg,
+            content: truncatedContent
           };
         }
         return msg;
@@ -962,6 +992,193 @@ export class ChatService {
       return ResponseBuilder.error(
         'tts_failed',
         'Failed to convert text to speech'
+      );
+    }
+  }
+
+  /**
+   * AI detection request kontrolü
+   */
+  private static isAIDetectionRequest(messages: ChatMessage[]): boolean {
+    const aiDetectionKeywords = [
+      'ai ile mi üretilmiş',
+      'ai ile mi üretilmis',
+      'ai ile mi üretildi',
+      'yapay zeka ile mi üretilmiş',
+      'yapay zeka ile mi üretilmis',
+      'yapay zeka ile mi üretildi',
+      'ai generated',
+      'artificial intelligence',
+      'ai ile mi yapılmış',
+      'ai ile mi yapilmis',
+      'ai ile mi yapıldı',
+      'ai ile mi yapildi',
+      'kontrol et',
+      'kontrol eder misin',
+      'ai detection',
+      'ai tespit',
+      'ai tespit et',
+      'ai tespit eder misin',
+      'bu foto ai ile mi',
+      'bu görsel ai ile mi',
+      'bu resim ai ile mi',
+      'ai ile mi yapılmış',
+      'ai ile mi yapilmis',
+      'ai ile mi yapıldı',
+      'ai ile mi yapildi',
+      'yapay zeka ile mi yapılmış',
+      'yapay zeka ile mi yapilmis',
+      'yapay zeka ile mi yapıldı',
+      'yapay zeka ile mi yapildi',
+      'ai ile üretilmiş',
+      'ai ile üretilmis',
+      'ai ile üretildi',
+      'yapay zeka ile üretilmiş',
+      'yapay zeka ile üretilmis',
+      'yapay zeka ile üretildi'
+    ];
+
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage) return false;
+
+    const content = lastMessage.content.toLowerCase();
+    
+    // Debug log
+    logger.info({
+      content: content.substring(0, 100),
+      keywords: aiDetectionKeywords.slice(0, 5),
+      operation: 'aiDetectionCheck'
+    }, 'Checking for AI detection keywords');
+    
+    const isAIDetection = aiDetectionKeywords.some(keyword => 
+      content.includes(keyword.toLowerCase())
+    );
+    
+    logger.info({
+      isAIDetection,
+      matchedKeyword: aiDetectionKeywords.find(keyword => 
+        content.includes(keyword.toLowerCase())
+      ),
+      operation: 'aiDetectionResult'
+    }, 'AI detection check result');
+    
+    return isAIDetection;
+  }
+
+  /**
+   * AI detection request işlemi
+   */
+  private static async handleAIDetectionRequest(request: ChatRequest, requestId: string): Promise<StandardResponse<ChatResponse>> {
+    try {
+      logger.info({ 
+        requestId,
+        userId: request.userId,
+        chatId: request.chatId,
+        operation: 'handleAIDetectionRequest' 
+      }, 'Processing AI detection request');
+
+      // Image URL'ini al
+      const imageUrl = request.imageFileUrl;
+      if (!imageUrl) {
+        return ResponseBuilder.error(
+          'no_image_provided',
+          'AI detection için görsel gerekli'
+        );
+      }
+
+      // Image'ı base64'e çevir
+      const base64Image = await this.convertImageUrlToBase64(imageUrl);
+      
+      // AI or Not API'ye istek gönder
+      const aiDetectionResult = await this.callAIOrNotAPI(base64Image, requestId);
+      
+      if (!aiDetectionResult.success) {
+        return ResponseBuilder.error(
+          'ai_detection_failed',
+          'AI detection başarısız oldu'
+        );
+      }
+
+      // Sonucu formatla
+      const aiScore = aiDetectionResult.data?.ai_score || 0;
+      const isAI = aiScore > 0.5;
+      
+      const responseMessage = isAI 
+        ? `Bu görsel AI ile üretilmiş olabilir. AI skoru: ${(aiScore * 100).toFixed(1)}%`
+        : `Bu görsel doğal olarak oluşturulmuş görünüyor. AI skoru: ${(aiScore * 100).toFixed(1)}%`;
+
+      logger.info({ 
+        requestId,
+        userId: request.userId,
+        chatId: request.chatId,
+        aiScore,
+        isAI,
+        operation: 'aiDetectionCompleted' 
+      }, 'AI detection completed successfully');
+
+      return ResponseBuilder.success({
+        message: {
+          role: 'assistant',
+          content: responseMessage,
+          timestamp: new Date().toISOString()
+        }
+      }, 'AI detection completed');
+
+    } catch (error: any) {
+      logger.error({ 
+        requestId,
+        userId: request.userId,
+        chatId: request.chatId,
+        err: error,
+        operation: 'handleAIDetectionRequest' 
+      }, 'AI detection request failed');
+      
+      return ResponseBuilder.error(
+        'ai_detection_failed',
+        'AI detection işlemi başarısız oldu'
+      );
+    }
+  }
+
+  /**
+   * AI or Not API'ye istek gönder
+   */
+  private static async callAIOrNotAPI(base64Image: string, requestId: string): Promise<StandardResponse<any>> {
+    try {
+      logger.info({ 
+        requestId,
+        imageSize: base64Image.length,
+        operation: 'callAIOrNotAPI' 
+      }, 'Calling AI or Not API');
+
+      const response = await axios.post('https://api.ai-or-not.com/v1/analyze', {
+        image: base64Image
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.AI_OR_NOT_API_KEY}`
+      },
+        timeout: 30000
+      });
+
+      logger.info({ 
+        requestId,
+        status: response.status,
+        operation: 'callAIOrNotAPI' 
+      }, 'AI or Not API response received');
+
+      return ResponseBuilder.success(response.data, 'AI or Not API call successful');
+
+    } catch (error: any) {
+      logger.error({ 
+        requestId,
+        err: error,
+        operation: 'callAIOrNotAPI' 
+      }, 'AI or Not API call failed');
+      
+      return ResponseBuilder.error(
+        'ai_or_not_api_failed',
+        'AI or Not API çağrısı başarısız oldu'
       );
     }
   }
