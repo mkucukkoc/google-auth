@@ -272,10 +272,10 @@ export class ChatService {
               }
             ]
           });
-        } catch (error) {
+        } catch (error: any) {
           logger.error({ 
             fileUrl, 
-            error: error.message,
+            error: error?.message || 'Unknown error',
             operation: 'imageConversion' 
           }, 'Failed to convert image to base64, using text only');
           
@@ -303,19 +303,19 @@ export class ChatService {
         timeout: 30000 // 30 saniye timeout
       });
       
-      const buffer = Buffer.from(response.data);
+      const buffer = Buffer.from(response.data as ArrayBuffer);
       const mimeType = response.headers['content-type'] || 'image/jpeg';
       const base64 = buffer.toString('base64');
       
       return `data:${mimeType};base64,${base64}`;
-    } catch (error) {
+    } catch (error: any) {
       logger.error({ 
         imageUrl, 
-        error: error.message,
+        error: error?.message || 'Unknown error',
         operation: 'imageUrlToBase64' 
       }, 'Failed to convert image URL to base64');
       
-      throw new Error(`Image conversion failed: ${error.message}`);
+      throw new Error(`Image conversion failed: ${error?.message || 'Unknown error'}`);
     }
   }
 
@@ -522,8 +522,9 @@ export class ChatService {
 
     // Tool cevaplarını modele geri gönder
     // Önce orijinal mesajları, sonra assistant'ın tool call'ını, sonra tool cevaplarını ekle
+    const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
     const followUpMessages = [
-      ...this.formatMessages(request.messages, request.imageFileUrl),
+      ...formattedMessages,
       {
         role: 'assistant',
         content: null,
