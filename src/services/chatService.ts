@@ -375,7 +375,7 @@ export class ChatService {
           };
         } else if (Array.isArray(msg.content)) {
           // Multimodal content için text kısmını kısalt
-          const truncatedContent = msg.content.map(part => {
+          const truncatedContent = msg.content.map((part: any) => {
             if (part.type === 'text' && part.text && part.text.length > 3000) {
               return {
                 ...part,
