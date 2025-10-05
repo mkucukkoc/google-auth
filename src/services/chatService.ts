@@ -665,6 +665,32 @@ export class ChatService {
 
       const messagesRef = db.collection('users').doc(userId).collection('chats').doc(chatId).collection('messages');
       
+      // Duplicate kontrol: Aynı içerik ve role'e sahip mesaj var mı?
+      const recentMessages = await messagesRef
+        .orderBy('timestamp', 'desc')
+        .limit(5)
+        .get();
+      
+      const isDuplicate = recentMessages.docs.some(doc => {
+        const data = doc.data();
+        return data.role === message.role && 
+               data.content === message.content &&
+               Math.abs(new Date(data.timestamp?.toDate()).getTime() - new Date().getTime()) < 10000; // 10 saniye içinde
+      });
+      
+      if (isDuplicate) {
+        logger.info({
+          requestId,
+          userId,
+          chatId,
+          role: message.role,
+          contentPreview: message.content.substring(0, 50) + '...',
+          operation: 'duplicateMessageSkipped'
+        }, 'Duplicate message detected, skipping save');
+        
+        return ResponseBuilder.success({}, 'Duplicate message skipped');
+      }
+      
       const messageData = {
         ...message,
         timestamp: admin.firestore.FieldValue.serverTimestamp()
