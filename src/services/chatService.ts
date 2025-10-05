@@ -83,14 +83,22 @@ export class ChatService {
         return await this.handleAIDetectionRequest(request, requestId);
       }
 
-      // Model seçimi
-      const modelToUse = request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
+      // Model seçimi - Image varsa gpt-4o kullan
+      const hasImageInMessages = request.messages.some(msg => 
+        msg.content.includes('[Dosya Bağlantısı]') || 
+        msg.fileUrl || 
+        request.imageFileUrl
+      );
+      
+      const modelToUse = (request.hasImage || hasImageInMessages) ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
       
       logger.info({ 
         requestId,
         modelToUse, 
         hasImage: request.hasImage,
+        hasImageInMessages,
         imageFileUrl: request.imageFileUrl,
+        fineTunedModel: this.FINE_TUNED_MODEL_ID,
         operation: 'modelSelection' 
       }, 'Model selected for OpenAI request');
 
@@ -1022,6 +1030,9 @@ export class ChatService {
       'bu foto ai ile mi',
       'bu görsel ai ile mi',
       'bu resim ai ile mi',
+      'bu foto ai ile mi üretildi',
+      'bu görsel ai ile mi üretildi',
+      'bu resim ai ile mi üretildi',
       'ai ile mi yapılmış',
       'ai ile mi yapilmis',
       'ai ile mi yapıldı',
