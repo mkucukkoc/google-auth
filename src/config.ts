@@ -5,7 +5,7 @@ export const config = {
     iss: process.env.JWT_ISS || 'chatgbtmini',
     aud: process.env.JWT_AUD || 'chatgbtmini-mobile',
     hsSecret: process.env.JWT_HS_SECRET || 'change_me_in_production',
-    accessTtlMin: Number(process.env.JWT_ACCESS_TTL_MIN || 15),
+    accessTtlMin: Number(process.env.JWT_ACCESS_TTL_MIN || 60), // 60 dakika
   },
   refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 60),
   redis: {

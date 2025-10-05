@@ -338,6 +338,33 @@ export class ChatService {
       tool_choice: 'auto'
     };
 
+    // Request size kontrolü
+    const requestSize = JSON.stringify(requestData).length;
+    const maxRequestSize = 100000; // 100KB limit
+    
+    if (requestSize > maxRequestSize) {
+      logger.warn({
+        requestId,
+        requestSize,
+        maxRequestSize,
+        messageCount: messages.length,
+        operation: 'openaiRequestSizeCheck'
+      }, 'Request size exceeds limit, truncating messages');
+      
+      // Mesajları kısalt
+      const truncatedMessages = messages.map(msg => {
+        if (typeof msg.content === 'string' && msg.content.length > 5000) {
+          return {
+            ...msg,
+            content: msg.content.substring(0, 5000) + '... [truncated]'
+          };
+        }
+        return msg;
+      });
+      
+      requestData.messages = truncatedMessages;
+    }
+
     logger.info({ 
       requestId,
       model, 
@@ -369,56 +396,76 @@ export class ChatService {
       operation: 'openaiRequest' 
     }, 'Sending detailed request to OpenAI API');
 
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', requestData, {
-      headers: {
-        'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 60000 // 60 saniye timeout
-    });
+    try {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', requestData, {
+        headers: {
+          'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 60000 // 60 saniye timeout
+      });
 
-    const processingTime = Date.now() - startTime;
-    logger.info({
-      requestId,
-      model,
-      responseStatus: response.status,
-      responseStatusText: response.statusText,
-      responseHeaders: {
-        contentType: response.headers['content-type'],
-        openaiVersion: response.headers['openai-version'],
-        requestId: response.headers['x-request-id'],
-        ratelimitLimit: response.headers['x-ratelimit-limit-requests'],
-        ratelimitRemaining: response.headers['x-ratelimit-remaining-requests'],
-        ratelimitReset: response.headers['x-ratelimit-reset-requests']
-      },
-      responseData: {
-        id: (response.data as any).id,
-        object: (response.data as any).object,
-        created: (response.data as any).created,
-        model: (response.data as any).model,
-        choicesCount: (response.data as any).choices?.length || 0,
-        usage: (response.data as any).usage ? {
-          promptTokens: (response.data as any).usage.prompt_tokens,
-          completionTokens: (response.data as any).usage.completion_tokens,
-          totalTokens: (response.data as any).usage.total_tokens
-        } : null,
-        choices: (response.data as any).choices?.map((choice: any, index: number) => ({
-          index,
-          finishReason: choice.finish_reason,
-          messageRole: choice.message?.role,
-          hasContent: !!choice.message?.content,
-          contentLength: choice.message?.content?.length || 0,
-          contentPreview: choice.message?.content ? 
-            choice.message.content.substring(0, 200) + (choice.message.content.length > 200 ? '...' : '') : 'none',
-          hasToolCalls: !!choice.message?.tool_calls,
-          toolCallsCount: choice.message?.tool_calls?.length || 0
-        })) || []
-      },
-      processingTimeMs: processingTime,
-      operation: 'openaiResponse'
-    }, 'OpenAI API response received with full details');
+      const processingTime = Date.now() - startTime;
+      logger.info({
+        requestId,
+        model,
+        responseStatus: response.status,
+        responseStatusText: response.statusText,
+        responseHeaders: {
+          contentType: response.headers['content-type'],
+          openaiVersion: response.headers['openai-version'],
+          requestId: response.headers['x-request-id'],
+          ratelimitLimit: response.headers['x-ratelimit-limit-requests'],
+          ratelimitRemaining: response.headers['x-ratelimit-remaining-requests'],
+          ratelimitReset: response.headers['x-ratelimit-reset-requests']
+        },
+        responseData: {
+          id: (response.data as any).id,
+          object: (response.data as any).object,
+          created: (response.data as any).created,
+          model: (response.data as any).model,
+          choicesCount: (response.data as any).choices?.length || 0,
+          usage: (response.data as any).usage ? {
+            promptTokens: (response.data as any).usage.prompt_tokens,
+            completionTokens: (response.data as any).usage.completion_tokens,
+            totalTokens: (response.data as any).usage.total_tokens
+          } : null,
+          choices: (response.data as any).choices?.map((choice: any, index: number) => ({
+            index,
+            finishReason: choice.finish_reason,
+            messageRole: choice.message?.role,
+            hasContent: !!choice.message?.content,
+            contentLength: choice.message?.content?.length || 0,
+            contentPreview: choice.message?.content ? 
+              choice.message.content.substring(0, 200) + (choice.message.content.length > 200 ? '...' : '') : 'none',
+            hasToolCalls: !!choice.message?.tool_calls,
+            toolCallsCount: choice.message?.tool_calls?.length || 0
+          })) || []
+        },
+        processingTimeMs: processingTime,
+        operation: 'openaiResponse'
+      }, 'OpenAI API response received with full details');
 
-    return response;
+      return response;
+    } catch (error: any) {
+      const processingTime = Date.now() - startTime;
+      logger.error({
+        requestId,
+        model,
+        requestSize: JSON.stringify(requestData).length,
+        messageCount: messages.length,
+        error: {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        },
+        processingTimeMs: processingTime,
+        operation: 'openaiRequestError'
+      }, 'OpenAI API request failed');
+      
+      throw error;
+    }
   }
 
   /**
