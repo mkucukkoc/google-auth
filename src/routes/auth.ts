@@ -536,6 +536,113 @@ export function createAuthRouter(): Router {
     }
   );
 
+  // Google OAuth endpoint
+  r.post('/google', 
+    authRateLimits.general,
+    async (req, res) => {
+      try {
+        const { idToken, email, name, photo } = req.body;
+        
+        if (!idToken || !email) {
+          return res.status(400).json({ 
+            error: 'invalid_request',
+            message: 'Missing required fields: idToken and email' 
+          });
+        }
+
+        // Verify Google ID token
+        const { OAuth2Client } = require('google-auth-library');
+        const client = new OAuth2Client(config.google.clientId);
+        
+        let ticket;
+        try {
+          ticket = await client.verifyIdToken({
+            idToken,
+            audience: config.google.clientId,
+          });
+        } catch (error) {
+          console.error('Google ID token verification failed:', error);
+          return res.status(401).json({ 
+            error: 'invalid_token',
+            message: 'Invalid Google ID token' 
+          });
+        }
+
+        const payload = ticket.getPayload();
+        if (!payload || payload.email !== email) {
+          return res.status(401).json({ 
+            error: 'invalid_token',
+            message: 'Token email does not match provided email' 
+          });
+        }
+
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
+
+        // Check if user exists
+        let user = await UserService.findByEmail(email);
+        
+        if (!user) {
+          // Create new Google user
+          user = await UserService.createGoogleUser(
+            email,
+            name || payload.name || payload.given_name || ''
+          );
+        } else {
+          // Update last login for existing user
+          await UserService.updateUser(user.id, {
+            lastLoginAt: new Date(),
+          });
+        }
+
+        // Create session
+        const deviceInfo = {
+          os: 'mobile',
+          model: 'unknown',
+          appVersion: '1.0.0',
+          platform: 'mobile',
+        };
+
+        const { session, tokens } = await SessionService.createSession(
+          user.id,
+          deviceInfo,
+          'google-auth-device', // Device ID for Google auth
+          ipAddress,
+          userAgent
+        );
+
+        // Log successful Google auth
+        await auditService.logAuthEvent('login', {
+          userId: user.id,
+          sessionId: session.id,
+          ipAddress,
+          userAgent,
+          deviceInfo,
+          success: true,
+        });
+
+        const response: AuthResponse = {
+          ...tokens,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+          },
+          deviceId: 'google-auth-device',
+        };
+
+        res.json(response);
+      } catch (error) {
+        console.error('Google auth error:', error);
+        res.status(500).json({ 
+          error: 'internal_error',
+          message: 'Google authentication failed' 
+        });
+      }
+    }
+  );
+
   return r;
 }
 
