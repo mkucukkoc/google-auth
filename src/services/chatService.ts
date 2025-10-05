@@ -80,7 +80,7 @@ export class ChatService {
       }, 'Model selected for OpenAI request');
 
       // Mesajları formatla
-      const formattedMessages = this.formatMessages(request.messages, request.imageFileUrl);
+      const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
       
       logger.info({ 
         requestId,
@@ -243,8 +243,10 @@ export class ChatService {
   /**
    * Mesajları OpenAI formatına çevir
    */
-  private static formatMessages(messages: ChatMessage[], imageFileUrl?: string): any[] {
-    return messages.map((msg, idx) => {
+  private static async formatMessages(messages: ChatMessage[], imageFileUrl?: string): Promise<any[]> {
+    const formattedMessages = [];
+    
+    for (const msg of messages) {
       // Dosya bağlantısı kontrolü
       const match = msg.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
       const fileUrl = match?.[1]?.trim() || imageFileUrl;
@@ -256,20 +258,65 @@ export class ChatService {
         const parts = msg.content.split('[Dosya Bağlantısı]:');
         const textPart = (parts[0] || '').trim();
         
-        return {
-          role: msg.role,
-          content: [
-            { type: 'text', text: textPart },
-            { 
-              type: 'image_url', 
-              image_url: { url: fileUrl } 
-            }
-          ]
-        };
+        try {
+          // Image URL'ini base64'e çevir
+          const base64Image = await this.convertImageUrlToBase64(fileUrl);
+          
+          formattedMessages.push({
+            role: msg.role,
+            content: [
+              { type: 'text', text: textPart },
+              { 
+                type: 'image_url', 
+                image_url: { url: base64Image } 
+              }
+            ]
+          });
+        } catch (error) {
+          logger.error({ 
+            fileUrl, 
+            error: error.message,
+            operation: 'imageConversion' 
+          }, 'Failed to convert image to base64, using text only');
+          
+          // Hata durumunda sadece text olarak gönder
+          formattedMessages.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
+      } else {
+        formattedMessages.push({ role: msg.role, content: msg.content });
       }
+    }
+    
+    return formattedMessages;
+  }
 
-      return { role: msg.role, content: msg.content };
-    });
+  /**
+   * Image URL'ini base64 formatına çevir
+   */
+  private static async convertImageUrlToBase64(imageUrl: string): Promise<string> {
+    try {
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000 // 30 saniye timeout
+      });
+      
+      const buffer = Buffer.from(response.data);
+      const mimeType = response.headers['content-type'] || 'image/jpeg';
+      const base64 = buffer.toString('base64');
+      
+      return `data:${mimeType};base64,${base64}`;
+    } catch (error) {
+      logger.error({ 
+        imageUrl, 
+        error: error.message,
+        operation: 'imageUrlToBase64' 
+      }, 'Failed to convert image URL to base64');
+      
+      throw new Error(`Image conversion failed: ${error.message}`);
+    }
   }
 
   /**
