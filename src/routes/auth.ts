@@ -13,6 +13,7 @@ import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
 import { db } from '../firebase';
 import { logger } from '../utils/logger';
+import { config } from '../config';
 
 export function createAuthRouter(): Router {
   const r = Router();
