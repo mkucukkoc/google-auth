@@ -1188,11 +1188,26 @@ export class ChatService {
    */
   private static async callAIOrNotAPI(base64Image: string, requestId: string): Promise<StandardResponse<any>> {
     try {
+      const apiKey = process.env.AI_OR_NOT_API_KEY;
       logger.info({ 
         requestId,
         imageSize: base64Image.length,
+        hasApiKey: !!apiKey,
+        apiKeyLength: apiKey?.length || 0,
         operation: 'callAIOrNotAPI' 
       }, 'Calling AI or Not API');
+      
+      if (!apiKey) {
+        logger.error({ 
+          requestId,
+          operation: 'callAIOrNotAPI' 
+        }, 'AI_OR_NOT_API_KEY environment variable is not set');
+        
+        return ResponseBuilder.error(
+          'ai_or_not_api_key_missing',
+          'AI or Not API key is not configured'
+        );
+      }
 
       // Base64'ten buffer'a çevir
       const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
@@ -1207,7 +1222,7 @@ export class ChatService {
 
       const response = await axios.post('https://api.aiornot.com/v2/image/sync', formData, {
         headers: {
-          'Authorization': `Bearer ${process.env.AI_OR_NOT_API_KEY}`,
+          'Authorization': `Bearer ${apiKey}`,
           ...formData.getHeaders()
         },
         timeout: 30000
