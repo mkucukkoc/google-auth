@@ -1194,19 +1194,29 @@ export class ChatService {
         operation: 'callAIOrNotAPI' 
       }, 'Calling AI or Not API');
 
-      const response = await axios.post('https://api.ai-or-not.com/v1/analyze', {
-        image: base64Image
-      }, {
+      // Base64'ten buffer'a çevir
+      const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
+      
+      // FormData oluştur
+      const FormData = require('form-data');
+      const formData = new FormData();
+      formData.append('image', imageBuffer, {
+        filename: 'image.jpg',
+        contentType: 'image/jpeg'
+      });
+
+      const response = await axios.post('https://api.aiornot.com/v2/image/sync', formData, {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.AI_OR_NOT_API_KEY}`
-      },
+          'Authorization': `Bearer ${process.env.AI_OR_NOT_API_KEY}`,
+          ...formData.getHeaders()
+        },
         timeout: 30000
       });
 
       logger.info({ 
         requestId,
         status: response.status,
+        responseData: response.data,
         operation: 'callAIOrNotAPI' 
       }, 'AI or Not API response received');
 
@@ -1216,6 +1226,8 @@ export class ChatService {
       logger.error({ 
         requestId,
         err: error,
+        errorStatus: error.response?.status,
+        errorData: error.response?.data,
         operation: 'callAIOrNotAPI' 
       }, 'AI or Not API call failed');
       
