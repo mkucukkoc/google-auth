@@ -71,11 +71,20 @@ export class ChatService {
       // AI detection kontrolü
       const isAIDetectionRequest = this.isAIDetectionRequest(request.messages);
       
-      if (isAIDetectionRequest && request.hasImage) {
+      // Image kontrolü - daha esnek
+      const hasImageInMessages = request.messages.some(msg => 
+        msg.content.includes('[Dosya Bağlantısı]') || 
+        msg.fileUrl || 
+        request.imageFileUrl
+      );
+      
+      if (isAIDetectionRequest && (request.hasImage || hasImageInMessages)) {
         logger.info({ 
           requestId,
           userId: request.userId,
           chatId: request.chatId,
+          hasImage: request.hasImage,
+          hasImageInMessages,
           operation: 'aiDetectionRequest' 
         }, 'AI detection request detected, redirecting to AI or Not API');
         
@@ -83,12 +92,7 @@ export class ChatService {
         return await this.handleAIDetectionRequest(request, requestId);
       }
 
-      // Model seçimi - Image varsa gpt-4o kullan
-      const hasImageInMessages = request.messages.some(msg => 
-        msg.content.includes('[Dosya Bağlantısı]') || 
-        msg.fileUrl || 
-        request.imageFileUrl
-      );
+      // Model seçimi - Image varsa gpt-4o kullan (hasImageInMessages zaten yukarıda tanımlandı)
       
       const modelToUse = (request.hasImage || hasImageInMessages) ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
       
@@ -1088,14 +1092,42 @@ export class ChatService {
         operation: 'handleAIDetectionRequest' 
       }, 'Processing AI detection request');
 
-      // Image URL'ini al
-      const imageUrl = request.imageFileUrl;
+      // Image URL'ini al - mesajlardan veya request'ten
+      let imageUrl = request.imageFileUrl;
+      
+      // Eğer request.imageFileUrl yoksa, mesajlardan al
       if (!imageUrl) {
+        const messageWithImage = request.messages.find(msg => 
+          msg.content.includes('[Dosya Bağlantısı]') || msg.fileUrl
+        );
+        
+        if (messageWithImage) {
+          const match = messageWithImage.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
+          imageUrl = match?.[1]?.trim() || messageWithImage.fileUrl;
+        }
+      }
+      
+      if (!imageUrl) {
+        logger.error({ 
+          requestId,
+          userId: request.userId,
+          chatId: request.chatId,
+          operation: 'handleAIDetectionRequest' 
+        }, 'No image URL found for AI detection');
+        
         return ResponseBuilder.error(
           'no_image_provided',
           'AI detection için görsel gerekli'
         );
       }
+      
+      logger.info({ 
+        requestId,
+        userId: request.userId,
+        chatId: request.chatId,
+        imageUrl: imageUrl.substring(0, 100) + '...',
+        operation: 'handleAIDetectionRequest' 
+      }, 'Image URL found for AI detection');
 
       // Image'ı base64'e çevir
       const base64Image = await this.convertImageUrlToBase64(imageUrl);

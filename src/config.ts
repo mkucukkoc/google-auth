@@ -5,9 +5,9 @@ export const config = {
     iss: process.env.JWT_ISS || 'chatgbtmini',
     aud: process.env.JWT_AUD || 'chatgbtmini-mobile',
     hsSecret: process.env.JWT_HS_SECRET || 'change_me_in_production',
-    accessTtlMin: Number(process.env.JWT_ACCESS_TTL_MIN || 60), // 60 dakika
+    accessTtlMin: Number(process.env.JWT_ACCESS_TTL_MIN || 120), // 2 saat (120 dakika)
   },
-  refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 60),
+  refreshTtlDays: Number(process.env.REFRESH_TTL_DAYS || 30), // 1 ay (30 gün)
   redis: {
     url: process.env.REDIS_URL || 'redis://red-d2nf9m7diees73cjdo40:6379',
     password: process.env.REDIS_PASSWORD || '',
