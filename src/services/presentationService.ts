@@ -63,6 +63,39 @@ export class PresentationService {
     return PresentationService.instance;
   }
 
+  public async getPresentationTemplates(): Promise<any[]> {
+    return [
+      {
+        id: 'startup_pitch',
+        name: 'Startup Pitch Deck',
+        description: 'A template for pitching your startup to investors.',
+        defaultSlideCount: 12,
+        includes: ['demo', 'pricing', 'competition', 'roadmap']
+      },
+      {
+        id: 'product_launch',
+        name: 'Product Launch',
+        description: 'A template for launching a new product.',
+        defaultSlideCount: 10,
+        includes: ['demo', 'pricing']
+      },
+      {
+        id: 'technical_deep_dive',
+        name: 'Technical Deep Dive',
+        description: 'A template for technical presentations.',
+        defaultSlideCount: 15,
+        includes: ['demo', 'roadmap']
+      },
+      {
+        id: 'business_proposal',
+        name: 'Business Proposal',
+        description: 'A template for business proposals.',
+        defaultSlideCount: 8,
+        includes: ['pricing', 'competition']
+      }
+    ];
+  }
+
   public async generatePresentation(request: PresentationRequest): Promise<PresentationResponse> {
     try {
       logger.info('Generating presentation', { request });
