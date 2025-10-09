@@ -163,7 +163,7 @@ export function createPresentationRouter(): Router {
           error: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,
           responseTime,
-          requestBody: presentationRequest,
+          requestBody: req.body,
         });
 
         res.status(500).json({

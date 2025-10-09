@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
-import { db } from '../config/firebase';
+import { db } from '../firebase';
 
 export interface PresentationRequest {
   topic: string;
@@ -48,8 +48,15 @@ export interface PresentationResponse {
       primary: string;
       secondary: string;
     };
-    createdAt: Date;
+    includes: {
+      demo: boolean;
+      pricing: boolean;
+      competition: boolean;
+      roadmap: boolean;
+    };
   };
+  createdAt: string;
+  updatedAt: string;
 }
 
 export class PresentationService {
@@ -189,15 +196,15 @@ export class PresentationService {
         .get();
 
       const presentations: PresentationResponse[] = [];
-      snapshot.forEach(doc => {
+      snapshot.forEach((doc: any) => {
         const data = doc.data();
         presentations.push({
           id: data.id,
           title: data.title,
           slides: data.slides,
           metadata: data.metadata,
-          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
-          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt || new Date().toISOString(),
         });
       });
 
@@ -407,36 +414,4 @@ Lütfen tam sunumu üret.`;
     return 'features'; // Default type
   }
 
-  public async getPresentationTemplates(): Promise<any[]> {
-    return [
-      {
-        id: 'startup-pitch',
-        name: 'Startup Pitch Deck',
-        description: 'Yatırımcılar için startup sunumu',
-        defaultSlideCount: 15,
-        includes: ['demo', 'pricing', 'competition', 'roadmap'],
-      },
-      {
-        id: 'product-launch',
-        name: 'Ürün Lansmanı',
-        description: 'Yeni ürün tanıtım sunumu',
-        defaultSlideCount: 12,
-        includes: ['demo', 'pricing'],
-      },
-      {
-        id: 'technical-presentation',
-        name: 'Teknik Sunum',
-        description: 'Geliştiriciler için teknik detaylar',
-        defaultSlideCount: 10,
-        includes: ['demo', 'roadmap'],
-      },
-      {
-        id: 'business-proposal',
-        name: 'İş Önerisi',
-        description: 'Müşterilere iş önerisi sunumu',
-        defaultSlideCount: 14,
-        includes: ['pricing', 'competition'],
-      },
-    ];
-  }
 }

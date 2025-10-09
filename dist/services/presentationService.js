@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PresentationService = void 0;
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = require("../utils/logger");
+const firebase_1 = require("../firebase");
 class PresentationService {
     constructor() { }
     static getInstance() {
@@ -14,9 +15,48 @@ class PresentationService {
         }
         return PresentationService.instance;
     }
-    async generatePresentation(request) {
+    async getPresentationTemplates() {
+        return [
+            {
+                id: 'startup_pitch',
+                name: 'Startup Pitch Deck',
+                description: 'A template for pitching your startup to investors.',
+                defaultSlideCount: 12,
+                includes: ['demo', 'pricing', 'competition', 'roadmap']
+            },
+            {
+                id: 'product_launch',
+                name: 'Product Launch',
+                description: 'A template for launching a new product.',
+                defaultSlideCount: 10,
+                includes: ['demo', 'pricing']
+            },
+            {
+                id: 'technical_deep_dive',
+                name: 'Technical Deep Dive',
+                description: 'A template for technical presentations.',
+                defaultSlideCount: 15,
+                includes: ['demo', 'roadmap']
+            },
+            {
+                id: 'business_proposal',
+                name: 'Business Proposal',
+                description: 'A template for business proposals.',
+                defaultSlideCount: 8,
+                includes: ['pricing', 'competition']
+            }
+        ];
+    }
+    async generatePresentation(request, userId) {
         try {
-            logger_1.logger.info('Generating presentation', { request });
+            logger_1.logger.info('Generating presentation', { request, userId });
+            // Validate required fields
+            if (!request.topic || !request.language || !request.audience || !request.tone) {
+                throw new Error('Missing required fields: topic, language, audience, or tone');
+            }
+            if (!process.env.OPENAI_API_KEY) {
+                throw new Error('OpenAI API key not configured');
+            }
             const presentationId = `pres_${Date.now()}_${Math.random().toString(36).substring(7)}`;
             // Generate presentation using OpenAI
             const presentation = await this.generatePresentationContent(request);
@@ -39,40 +79,124 @@ class PresentationService {
                         primary: request.primaryFont,
                         secondary: request.secondaryFont,
                     },
-                    createdAt: new Date(),
+                    includes: {
+                        demo: request.includeDemo,
+                        pricing: request.includePricing,
+                        competition: request.includeCompetition,
+                        roadmap: request.includeRoadmap,
+                    },
                 },
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             };
-            logger_1.logger.info('Presentation generated successfully', { presentationId });
+            // Save to Firebase
+            await this.savePresentationToFirebase(response, userId);
+            logger_1.logger.info('Presentation generated and saved successfully', { presentationId, userId });
             return response;
         }
         catch (error) {
-            logger_1.logger.error('Failed to generate presentation', { error, request });
-            throw new Error('Failed to generate presentation');
+            logger_1.logger.error('Failed to generate presentation', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                request,
+                userId
+            });
+            throw error;
+        }
+    }
+    async savePresentationToFirebase(presentation, userId) {
+        try {
+            const presentationData = {
+                ...presentation,
+                userId,
+                type: 'presentation',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            await firebase_1.db.collection('presentations').doc(presentation.id).set(presentationData);
+            logger_1.logger.info('Presentation saved to Firebase', { presentationId: presentation.id, userId });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to save presentation to Firebase', { error, presentationId: presentation.id, userId });
+            throw error;
+        }
+    }
+    async getUserPresentations(userId) {
+        try {
+            const snapshot = await firebase_1.db
+                .collection('presentations')
+                .where('userId', '==', userId)
+                .where('type', '==', 'presentation')
+                .orderBy('createdAt', 'desc')
+                .get();
+            const presentations = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                presentations.push({
+                    id: data.id,
+                    title: data.title,
+                    slides: data.slides,
+                    metadata: data.metadata,
+                    createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString(),
+                    updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt || new Date().toISOString(),
+                });
+            });
+            logger_1.logger.info('Retrieved user presentations', { userId, count: presentations.length });
+            return presentations;
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to get user presentations', { error, userId });
+            throw error;
         }
     }
     async generatePresentationContent(request) {
-        const systemPrompt = this.buildSystemPrompt(request);
-        const userPrompt = this.buildUserPrompt(request);
-        const response = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-4',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-            ],
-            temperature: 0.7,
-            max_tokens: 4000,
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 60000
-        });
-        const content = response.data.choices?.[0]?.message?.content;
-        if (!content) {
-            throw new Error('No content generated');
+        try {
+            const systemPrompt = this.buildSystemPrompt(request);
+            const userPrompt = this.buildUserPrompt(request);
+            logger_1.logger.info('Sending request to OpenAI', {
+                model: 'gpt-4',
+                systemPromptLength: systemPrompt.length,
+                userPromptLength: userPrompt.length
+            });
+            const response = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
+                model: 'gpt-4',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.7,
+                max_tokens: 4000,
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 60000
+            });
+            logger_1.logger.info('OpenAI response received', {
+                status: response.status,
+                hasChoices: !!response.data.choices,
+                choicesLength: response.data.choices?.length
+            });
+            const content = response.data.choices?.[0]?.message?.content;
+            if (!content) {
+                logger_1.logger.error('No content in OpenAI response', {
+                    responseData: response.data,
+                    choices: response.data.choices
+                });
+                throw new Error('No content generated from OpenAI');
+            }
+            logger_1.logger.info('Parsing presentation content', { contentLength: content.length });
+            return this.parsePresentationContent(content, request);
         }
-        return this.parsePresentationContent(content, request);
+        catch (error) {
+            logger_1.logger.error('Failed to generate presentation content', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                request
+            });
+            throw error;
+        }
     }
     buildSystemPrompt(request) {
         return `Sen dünya standartlarında bir **AI Sunum Yazarı** ve **Görsel Tasarım Direktörü**sün.
@@ -224,38 +348,6 @@ Lütfen tam sunumu üret.`;
         if (titleLower.includes('kapanış') || titleLower.includes('cta') || titleLower.includes('closing'))
             return 'cta';
         return 'features'; // Default type
-    }
-    async getPresentationTemplates() {
-        return [
-            {
-                id: 'startup-pitch',
-                name: 'Startup Pitch Deck',
-                description: 'Yatırımcılar için startup sunumu',
-                defaultSlideCount: 15,
-                includes: ['demo', 'pricing', 'competition', 'roadmap'],
-            },
-            {
-                id: 'product-launch',
-                name: 'Ürün Lansmanı',
-                description: 'Yeni ürün tanıtım sunumu',
-                defaultSlideCount: 12,
-                includes: ['demo', 'pricing'],
-            },
-            {
-                id: 'technical-presentation',
-                name: 'Teknik Sunum',
-                description: 'Geliştiriciler için teknik detaylar',
-                defaultSlideCount: 10,
-                includes: ['demo', 'roadmap'],
-            },
-            {
-                id: 'business-proposal',
-                name: 'İş Önerisi',
-                description: 'Müşterilere iş önerisi sunumu',
-                defaultSlideCount: 14,
-                includes: ['pricing', 'competition'],
-            },
-        ];
     }
 }
 exports.PresentationService = PresentationService;

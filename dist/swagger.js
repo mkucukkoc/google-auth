@@ -211,6 +211,253 @@ exports.swaggerSpec = {
                     },
                 },
             },
+            PresentationRequest: {
+                type: 'object',
+                required: ['topic', 'language', 'audience', 'tone'],
+                properties: {
+                    topic: {
+                        type: 'string',
+                        description: 'The main topic of the presentation',
+                        example: 'Avenia AI Chat App Features',
+                        minLength: 3,
+                        maxLength: 200
+                    },
+                    language: {
+                        type: 'string',
+                        description: 'Language of the presentation',
+                        enum: ['tr', 'en', 'es', 'fr', 'de', 'it'],
+                        example: 'en'
+                    },
+                    audience: {
+                        type: 'string',
+                        description: 'Target audience for the presentation',
+                        example: 'Potential Investors',
+                        minLength: 5,
+                        maxLength: 100
+                    },
+                    tone: {
+                        type: 'string',
+                        description: 'The desired tone of the presentation',
+                        example: 'professional',
+                        minLength: 3,
+                        maxLength: 50
+                    },
+                    slideCount: {
+                        type: 'number',
+                        description: 'Number of slides to generate',
+                        minimum: 5,
+                        maximum: 30,
+                        default: 15,
+                        example: 15
+                    },
+                    brandName: {
+                        type: 'string',
+                        description: 'Brand name to use in the presentation',
+                        default: 'Avenia',
+                        minLength: 2,
+                        maxLength: 50,
+                        example: 'Avenia'
+                    },
+                    primaryColor: {
+                        type: 'string',
+                        description: 'Primary brand color in hex format',
+                        pattern: '^#[0-9A-Fa-f]{6}$',
+                        default: '#7A5AF8',
+                        example: '#7A5AF8'
+                    },
+                    secondaryColor: {
+                        type: 'string',
+                        description: 'Secondary brand color in hex format',
+                        pattern: '^#[0-9A-Fa-f]{6}$',
+                        default: '#00C896',
+                        example: '#00C896'
+                    },
+                    darkBackgroundColor: {
+                        type: 'string',
+                        description: 'Dark background color in hex format',
+                        pattern: '^#[0-9A-Fa-f]{6}$',
+                        default: '#1A1A1A',
+                        example: '#1A1A1A'
+                    },
+                    primaryFont: {
+                        type: 'string',
+                        description: 'Primary font family',
+                        default: 'Inter',
+                        minLength: 2,
+                        maxLength: 30,
+                        example: 'Inter'
+                    },
+                    secondaryFont: {
+                        type: 'string',
+                        description: 'Secondary font family',
+                        default: 'Roboto',
+                        minLength: 2,
+                        maxLength: 30,
+                        example: 'Roboto'
+                    },
+                    includeDemo: {
+                        type: 'boolean',
+                        description: 'Whether to include a demo flow slide',
+                        default: true,
+                        example: true
+                    },
+                    includePricing: {
+                        type: 'boolean',
+                        description: 'Whether to include a pricing slide',
+                        default: true,
+                        example: true
+                    },
+                    includeCompetition: {
+                        type: 'boolean',
+                        description: 'Whether to include a competition matrix slide',
+                        default: true,
+                        example: true
+                    },
+                    includeRoadmap: {
+                        type: 'boolean',
+                        description: 'Whether to include a roadmap slide',
+                        default: true,
+                        example: true
+                    }
+                }
+            },
+            PresentationResponse: {
+                type: 'object',
+                properties: {
+                    id: {
+                        type: 'string',
+                        description: 'Unique identifier for the presentation',
+                        example: 'pres_16789012345_abc123'
+                    },
+                    title: {
+                        type: 'string',
+                        description: 'Title of the presentation',
+                        example: 'Avenia AI Chat App Features'
+                    },
+                    slides: {
+                        type: 'array',
+                        description: 'Array of presentation slides',
+                        items: {
+                            $ref: '#/components/schemas/Slide'
+                        }
+                    },
+                    metadata: {
+                        type: 'object',
+                        description: 'Presentation metadata and configuration',
+                        properties: {
+                            language: { type: 'string', example: 'en' },
+                            audience: { type: 'string', example: 'Potential Investors' },
+                            tone: { type: 'string', example: 'professional' },
+                            slideCount: { type: 'number', example: 15 },
+                            brandName: { type: 'string', example: 'Avenia' },
+                            colors: {
+                                type: 'object',
+                                properties: {
+                                    primary: { type: 'string', example: '#7A5AF8' },
+                                    secondary: { type: 'string', example: '#00C896' },
+                                    darkBackground: { type: 'string', example: '#1A1A1A' }
+                                }
+                            },
+                            fonts: {
+                                type: 'object',
+                                properties: {
+                                    primary: { type: 'string', example: 'Inter' },
+                                    secondary: { type: 'string', example: 'Roboto' }
+                                }
+                            },
+                            includes: {
+                                type: 'object',
+                                properties: {
+                                    demo: { type: 'boolean', example: true },
+                                    pricing: { type: 'boolean', example: true },
+                                    competition: { type: 'boolean', example: true },
+                                    roadmap: { type: 'boolean', example: true }
+                                }
+                            }
+                        }
+                    },
+                    createdAt: {
+                        type: 'string',
+                        format: 'date-time',
+                        description: 'Creation timestamp',
+                        example: '2023-03-15T10:30:00.000Z'
+                    },
+                    updatedAt: {
+                        type: 'string',
+                        format: 'date-time',
+                        description: 'Last update timestamp',
+                        example: '2023-03-15T10:30:00.000Z'
+                    }
+                }
+            },
+            Slide: {
+                type: 'object',
+                properties: {
+                    id: {
+                        type: 'number',
+                        description: 'Slide number',
+                        example: 1
+                    },
+                    title: {
+                        type: 'string',
+                        description: 'Slide title',
+                        example: 'Kapak — Avenia Backend API'
+                    },
+                    content: {
+                        type: 'array',
+                        description: 'Slide content as bullet points',
+                        items: { type: 'string' },
+                        example: ['Modern AI uygulamaları için backend çözümü', 'Ölçeklenebilir ve güvenli mimari']
+                    },
+                    speakerNotes: {
+                        type: 'string',
+                        description: 'Speaker notes for the slide',
+                        example: 'Bu slayt, sunumun açılışını yapar ve dinleyicilerin dikkatini çeker.'
+                    },
+                    visualNotes: {
+                        type: 'string',
+                        description: 'Visual design notes for the slide',
+                        example: 'Arka planda Avenia logosu ve gradient geçiş kullanılabilir.'
+                    },
+                    type: {
+                        type: 'string',
+                        description: 'Type of slide',
+                        example: 'cover',
+                        enum: ['cover', 'problem', 'solution', 'architecture', 'features', 'roadmap', 'pricing', 'competition', 'cta', 'content']
+                    }
+                }
+            },
+            PresentationTemplate: {
+                type: 'object',
+                properties: {
+                    id: {
+                        type: 'string',
+                        description: 'Template identifier',
+                        example: 'startup_pitch'
+                    },
+                    name: {
+                        type: 'string',
+                        description: 'Template name',
+                        example: 'Startup Pitch Deck'
+                    },
+                    description: {
+                        type: 'string',
+                        description: 'Template description',
+                        example: 'A template for pitching your startup to investors.'
+                    },
+                    defaultSlideCount: {
+                        type: 'number',
+                        description: 'Default number of slides for this template',
+                        example: 12
+                    },
+                    includes: {
+                        type: 'array',
+                        description: 'Features included in this template',
+                        items: { type: 'string' },
+                        example: ['demo', 'pricing', 'competition', 'roadmap']
+                    }
+                }
+            }
         },
     },
     paths: {
@@ -1367,6 +1614,105 @@ exports.swaggerSpec = {
                         }
                     },
                     401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        // ==================== PRESENTATION ====================
+        '/api/v1/presentation/generate': {
+            post: {
+                summary: 'Generate a new AI-powered presentation',
+                description: 'Generate a professional presentation using AI based on user requirements',
+                tags: ['Presentation'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                $ref: '#/components/schemas/PresentationRequest'
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'Presentation generated successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    $ref: '#/components/schemas/PresentationResponse'
+                                }
+                            }
+                        }
+                    },
+                    400: { $ref: '#/components/responses/BadRequest' },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    429: { $ref: '#/components/responses/TooManyRequests' },
+                    500: { $ref: '#/components/responses/InternalServerError' }
+                }
+            }
+        },
+        '/api/v1/presentation/templates': {
+            get: {
+                summary: 'Get available presentation templates',
+                description: 'Retrieve list of available presentation templates',
+                tags: ['Presentation'],
+                security: [{ BearerAuth: [] }],
+                responses: {
+                    200: {
+                        description: 'Templates retrieved successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'array',
+                                            items: {
+                                                $ref: '#/components/schemas/PresentationTemplate'
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'Templates retrieved successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    500: { $ref: '#/components/responses/InternalServerError' }
+                }
+            }
+        },
+        '/api/v1/presentation/user-presentations': {
+            get: {
+                summary: 'Get user\'s saved presentations',
+                description: 'Retrieve all presentations created by the authenticated user',
+                tags: ['Presentation'],
+                security: [{ BearerAuth: [] }],
+                responses: {
+                    200: {
+                        description: 'User presentations retrieved successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'array',
+                                            items: {
+                                                $ref: '#/components/schemas/PresentationResponse'
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'Presentations retrieved successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                    500: { $ref: '#/components/responses/InternalServerError' }
                 }
             }
         }
