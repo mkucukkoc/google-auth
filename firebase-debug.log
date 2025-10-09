@@ -1,0 +1,99 @@
+[debug] [2025-10-08T21:22:55.436Z] ----------------------------------------------------------------------
+[debug] [2025-10-08T21:22:55.438Z] Command:       /usr/local/bin/node /Users/mustafakucukkoc/Desktop/ChatgbtMini/server/node_modules/.bin/firebase init emulators
+[debug] [2025-10-08T21:22:55.438Z] CLI Version:   14.19.1
+[debug] [2025-10-08T21:22:55.438Z] Platform:      darwin
+[debug] [2025-10-08T21:22:55.438Z] Node Version:  v22.14.0
+[debug] [2025-10-08T21:22:55.438Z] Time:          Thu Oct 09 2025 00:22:55 GMT+0300 (GMT+03:00)
+[debug] [2025-10-08T21:22:55.438Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-10-08T21:22:55.439Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /Users/mustafakucukkoc/Desktop/ChatgbtMini
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2025-10-08T21:22:55.619Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-10-08T21:22:55.619Z] > authorizing via signed-in user (iammustafakucukkoc@gmail.com)
+[debug] [2025-10-08T21:22:55.619Z] Checked if tokens are valid: false, expires at: 1758272987929
+[debug] [2025-10-08T21:22:55.619Z] Checked if tokens are valid: false, expires at: 1758272987929
+[debug] [2025-10-08T21:22:55.619Z] > refreshing access token with scopes: []
+[debug] [2025-10-08T21:22:55.620Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-10-08T21:22:55.620Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-10-08T21:22:55.822Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-10-08T21:22:55.822Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-10-08T21:22:55.880Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/aveniaapp [none]
+[debug] [2025-10-08T21:22:56.118Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-10-08T21:22:56.118Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2025-10-08T21:22:56.322Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/aveniaapp 200
+[debug] [2025-10-08T21:22:56.322Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/aveniaapp {"projectId":"aveniaapp","projectNumber":"954027282170","displayName":"AveniaApp","name":"projects/aveniaapp","resources":{"hostingSite":"aveniaapp"},"state":"ACTIVE","etag":"1_79cae618-e12e-462d-af37-148b357564bc"}
+[info] i  Using project aveniaapp (AveniaApp) . 
+[info] 
+=== Emulators Setup
+[debug] [2025-10-08T21:33:00.405Z] ExitPromptError: User force closed the prompt with SIGINT
+    at Interface.sigint (/Users/mustafakucukkoc/Desktop/ChatgbtMini/server/node_modules/@inquirer/core/dist/commonjs/lib/create-prompt.js:101:37)
+    at Interface.emit (node:events:518:28)
+    at Interface.emit (node:domain:489:12)
+    at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1124:18)
+    at ReadStream.onkeypress (node:internal/readline/interface:263:20)
+    at ReadStream.emit (node:events:530:35)
+    at ReadStream.emit (node:domain:489:12)
+    at emitKeys (node:internal/readline/utils:370:14)
+    at emitKeys.next (<anonymous>)
+    at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2025-10-08T21:33:17.756Z] ----------------------------------------------------------------------
+[debug] [2025-10-08T21:33:17.757Z] Command:       /usr/local/bin/node /Users/mustafakucukkoc/Desktop/ChatgbtMini/server/node_modules/.bin/firebase init emulators
+[debug] [2025-10-08T21:33:17.757Z] CLI Version:   14.19.1
+[debug] [2025-10-08T21:33:17.757Z] Platform:      darwin
+[debug] [2025-10-08T21:33:17.757Z] Node Version:  v22.14.0
+[debug] [2025-10-08T21:33:17.758Z] Time:          Thu Oct 09 2025 00:33:17 GMT+0300 (GMT+03:00)
+[debug] [2025-10-08T21:33:17.761Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /Users/mustafakucukkoc/Desktop/ChatgbtMini
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2025-10-08T21:33:17.855Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-10-08T21:33:17.855Z] > authorizing via signed-in user (iammustafakucukkoc@gmail.com)
+[debug] [2025-10-08T21:33:17.856Z] Checked if tokens are valid: true, expires at: 1759962174822
+[debug] [2025-10-08T21:33:17.856Z] Checked if tokens are valid: true, expires at: 1759962174822
+[debug] [2025-10-08T21:33:17.856Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/aveniaapp [none]
+[debug] [2025-10-08T21:33:18.332Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/aveniaapp 200
+[debug] [2025-10-08T21:33:18.332Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/aveniaapp {"projectId":"aveniaapp","projectNumber":"954027282170","displayName":"AveniaApp","name":"projects/aveniaapp","resources":{"hostingSite":"aveniaapp"},"state":"ACTIVE","etag":"1_79cae618-e12e-462d-af37-148b357564bc"}
+[info] i  Using project aveniaapp (AveniaApp) . 
+[info] 
+=== Emulators Setup

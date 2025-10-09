@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { HashService } from '../src/services/hashService';
 import { UserService } from '../src/services/userService';
 import { SessionService } from '../src/services/sessionService';
@@ -116,7 +116,10 @@ describe('Services', () => {
       const updatedUser = await UserService.findById(user.id);
       expect(updatedUser?.failedLoginAttempts).toBe(5);
       expect(updatedUser?.lockedUntil).toBeDefined();
-      expect(UserService.isUserLocked(updatedUser!)).toBe(true);
+      expect(updatedUser).toBeDefined();
+      if (updatedUser) {
+        expect(UserService.isUserLocked(updatedUser)).toBe(true);
+      }
     });
 
     it('should reset failed attempts on successful login', async () => {
@@ -292,7 +295,9 @@ describe('Services', () => {
 
     it('should verify and consume reset token', async () => {
       const user = await UserService.createUser(testUser);
-      const { token } = await PasswordResetService.generateResetToken(testUser.email)!;
+      const result = await PasswordResetService.generateResetToken(testUser.email);
+      expect(result).toBeDefined();
+      const { token } = result!;
       
       const success = await PasswordResetService.verifyAndConsumeToken(
         token,
@@ -323,7 +328,12 @@ async function cleanupTestData() {
     });
   }
   
-  if (batch._writes.length > 0) {
-    await batch.commit();
+  // Check if batch has any operations before committing
+  for (const collection of collections) {
+    const snapshot = await db.collection(collection).get();
+    if (!snapshot.empty) {
+      await batch.commit();
+      break;
+    }
   }
 }

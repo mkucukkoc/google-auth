@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 import { app } from '../src/index';
 import { UserService } from '../src/services/userService';
@@ -253,7 +253,12 @@ async function cleanupTestData() {
     });
   }
   
-  if (batch._writes.length > 0) {
-    await batch.commit();
+  // Check if batch has any operations before committing
+  for (const collection of collections) {
+    const snapshot = await db.collection(collection).get();
+    if (!snapshot.empty) {
+      await batch.commit();
+      break;
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 import { app } from '../src/index';
 import { db } from '../src/firebase';
@@ -343,9 +343,10 @@ describe('Authentication API', () => {
 
 async function cleanupTestData() {
   // Clean up test users
+  const testUserEmail = 'test@example.com';
   const usersSnapshot = await db
     .collection('subsc')
-    .where('email', '==', testUser.email)
+    .where('email', '==', testUserEmail)
     .get();
   
   const batch = db.batch();

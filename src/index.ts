@@ -77,7 +77,7 @@ const initializeServices = async () => {
 };
 
 // Initialize services before creating app
-let app: express.Application;
+export let app: express.Application;
 
 const startServer = async () => {
   try {
