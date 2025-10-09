@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { db } from '../config/firebase';
 
 export interface PresentationRequest {
   topic: string;
@@ -96,9 +97,18 @@ export class PresentationService {
     ];
   }
 
-  public async generatePresentation(request: PresentationRequest): Promise<PresentationResponse> {
+  public async generatePresentation(request: PresentationRequest, userId: string): Promise<PresentationResponse> {
     try {
-      logger.info('Generating presentation', { request });
+      logger.info('Generating presentation', { request, userId });
+
+      // Validate required fields
+      if (!request.topic || !request.language || !request.audience || !request.tone) {
+        throw new Error('Missing required fields: topic, language, audience, or tone');
+      }
+
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OpenAI API key not configured');
+      }
 
       const presentationId = `pres_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       
@@ -124,44 +134,133 @@ export class PresentationService {
             primary: request.primaryFont,
             secondary: request.secondaryFont,
           },
-          createdAt: new Date(),
+          includes: {
+            demo: request.includeDemo,
+            pricing: request.includePricing,
+            competition: request.includeCompetition,
+            roadmap: request.includeRoadmap,
+          },
         },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      logger.info('Presentation generated successfully', { presentationId });
+      // Save to Firebase
+      await this.savePresentationToFirebase(response, userId);
+
+      logger.info('Presentation generated and saved successfully', { presentationId, userId });
       return response;
     } catch (error) {
-      logger.error('Failed to generate presentation', { error, request });
-      throw new Error('Failed to generate presentation');
+      logger.error('Failed to generate presentation', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        request, 
+        userId 
+      });
+      throw error;
+    }
+  }
+
+  private async savePresentationToFirebase(presentation: PresentationResponse, userId: string): Promise<void> {
+    try {
+      const presentationData = {
+        ...presentation,
+        userId,
+        type: 'presentation',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await db.collection('presentations').doc(presentation.id).set(presentationData);
+      logger.info('Presentation saved to Firebase', { presentationId: presentation.id, userId });
+    } catch (error) {
+      logger.error('Failed to save presentation to Firebase', { error, presentationId: presentation.id, userId });
+      throw error;
+    }
+  }
+
+  public async getUserPresentations(userId: string): Promise<PresentationResponse[]> {
+    try {
+      const snapshot = await db
+        .collection('presentations')
+        .where('userId', '==', userId)
+        .where('type', '==', 'presentation')
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const presentations: PresentationResponse[] = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        presentations.push({
+          id: data.id,
+          title: data.title,
+          slides: data.slides,
+          metadata: data.metadata,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt,
+        });
+      });
+
+      logger.info('Retrieved user presentations', { userId, count: presentations.length });
+      return presentations;
+    } catch (error) {
+      logger.error('Failed to get user presentations', { error, userId });
+      throw error;
     }
   }
 
   private async generatePresentationContent(request: PresentationRequest): Promise<{ title: string; slides: Slide[] }> {
-    const systemPrompt = this.buildSystemPrompt(request);
-    const userPrompt = this.buildUserPrompt(request);
+    try {
+      const systemPrompt = this.buildSystemPrompt(request);
+      const userPrompt = this.buildUserPrompt(request);
 
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7,
-      max_tokens: 4000,
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 60000
-    });
+      logger.info('Sending request to OpenAI', { 
+        model: 'gpt-4',
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPrompt.length 
+      });
 
-    const content = (response.data as any).choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('No content generated');
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-4',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      }, {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 60000
+      });
+
+      logger.info('OpenAI response received', { 
+        status: response.status,
+        hasChoices: !!(response.data as any).choices,
+        choicesLength: (response.data as any).choices?.length 
+      });
+
+      const content = (response.data as any).choices?.[0]?.message?.content;
+      if (!content) {
+        logger.error('No content in OpenAI response', { 
+          responseData: response.data,
+          choices: (response.data as any).choices 
+        });
+        throw new Error('No content generated from OpenAI');
+      }
+
+      logger.info('Parsing presentation content', { contentLength: content.length });
+      return this.parsePresentationContent(content, request);
+    } catch (error) {
+      logger.error('Failed to generate presentation content', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        request
+      });
+      throw error;
     }
-
-    return this.parsePresentationContent(content, request);
   }
 
   private buildSystemPrompt(request: PresentationRequest): string {

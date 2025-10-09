@@ -124,8 +124,8 @@ export function createPresentationRouter(): Router {
         const presentationRequest: PresentationRequest = req.body;
         const presentationService = PresentationService.getInstance();
         
-        // Generate presentation
-        const presentation = await presentationService.generatePresentation(presentationRequest);
+            // Generate presentation
+            const presentation = await presentationService.generatePresentation(presentationRequest, req.user?.id || '');
         
         // Log audit
         await auditService.logEvent({
@@ -161,13 +161,15 @@ export function createPresentationRouter(): Router {
           requestId,
           userId: req.user?.id,
           error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
           responseTime,
+          requestBody: presentationRequest,
         });
 
         res.status(500).json({
           success: false,
           error: 'presentation_generation_failed',
-          message: 'Failed to generate presentation',
+          message: `Failed to generate presentation: ${error instanceof Error ? error.message : 'Unknown error'}`,
         });
       }
     }
@@ -240,5 +242,60 @@ export function createPresentationRouter(): Router {
     }
   );
 
-  return router;
-}
+      /**
+       * @swagger
+       * /api/v1/presentation/user-presentations:
+       *   get:
+       *     summary: Get user's saved presentations
+       *     tags: [Presentation]
+       *     security:
+       *       - BearerAuth: []
+       *     responses:
+       *       200:
+       *         description: User presentations retrieved successfully
+       *         content:
+       *           application/json:
+       *             schema:
+       *               type: object
+       *               properties:
+       *                 success:
+       *                   type: boolean
+       *                   example: true
+       *                 data:
+       *                   type: array
+       *                   items:
+       *                     $ref: '#/components/schemas/PresentationResponse'
+       *                 message:
+       *                   type: string
+       *                   example: "Presentations retrieved successfully"
+       *       401:
+       *         $ref: '#/components/responses/Unauthorized'
+       *       500:
+       *         $ref: '#/components/responses/InternalServerError'
+       */
+      router.get('/user-presentations', authenticateToken, async (req: AuthRequest, res: Response) => {
+        try {
+          const presentationService = PresentationService.getInstance();
+          const presentations = await presentationService.getUserPresentations(req.user?.id || '');
+          
+          res.json({
+            success: true,
+            data: presentations,
+            message: 'Presentations retrieved successfully',
+          });
+        } catch (error: any) {
+          logger.error('Failed to get user presentations', {
+            userId: req.user?.id,
+            error: error.message,
+            stack: error.stack,
+          });
+          res.status(500).json({
+            success: false,
+            error: 'internal_server_error',
+            message: 'Failed to get user presentations',
+          });
+        }
+      });
+
+      return router;
+    }
