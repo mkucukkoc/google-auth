@@ -1408,6 +1408,7 @@ export const swaggerSpec = {
     { name: 'Password Reset', description: 'Password reset functionality' },
     { name: 'Chat', description: 'AI chat and messaging' },
     { name: 'PDF Read', description: 'PDF processing and AI analysis' },
+    { name: 'Presentation', description: 'AI-powered presentation generation' },
     { name: 'Notifications', description: 'Push notification management' }
   ]
 } as const;

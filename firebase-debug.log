@@ -97,3 +97,16 @@ Before we get started, keep in mind:
 [info] i  Using project aveniaapp (AveniaApp) . 
 [info] 
 === Emulators Setup
+[debug] [2025-10-09T19:55:10.968Z] ExitPromptError: User force closed the prompt with SIGINT
+    at Interface.sigint (/Users/mustafakucukkoc/Desktop/ChatgbtMini/server/node_modules/@inquirer/core/dist/commonjs/lib/create-prompt.js:101:37)
+    at Interface.emit (node:events:518:28)
+    at Interface.emit (node:domain:489:12)
+    at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1124:18)
+    at ReadStream.onkeypress (node:internal/readline/interface:263:20)
+    at ReadStream.emit (node:events:530:35)
+    at ReadStream.emit (node:domain:489:12)
+    at emitKeys (node:internal/readline/utils:370:14)
+    at emitKeys.next (<anonymous>)
+    at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+[error] 
+[error] Error: An unexpected error has occurred.
