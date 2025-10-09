@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.schemas = exports.sanitizeObject = exports.sanitizeHTML = exports.sanitizeString = exports.validateFileSize = exports.validateFileType = exports.validateUUID = exports.validatePassword = exports.validateEmail = exports.validateRequest = exports.settingsSchemas = exports.apiSchemas = exports.fileSchemas = exports.authSchemas = exports.chatSchemas = exports.userSchemas = void 0;
+exports.schemas = exports.sanitizeObject = exports.sanitizeHTML = exports.sanitizeString = exports.validateFileSize = exports.validateFileType = exports.validateUUID = exports.validatePassword = exports.validateEmail = exports.validateRequest = exports.pdfSummarySchemas = exports.settingsSchemas = exports.apiSchemas = exports.fileSchemas = exports.authSchemas = exports.chatSchemas = exports.userSchemas = void 0;
 const joi_1 = __importDefault(require("joi"));
 const logger_1 = require("../utils/logger");
 // User schemas
@@ -203,6 +203,19 @@ exports.settingsSchemas = {
         }).optional(),
     }),
 };
+// PDF Summary schemas
+exports.pdfSummarySchemas = {
+    summarize: joi_1.default.object({
+        fileUrl: joi_1.default.string().uri().required().messages({
+            'string.uri': 'Geçerli bir dosya URL\'si giriniz',
+            'any.required': 'Dosya URL\'si zorunludur',
+        }),
+        chatId: joi_1.default.string().uuid().required().messages({
+            'string.guid': 'Geçerli bir chat ID giriniz',
+            'any.required': 'Chat ID zorunludur',
+        }),
+    }),
+};
 // Validation middleware
 const validateRequest = (schema, property = 'body') => {
     return (req, res, next) => {
@@ -310,6 +323,71 @@ const sanitizeObject = (obj) => {
     return obj;
 };
 exports.sanitizeObject = sanitizeObject;
+// Presentation schemas
+const presentationSchemas = {
+    generate: joi_1.default.object({
+        topic: joi_1.default.string().min(3).max(200).required()
+            .messages({
+            'string.min': 'Topic must be at least 3 characters',
+            'string.max': 'Topic must not exceed 200 characters',
+            'any.required': 'Topic is required',
+        }),
+        language: joi_1.default.string().valid('tr', 'en', 'es', 'fr', 'de', 'it').required()
+            .messages({
+            'any.only': 'Language must be one of: tr, en, es, fr, de, it',
+            'any.required': 'Language is required',
+        }),
+        audience: joi_1.default.string().min(5).max(100).required()
+            .messages({
+            'string.min': 'Audience must be at least 5 characters',
+            'string.max': 'Audience must not exceed 100 characters',
+            'any.required': 'Audience is required',
+        }),
+        tone: joi_1.default.string().min(3).max(50).required()
+            .messages({
+            'string.min': 'Tone must be at least 3 characters',
+            'string.max': 'Tone must not exceed 50 characters',
+            'any.required': 'Tone is required',
+        }),
+        slideCount: joi_1.default.number().integer().min(5).max(30).default(15)
+            .messages({
+            'number.min': 'Slide count must be at least 5',
+            'number.max': 'Slide count must not exceed 30',
+            'number.integer': 'Slide count must be an integer',
+        }),
+        brandName: joi_1.default.string().min(2).max(50).default('Avenia')
+            .messages({
+            'string.min': 'Brand name must be at least 2 characters',
+            'string.max': 'Brand name must not exceed 50 characters',
+        }),
+        primaryColor: joi_1.default.string().pattern(/^#[0-9A-Fa-f]{6}$/).default('#7A5AF8')
+            .messages({
+            'string.pattern.base': 'Primary color must be a valid hex color code',
+        }),
+        secondaryColor: joi_1.default.string().pattern(/^#[0-9A-Fa-f]{6}$/).default('#00C896')
+            .messages({
+            'string.pattern.base': 'Secondary color must be a valid hex color code',
+        }),
+        darkBackgroundColor: joi_1.default.string().pattern(/^#[0-9A-Fa-f]{6}$/).default('#1A1A1A')
+            .messages({
+            'string.pattern.base': 'Dark background color must be a valid hex color code',
+        }),
+        primaryFont: joi_1.default.string().min(2).max(30).default('Inter')
+            .messages({
+            'string.min': 'Primary font must be at least 2 characters',
+            'string.max': 'Primary font must not exceed 30 characters',
+        }),
+        secondaryFont: joi_1.default.string().min(2).max(30).default('Roboto')
+            .messages({
+            'string.min': 'Secondary font must be at least 2 characters',
+            'string.max': 'Secondary font must not exceed 30 characters',
+        }),
+        includeDemo: joi_1.default.boolean().default(true),
+        includePricing: joi_1.default.boolean().default(true),
+        includeCompetition: joi_1.default.boolean().default(true),
+        includeRoadmap: joi_1.default.boolean().default(true),
+    }),
+};
 // Export all schemas
 exports.schemas = {
     user: exports.userSchemas,
@@ -318,4 +396,6 @@ exports.schemas = {
     file: exports.fileSchemas,
     api: exports.apiSchemas,
     settings: exports.settingsSchemas,
+    pdfSummary: exports.pdfSummarySchemas,
+    presentation: presentationSchemas,
 };

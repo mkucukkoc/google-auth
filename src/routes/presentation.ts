@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { PresentationService, PresentationRequest } from '../services/presentationService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
-import { validate, presentationSchemas } from '../middleware/validationMiddleware';
+import { validate } from '../middleware/validationMiddleware';
+import { presentationGenerateSchema } from '../validation/presentationSchemas';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
@@ -114,7 +115,7 @@ export function createPresentationRouter(): Router {
   router.post('/generate',
     authRateLimits.presentation,
     authenticateToken,
-    validate(presentationSchemas.generate),
+    validate(presentationGenerateSchema),
     async (req: AuthRequest, res: Response) => {
       const requestId = Math.random().toString(36).substring(7);
       const startTime = Date.now();
@@ -127,11 +128,12 @@ export function createPresentationRouter(): Router {
         const presentation = await presentationService.generatePresentation(presentationRequest);
         
         // Log audit
-        await auditService.logAction({
+        await auditService.logEvent({
           userId: req.user?.id || 'unknown',
           action: 'presentation_generated',
           resource: 'presentation',
           resourceId: presentation.id,
+          success: true,
           metadata: {
             topic: presentationRequest.topic,
             language: presentationRequest.language,

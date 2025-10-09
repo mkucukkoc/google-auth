@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -44,17 +77,37 @@ class ChatService {
                 })),
                 operation: 'frontendMessagesReceived'
             }, 'Frontend messages received and logged');
-            // Model seçimi
-            const modelToUse = request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
+            // AI detection kontrolü
+            const isAIDetectionRequest = this.isAIDetectionRequest(request.messages);
+            // Image kontrolü - daha esnek
+            const hasImageInMessages = request.messages.some(msg => msg.content.includes('[Dosya Bağlantısı]') ||
+                msg.fileUrl ||
+                request.imageFileUrl);
+            if (isAIDetectionRequest && (request.hasImage || hasImageInMessages)) {
+                logger_1.logger.info({
+                    requestId,
+                    userId: request.userId,
+                    chatId: request.chatId,
+                    hasImage: request.hasImage,
+                    hasImageInMessages,
+                    operation: 'aiDetectionRequest'
+                }, 'AI detection request detected, redirecting to AI or Not API');
+                // AI detection için özel işlem
+                return await this.handleAIDetectionRequest(request, requestId);
+            }
+            // Model seçimi - Image varsa gpt-4o kullan (hasImageInMessages zaten yukarıda tanımlandı)
+            const modelToUse = (request.hasImage || hasImageInMessages) ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
             logger_1.logger.info({
                 requestId,
                 modelToUse,
                 hasImage: request.hasImage,
+                hasImageInMessages,
                 imageFileUrl: request.imageFileUrl,
+                fineTunedModel: this.FINE_TUNED_MODEL_ID,
                 operation: 'modelSelection'
             }, 'Model selected for OpenAI request');
             // Mesajları formatla
-            const formattedMessages = this.formatMessages(request.messages, request.imageFileUrl);
+            const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
             logger_1.logger.info({
                 requestId,
                 formattedMessagesCount: formattedMessages.length,
@@ -196,8 +249,9 @@ class ChatService {
     /**
      * Mesajları OpenAI formatına çevir
      */
-    static formatMessages(messages, imageFileUrl) {
-        return messages.map((msg, idx) => {
+    static async formatMessages(messages, imageFileUrl) {
+        const formattedMessages = [];
+        for (const msg of messages) {
             // Dosya bağlantısı kontrolü
             const match = msg.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
             const fileUrl = match?.[1]?.trim() || imageFileUrl;
@@ -206,19 +260,61 @@ class ChatService {
             if (fileUrl && isImage) {
                 const parts = msg.content.split('[Dosya Bağlantısı]:');
                 const textPart = (parts[0] || '').trim();
-                return {
-                    role: msg.role,
-                    content: [
-                        { type: 'text', text: textPart },
-                        {
-                            type: 'image_url',
-                            image_url: { url: fileUrl }
-                        }
-                    ]
-                };
+                try {
+                    // Image URL'ini base64'e çevir
+                    const base64Image = await this.convertImageUrlToBase64(fileUrl);
+                    formattedMessages.push({
+                        role: msg.role,
+                        content: [
+                            { type: 'text', text: textPart },
+                            {
+                                type: 'image_url',
+                                image_url: { url: base64Image }
+                            }
+                        ]
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.error({
+                        fileUrl,
+                        error: error?.message || 'Unknown error',
+                        operation: 'imageConversion'
+                    }, 'Failed to convert image to base64, using text only');
+                    // Hata durumunda sadece text olarak gönder
+                    formattedMessages.push({
+                        role: msg.role,
+                        content: msg.content
+                    });
+                }
             }
-            return { role: msg.role, content: msg.content };
-        });
+            else {
+                formattedMessages.push({ role: msg.role, content: msg.content });
+            }
+        }
+        return formattedMessages;
+    }
+    /**
+     * Image URL'ini base64 formatına çevir
+     */
+    static async convertImageUrlToBase64(imageUrl) {
+        try {
+            const response = await axios_1.default.get(imageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 30000 // 30 saniye timeout
+            });
+            const buffer = Buffer.from(response.data);
+            const mimeType = response.headers['content-type'] || 'image/jpeg';
+            const base64 = buffer.toString('base64');
+            return `data:${mimeType};base64,${base64}`;
+        }
+        catch (error) {
+            logger_1.logger.error({
+                imageUrl,
+                error: error?.message || 'Unknown error',
+                operation: 'imageUrlToBase64'
+            }, 'Failed to convert image URL to base64');
+            throw new Error(`Image conversion failed: ${error?.message || 'Unknown error'}`);
+        }
     }
     /**
      * OpenAI API'ye istek gönder
@@ -238,6 +334,45 @@ class ChatService {
             })),
             tool_choice: 'auto'
         };
+        // Request size kontrolü
+        const requestSize = JSON.stringify(requestData).length;
+        const maxRequestSize = 200000; // 200KB limit
+        if (requestSize > maxRequestSize) {
+            logger_1.logger.warn({
+                requestId,
+                requestSize,
+                maxRequestSize,
+                messageCount: messages.length,
+                operation: 'openaiRequestSizeCheck'
+            }, 'Request size exceeds limit, truncating messages');
+            // Mesajları kısalt
+            const truncatedMessages = messages.map(msg => {
+                if (typeof msg.content === 'string' && msg.content.length > 3000) {
+                    return {
+                        ...msg,
+                        content: msg.content.substring(0, 3000) + '... [truncated]'
+                    };
+                }
+                else if (Array.isArray(msg.content)) {
+                    // Multimodal content için text kısmını kısalt
+                    const truncatedContent = msg.content.map((part) => {
+                        if (part.type === 'text' && part.text && part.text.length > 3000) {
+                            return {
+                                ...part,
+                                text: part.text.substring(0, 3000) + '... [truncated]'
+                            };
+                        }
+                        return part;
+                    });
+                    return {
+                        ...msg,
+                        content: truncatedContent
+                    };
+                }
+                return msg;
+            });
+            requestData.messages = truncatedMessages;
+        }
         logger_1.logger.info({
             requestId,
             model,
@@ -254,10 +389,10 @@ class ChatService {
                     contentType: Array.isArray(msg.content) ? 'multimodal' : 'text',
                     contentLength: Array.isArray(msg.content) ?
                         msg.content.reduce((total, part) => total + (part.text?.length || 0), 0) :
-                        msg.content.length,
+                        (msg.content?.length || 0),
                     contentPreview: Array.isArray(msg.content) ?
                         msg.content.map((part) => part.text || `[${part.type}]`).join(' ').substring(0, 100) + '...' :
-                        msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : ''),
+                        (msg.content ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '') : 'null'),
                     hasImage: Array.isArray(msg.content) && msg.content.some((part) => part.type === 'image_url')
                 })),
                 tools: requestData.tools.map(tool => ({
@@ -268,54 +403,74 @@ class ChatService {
             },
             operation: 'openaiRequest'
         }, 'Sending detailed request to OpenAI API');
-        const response = await axios_1.default.post('https://api.openai.com/v1/chat/completions', requestData, {
-            headers: {
-                'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 60000 // 60 saniye timeout
-        });
-        const processingTime = Date.now() - startTime;
-        logger_1.logger.info({
-            requestId,
-            model,
-            responseStatus: response.status,
-            responseStatusText: response.statusText,
-            responseHeaders: {
-                contentType: response.headers['content-type'],
-                openaiVersion: response.headers['openai-version'],
-                requestId: response.headers['x-request-id'],
-                ratelimitLimit: response.headers['x-ratelimit-limit-requests'],
-                ratelimitRemaining: response.headers['x-ratelimit-remaining-requests'],
-                ratelimitReset: response.headers['x-ratelimit-reset-requests']
-            },
-            responseData: {
-                id: response.data.id,
-                object: response.data.object,
-                created: response.data.created,
-                model: response.data.model,
-                choicesCount: response.data.choices?.length || 0,
-                usage: response.data.usage ? {
-                    promptTokens: response.data.usage.prompt_tokens,
-                    completionTokens: response.data.usage.completion_tokens,
-                    totalTokens: response.data.usage.total_tokens
-                } : null,
-                choices: response.data.choices?.map((choice, index) => ({
-                    index,
-                    finishReason: choice.finish_reason,
-                    messageRole: choice.message?.role,
-                    hasContent: !!choice.message?.content,
-                    contentLength: choice.message?.content?.length || 0,
-                    contentPreview: choice.message?.content ?
-                        choice.message.content.substring(0, 200) + (choice.message.content.length > 200 ? '...' : '') : 'none',
-                    hasToolCalls: !!choice.message?.tool_calls,
-                    toolCallsCount: choice.message?.tool_calls?.length || 0
-                })) || []
-            },
-            processingTimeMs: processingTime,
-            operation: 'openaiResponse'
-        }, 'OpenAI API response received with full details');
-        return response;
+        try {
+            const response = await axios_1.default.post('https://api.openai.com/v1/chat/completions', requestData, {
+                headers: {
+                    'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 60000 // 60 saniye timeout
+            });
+            const processingTime = Date.now() - startTime;
+            logger_1.logger.info({
+                requestId,
+                model,
+                responseStatus: response.status,
+                responseStatusText: response.statusText,
+                responseHeaders: {
+                    contentType: response.headers['content-type'],
+                    openaiVersion: response.headers['openai-version'],
+                    requestId: response.headers['x-request-id'],
+                    ratelimitLimit: response.headers['x-ratelimit-limit-requests'],
+                    ratelimitRemaining: response.headers['x-ratelimit-remaining-requests'],
+                    ratelimitReset: response.headers['x-ratelimit-reset-requests']
+                },
+                responseData: {
+                    id: response.data.id,
+                    object: response.data.object,
+                    created: response.data.created,
+                    model: response.data.model,
+                    choicesCount: response.data.choices?.length || 0,
+                    usage: response.data.usage ? {
+                        promptTokens: response.data.usage.prompt_tokens,
+                        completionTokens: response.data.usage.completion_tokens,
+                        totalTokens: response.data.usage.total_tokens
+                    } : null,
+                    choices: response.data.choices?.map((choice, index) => ({
+                        index,
+                        finishReason: choice.finish_reason,
+                        messageRole: choice.message?.role,
+                        hasContent: !!choice.message?.content,
+                        contentLength: choice.message?.content?.length || 0,
+                        contentPreview: choice.message?.content ?
+                            choice.message.content.substring(0, 200) + (choice.message.content.length > 200 ? '...' : '') : 'none',
+                        hasToolCalls: !!choice.message?.tool_calls,
+                        toolCallsCount: choice.message?.tool_calls?.length || 0
+                    })) || []
+                },
+                processingTimeMs: processingTime,
+                operation: 'openaiResponse'
+            }, 'OpenAI API response received with full details');
+            return response;
+        }
+        catch (error) {
+            const processingTime = Date.now() - startTime;
+            logger_1.logger.error({
+                requestId,
+                model,
+                requestSize: JSON.stringify(requestData).length,
+                messageCount: messages.length,
+                error: {
+                    message: error.message,
+                    status: error.response?.status,
+                    statusText: error.response?.statusText,
+                    data: error.response?.data
+                },
+                processingTimeMs: processingTime,
+                operation: 'openaiRequestError'
+            }, 'OpenAI API request failed');
+            throw error;
+        }
     }
     /**
      * Tool calls işle
@@ -406,10 +561,18 @@ class ChatService {
             operation: 'toolCallsCompleted'
         }, 'All tool calls completed, preparing follow-up request');
         // Tool cevaplarını modele geri gönder
-        const followUpResponse = await this.callOpenAI(requestId, request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID, [
-            ...this.formatMessages(request.messages, request.imageFileUrl),
+        // Önce orijinal mesajları, sonra assistant'ın tool call'ını, sonra tool cevaplarını ekle
+        const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
+        const followUpMessages = [
+            ...formattedMessages,
+            {
+                role: 'assistant',
+                content: null,
+                tool_calls: toolCalls
+            },
             ...toolResponses
-        ], this.getAgentFunctions());
+        ];
+        const followUpResponse = await this.callOpenAI(requestId, request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID, followUpMessages, this.getAgentFunctions());
         const followUpMessage = followUpResponse.data.choices?.[0]?.message;
         if (followUpMessage?.content) {
             logger_1.logger.info({
@@ -506,8 +669,28 @@ class ChatService {
     static getFunctionMap() {
         return {
             summarize_pdf: async (args) => {
-                // PDF özetleme implementasyonu
-                return { message: 'PDF özetlendi', data: 'Özet içeriği...' };
+                // Gerçek PDF özetleme implementasyonu
+                const { PDFService } = await Promise.resolve().then(() => __importStar(require('./pdfService')));
+                const result = await PDFService.extractAndSummarizePDF({
+                    fileUrl: args.fileUrl,
+                    userId: 'system', // Chat context'ten alınabilir
+                    chatId: 'system' // Chat context'ten alınabilir
+                });
+                if (result.success) {
+                    return {
+                        message: 'PDF başarıyla özetlendi',
+                        data: result.data?.summary || 'Özet oluşturulamadı',
+                        pageCount: result.data?.pageCount || 0,
+                        wordCount: result.data?.wordCount || 0
+                    };
+                }
+                else {
+                    return {
+                        message: 'PDF özetleme hatası',
+                        data: result.error?.message || 'Bilinmeyen hata',
+                        error: true
+                    };
+                }
             },
             ask_pdf_question: async (args) => {
                 // PDF soru-cevap implementasyonu
@@ -549,6 +732,28 @@ class ChatService {
                 operation: 'saveMessage'
             }, 'Starting message save to Firestore');
             const messagesRef = firebase_1.db.collection('users').doc(userId).collection('chats').doc(chatId).collection('messages');
+            // Duplicate kontrol: Aynı içerik ve role'e sahip mesaj var mı?
+            const recentMessages = await messagesRef
+                .orderBy('timestamp', 'desc')
+                .limit(5)
+                .get();
+            const isDuplicate = recentMessages.docs.some(doc => {
+                const data = doc.data();
+                return data.role === message.role &&
+                    data.content === message.content &&
+                    Math.abs(new Date(data.timestamp?.toDate()).getTime() - new Date().getTime()) < 10000; // 10 saniye içinde
+            });
+            if (isDuplicate) {
+                logger_1.logger.info({
+                    requestId,
+                    userId,
+                    chatId,
+                    role: message.role,
+                    contentPreview: message.content.substring(0, 50) + '...',
+                    operation: 'duplicateMessageSkipped'
+                }, 'Duplicate message detected, skipping save');
+                return response_1.ResponseBuilder.success({}, 'Duplicate message skipped');
+            }
             const messageData = {
                 ...message,
                 timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
@@ -700,6 +905,200 @@ class ChatService {
                 operation: 'textToSpeech'
             }, 'TTS conversion failed');
             return response_1.ResponseBuilder.error('tts_failed', 'Failed to convert text to speech');
+        }
+    }
+    /**
+     * AI detection request kontrolü
+     */
+    static isAIDetectionRequest(messages) {
+        const aiDetectionKeywords = [
+            'ai ile mi üretilmiş',
+            'ai ile mi üretilmis',
+            'ai ile mi üretildi',
+            'yapay zeka ile mi üretilmiş',
+            'yapay zeka ile mi üretilmis',
+            'yapay zeka ile mi üretildi',
+            'ai generated',
+            'artificial intelligence',
+            'ai ile mi yapılmış',
+            'ai ile mi yapilmis',
+            'ai ile mi yapıldı',
+            'ai ile mi yapildi',
+            'kontrol et',
+            'kontrol eder misin',
+            'ai detection',
+            'ai tespit',
+            'ai tespit et',
+            'ai tespit eder misin',
+            'bu foto ai ile mi',
+            'bu görsel ai ile mi',
+            'bu resim ai ile mi',
+            'bu foto ai ile mi üretildi',
+            'bu görsel ai ile mi üretildi',
+            'bu resim ai ile mi üretildi',
+            'ai ile mi yapılmış',
+            'ai ile mi yapilmis',
+            'ai ile mi yapıldı',
+            'ai ile mi yapildi',
+            'yapay zeka ile mi yapılmış',
+            'yapay zeka ile mi yapilmis',
+            'yapay zeka ile mi yapıldı',
+            'yapay zeka ile mi yapildi',
+            'ai ile üretilmiş',
+            'ai ile üretilmis',
+            'ai ile üretildi',
+            'yapay zeka ile üretilmiş',
+            'yapay zeka ile üretilmis',
+            'yapay zeka ile üretildi'
+        ];
+        const lastMessage = messages[messages.length - 1];
+        if (!lastMessage)
+            return false;
+        const content = lastMessage.content.toLowerCase();
+        // Debug log
+        logger_1.logger.info({
+            content: content.substring(0, 100),
+            keywords: aiDetectionKeywords.slice(0, 5),
+            operation: 'aiDetectionCheck'
+        }, 'Checking for AI detection keywords');
+        const isAIDetection = aiDetectionKeywords.some(keyword => content.includes(keyword.toLowerCase()));
+        logger_1.logger.info({
+            isAIDetection,
+            matchedKeyword: aiDetectionKeywords.find(keyword => content.includes(keyword.toLowerCase())),
+            operation: 'aiDetectionResult'
+        }, 'AI detection check result');
+        return isAIDetection;
+    }
+    /**
+     * AI detection request işlemi
+     */
+    static async handleAIDetectionRequest(request, requestId) {
+        try {
+            logger_1.logger.info({
+                requestId,
+                userId: request.userId,
+                chatId: request.chatId,
+                operation: 'handleAIDetectionRequest'
+            }, 'Processing AI detection request');
+            // Image URL'ini al - mesajlardan veya request'ten
+            let imageUrl = request.imageFileUrl;
+            // Eğer request.imageFileUrl yoksa, mesajlardan al
+            if (!imageUrl) {
+                const messageWithImage = request.messages.find(msg => msg.content.includes('[Dosya Bağlantısı]') || msg.fileUrl);
+                if (messageWithImage) {
+                    const match = messageWithImage.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
+                    imageUrl = match?.[1]?.trim() || messageWithImage.fileUrl;
+                }
+            }
+            if (!imageUrl) {
+                logger_1.logger.error({
+                    requestId,
+                    userId: request.userId,
+                    chatId: request.chatId,
+                    operation: 'handleAIDetectionRequest'
+                }, 'No image URL found for AI detection');
+                return response_1.ResponseBuilder.error('no_image_provided', 'AI detection için görsel gerekli');
+            }
+            logger_1.logger.info({
+                requestId,
+                userId: request.userId,
+                chatId: request.chatId,
+                imageUrl: imageUrl.substring(0, 100) + '...',
+                operation: 'handleAIDetectionRequest'
+            }, 'Image URL found for AI detection');
+            // Image'ı base64'e çevir
+            const base64Image = await this.convertImageUrlToBase64(imageUrl);
+            // AI or Not API'ye istek gönder
+            const aiDetectionResult = await this.callAIOrNotAPI(base64Image, requestId);
+            if (!aiDetectionResult.success) {
+                return response_1.ResponseBuilder.error('ai_detection_failed', 'AI detection başarısız oldu');
+            }
+            // Sonucu formatla
+            const aiScore = aiDetectionResult.data?.ai_score || 0;
+            const isAI = aiScore > 0.5;
+            const responseMessage = isAI
+                ? `Bu görsel AI ile üretilmiş olabilir. AI skoru: ${(aiScore * 100).toFixed(1)}%`
+                : `Bu görsel doğal olarak oluşturulmuş görünüyor. AI skoru: ${(aiScore * 100).toFixed(1)}%`;
+            logger_1.logger.info({
+                requestId,
+                userId: request.userId,
+                chatId: request.chatId,
+                aiScore,
+                isAI,
+                operation: 'aiDetectionCompleted'
+            }, 'AI detection completed successfully');
+            return response_1.ResponseBuilder.success({
+                message: {
+                    role: 'assistant',
+                    content: responseMessage,
+                    timestamp: new Date().toISOString()
+                }
+            }, 'AI detection completed');
+        }
+        catch (error) {
+            logger_1.logger.error({
+                requestId,
+                userId: request.userId,
+                chatId: request.chatId,
+                err: error,
+                operation: 'handleAIDetectionRequest'
+            }, 'AI detection request failed');
+            return response_1.ResponseBuilder.error('ai_detection_failed', 'AI detection işlemi başarısız oldu');
+        }
+    }
+    /**
+     * AI or Not API'ye istek gönder
+     */
+    static async callAIOrNotAPI(base64Image, requestId) {
+        try {
+            const apiKey = process.env.AI_OR_NOT_API_KEY;
+            logger_1.logger.info({
+                requestId,
+                imageSize: base64Image.length,
+                hasApiKey: !!apiKey,
+                apiKeyLength: apiKey?.length || 0,
+                operation: 'callAIOrNotAPI'
+            }, 'Calling AI or Not API');
+            if (!apiKey) {
+                logger_1.logger.error({
+                    requestId,
+                    operation: 'callAIOrNotAPI'
+                }, 'AI_OR_NOT_API_KEY environment variable is not set');
+                return response_1.ResponseBuilder.error('ai_or_not_api_key_missing', 'AI or Not API key is not configured');
+            }
+            // Base64'ten buffer'a çevir
+            const imageBuffer = Buffer.from(base64Image.replace(/^data:image\/[a-z]+;base64,/, ''), 'base64');
+            // FormData oluştur
+            const FormData = require('form-data');
+            const formData = new FormData();
+            formData.append('image', imageBuffer, {
+                filename: 'image.jpg',
+                contentType: 'image/jpeg'
+            });
+            const response = await axios_1.default.post('https://api.aiornot.com/v2/image/sync', formData, {
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    ...formData.getHeaders()
+                },
+                timeout: 30000
+            });
+            logger_1.logger.info({
+                requestId,
+                status: response.status,
+                responseData: response.data,
+                operation: 'callAIOrNotAPI'
+            }, 'AI or Not API response received');
+            return response_1.ResponseBuilder.success(response.data, 'AI or Not API call successful');
+        }
+        catch (error) {
+            logger_1.logger.error({
+                requestId,
+                err: error,
+                errorStatus: error.response?.status,
+                errorData: error.response?.data,
+                operation: 'callAIOrNotAPI'
+            }, 'AI or Not API call failed');
+            return response_1.ResponseBuilder.error('ai_or_not_api_failed', 'AI or Not API çağrısı başarısız oldu');
         }
     }
 }

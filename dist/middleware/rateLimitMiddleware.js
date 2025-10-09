@@ -75,6 +75,38 @@ exports.authRateLimits = {
         standardHeaders: true,
         legacyHeaders: false,
     }),
+    // PDF summary rate limiting - moderate (PDF processing is resource intensive)
+    pdfSummary: (0, express_rate_limit_1.default)({
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 10, // 10 PDF summaries per hour
+        message: {
+            error: 'rate_limit_exceeded',
+            message: 'Too many PDF summary requests. Please try again later.'
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+    }),
+    // PDF history rate limiting - more permissive
+    pdfHistory: (0, express_rate_limit_1.default)({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 30, // 30 history requests per window
+        message: {
+            error: 'rate_limit_exceeded',
+            message: 'Too many PDF history requests. Please try again later.'
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+    }),
+    presentation: (0, express_rate_limit_1.default)({
+        windowMs: 5 * 60 * 1000, // 5 minutes
+        max: 3, // 3 presentations per 5 minutes
+        message: {
+            error: 'presentation_rate_limit_exceeded',
+            message: 'Too many presentation requests. Please try again later.',
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+    }),
 };
 // Cleanup function for rate limit stores
 function cleanupRateLimits() {

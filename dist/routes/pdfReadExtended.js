@@ -252,7 +252,7 @@ function createPDFReadExtendedRouter() {
     r.post('/analyze-video', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeVideo), async (req, res) => {
         const authReq = req;
         try {
-            const { videoBase64 } = req.body;
+            const { videoBase64, user_id, chat_id } = req.body;
             const result = await pdfReadService_1.PDFReadService.analyzeVideo(videoBase64);
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_video', {
@@ -647,6 +647,32 @@ function createPDFReadExtendedRouter() {
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Failed to export chat'
+            });
+        }
+    });
+    // POST /pdfread/audio-isolation
+    r.post('/audio-isolation', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.audioIsolation), async (req, res) => {
+        const authReq = req;
+        try {
+            const { audioBase64 } = req.body;
+            const result = await pdfReadService_1.PDFReadService.audioIsolation(audioBase64);
+            // Log the action
+            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_audio_isolation', {
+                audioSize: audioBase64.length,
+                success: result.success
+            });
+            if (result.success) {
+                res.json(result);
+            }
+            else {
+                res.status(400).json(result);
+            }
+        }
+        catch (error) {
+            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'audioIsolation' }, 'Audio isolation error');
+            res.status(500).json({
+                error: 'internal_error',
+                message: 'Failed to process audio isolation'
             });
         }
     });

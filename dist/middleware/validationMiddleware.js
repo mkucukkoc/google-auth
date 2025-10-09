@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateParams = exports.validateQuery = exports.chatSchemas = exports.pdfReadSchemas = exports.authSchemas = exports.validate = void 0;
+exports.validateParams = exports.validateQuery = exports.pdfSummarySchemas = exports.chatSchemas = exports.pdfReadSchemas = exports.authSchemas = exports.validate = void 0;
 const zod_1 = require("zod");
 /**
  * Validation middleware factory
@@ -95,6 +95,8 @@ exports.pdfReadSchemas = {
     }),
     analyzeImage: zod_1.z.object({
         imageBase64: zod_1.z.string().min(1, 'Image base64 is required'),
+        user_id: zod_1.z.string().optional(),
+        chat_id: zod_1.z.string().optional(),
     }),
     generateDoc: zod_1.z.object({
         prompt: zod_1.z.string().min(1, 'Prompt is required').max(5000, 'Prompt too long'),
@@ -110,6 +112,11 @@ exports.pdfReadSchemas = {
     }),
     analyzeVideo: zod_1.z.object({
         videoBase64: zod_1.z.string().min(1, 'Video base64 is required'),
+        user_id: zod_1.z.string().optional(),
+        chat_id: zod_1.z.string().optional(),
+    }),
+    audioIsolation: zod_1.z.object({
+        audioBase64: zod_1.z.string().min(1, 'Audio base64 is required'),
     }),
     askWithEmbeddings: zod_1.z.object({
         question: zod_1.z.string().min(1, 'Question is required').max(1000, 'Question too long'),
@@ -154,6 +161,15 @@ exports.chatSchemas = {
     }),
     createChat: zod_1.z.object({
         title: zod_1.z.string().optional(),
+    }),
+};
+/**
+ * Validation schemas for PDF summary endpoints
+ */
+exports.pdfSummarySchemas = {
+    summarize: zod_1.z.object({
+        fileUrl: zod_1.z.string().url('Geçerli bir dosya URL\'si giriniz'),
+        chatId: zod_1.z.string().uuid('Geçerli bir chat ID giriniz'),
     }),
 };
 /**

@@ -135,7 +135,7 @@ function createPDFReadRouter() {
     r.post('/analyze-image', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
         const authReq = req;
         try {
-            const { imageBase64 } = req.body;
+            const { imageBase64, user_id, chat_id } = req.body;
             const result = await pdfReadService_1.PDFReadService.analyzeImage(imageBase64);
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_image', {

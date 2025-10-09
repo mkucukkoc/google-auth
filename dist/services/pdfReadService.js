@@ -426,6 +426,27 @@ class PDFReadService {
         }
     }
     /**
+     * Audio isolation (Ses izolasyonu)
+     */
+    static async audioIsolation(audioBase64) {
+        try {
+            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/audio-isolation`, {
+                base64: audioBase64
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+                },
+                timeout: 60000
+            });
+            return response_1.ResponseBuilder.success(response.data, 'Audio isolation completed successfully');
+        }
+        catch (error) {
+            logger_1.logger.error({ err: error, audioSize: audioBase64.length, operation: 'audioIsolation' }, 'Audio isolation error');
+            return response_1.ResponseBuilder.error('audio_isolation_failed', error.response?.data?.detail || 'Failed to process audio isolation');
+        }
+    }
+    /**
      * Video üretir
      */
     static async generateVideo(prompt) {

@@ -1,4 +1,4 @@
-import { openai } from '../config/openai';
+import axios from 'axios';
 import { logger } from '../utils/logger';
 
 export interface PresentationRequest {
@@ -107,7 +107,7 @@ export class PresentationService {
     const systemPrompt = this.buildSystemPrompt(request);
     const userPrompt = this.buildUserPrompt(request);
 
-    const completion = await openai.chat.completions.create({
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -115,9 +115,15 @@ export class PresentationService {
       ],
       temperature: 0.7,
       max_tokens: 4000,
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 60000
     });
 
-    const content = completion.choices[0]?.message?.content;
+    const content = (response.data as any).choices?.[0]?.message?.content;
     if (!content) {
       throw new Error('No content generated');
     }
@@ -223,6 +229,9 @@ Lütfen tam sunumu üret.`;
         };
       } else if (trimmedLine.startsWith('- ') && currentSlide) {
         // Add bullet point
+        if (!currentSlide.content) {
+          currentSlide.content = [];
+        }
         currentSlide.content.push(trimmedLine.substring(2));
       } else if (trimmedLine.startsWith('**Konuşmacı Notu:**') && currentSlide) {
         // Add speaker notes
