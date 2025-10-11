@@ -164,7 +164,13 @@ export const handleUnhandledRejection = () => {
 // Uncaught exception handler
 export const handleUncaughtException = () => {
   process.on('uncaughtException', (err: Error) => {
-    logger.error('UNCAUGHT EXCEPTION! 💥 Shutting down...', err);
+    logger.error({
+      message: 'UNCAUGHT EXCEPTION! 💥 Shutting down...',
+      error: err.message,
+      stack: err.stack,
+      name: err.name
+    }, 'Uncaught Exception');
+    console.error('Uncaught Exception:', err);
     process.exit(1);
   });
 };
