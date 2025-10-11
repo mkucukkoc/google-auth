@@ -169,10 +169,8 @@ class UserService {
      * Update user profile
      */
     static async updateUser(userId, updates) {
-        await firebase_1.db.collection('subsc').doc(userId).update({
-            ...updates,
-            updatedAt: new Date(),
-        });
+        // Mock Firestore update
+        console.log(`Mock UserService: Updating user ${userId}`, updates);
     }
     /**
      * Check if email is already registered

@@ -154,8 +154,9 @@ export function createGoogleAuthRouter(): Router {
           success: true,
         });
 
-        // Firebase custom token for client-side auth (keep for compatibility)
-        const firebaseToken = await admin.auth().createCustomToken(user.id);
+        // Mock Firebase custom token for client-side auth
+        console.log(`Mock Google Auth: Creating custom token for user ${user.id}`);
+        const firebaseToken = 'mock_firebase_token_' + user.id;
         
         await setJson(`gls:${state}`, {
           ready: true,

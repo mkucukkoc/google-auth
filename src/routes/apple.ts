@@ -129,8 +129,9 @@ export function createAppleAuthRouter(): Router {
           success: true,
         });
 
-        // Firebase custom token for client-side auth (keep for compatibility)
-        const firebaseToken = await admin.auth().createCustomToken(userRecord.id);
+        // Mock Firebase custom token for client-side auth
+        console.log(`Mock Apple Auth: Creating custom token for user ${userRecord.id}`);
+        const firebaseToken = 'mock_firebase_token_' + userRecord.id;
         
         await setJson(`als:${state}`, {
           ready: true,

@@ -14,7 +14,6 @@ const userService_1 = require("../services/userService");
 const sessionService_1 = require("../services/sessionService");
 const auditService_1 = require("../services/auditService");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
-const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const logger_1 = require("../utils/logger");
 function createGoogleAuthRouter() {
     const r = (0, express_1.Router)();
@@ -123,8 +122,9 @@ function createGoogleAuthRouter() {
                 deviceInfo,
                 success: true,
             });
-            // Firebase custom token for client-side auth (keep for compatibility)
-            const firebaseToken = await firebase_admin_1.default.auth().createCustomToken(user.id);
+            // Mock Firebase custom token for client-side auth
+            console.log(`Mock Google Auth: Creating custom token for user ${user.id}`);
+            const firebaseToken = 'mock_firebase_token_' + user.id;
             await (0, redis_1.setJson)(`gls:${state}`, {
                 ready: true,
                 accessToken: tokens.accessToken,

@@ -197,10 +197,8 @@ export class UserService {
    * Update user profile
    */
   static async updateUser(userId: string, updates: Partial<User>): Promise<void> {
-    await db.collection('subsc').doc(userId).update({
-      ...updates,
-      updatedAt: new Date(),
-    });
+    // Mock Firestore update
+    console.log(`Mock UserService: Updating user ${userId}`, updates);
   }
 
   /**

@@ -46,7 +46,6 @@ const userService_1 = require("../services/userService");
 const sessionService_1 = require("../services/sessionService");
 const auditService_1 = require("../services/auditService");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
-const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const logger_1 = require("../utils/logger");
 const jwt = __importStar(require("jsonwebtoken"));
 function createAppleAuthRouter() {
@@ -134,8 +133,9 @@ function createAppleAuthRouter() {
                 deviceInfo,
                 success: true,
             });
-            // Firebase custom token for client-side auth (keep for compatibility)
-            const firebaseToken = await firebase_admin_1.default.auth().createCustomToken(userRecord.id);
+            // Mock Firebase custom token for client-side auth
+            console.log(`Mock Apple Auth: Creating custom token for user ${userRecord.id}`);
+            const firebaseToken = 'mock_firebase_token_' + userRecord.id;
             await (0, redis_1.setJson)(`als:${state}`, {
                 ready: true,
                 accessToken: tokens.accessToken,
