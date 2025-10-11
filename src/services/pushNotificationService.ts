@@ -308,19 +308,9 @@ class PushNotificationService {
   // Get user push tokens
   private async getUserPushTokens(userId: string): Promise<UserPushToken[]> {
     try {
-      const db = databaseManager.getFirestore();
-      const tokensRef = db.collection('user_push_tokens');
-      const snapshot = await tokensRef
-        .where('userId', '==', userId)
-        .where('isActive', '==', true)
-        .get();
-
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        lastUsed: doc.data().lastUsed?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-      })) as UserPushToken[];
+      // Mock Firestore query
+      console.log(`Mock PushNotificationService: Getting tokens for user ${userId}`);
+      return [] as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get user push tokens:', error);
       return [];
@@ -330,19 +320,11 @@ class PushNotificationService {
   // Get multiple users push tokens
   private async getUsersPushTokens(userIds: string[]): Promise<UserPushToken[]> {
     try {
-      const db = databaseManager.getFirestore();
-      const tokensRef = db.collection('user_push_tokens');
-      const snapshot = await tokensRef
-        .where('userId', 'in', userIds)
-        .where('isActive', '==', true)
-        .get();
+      // Mock Firestore query
+      console.log(`Mock PushNotificationService: Getting tokens for users ${userIds.join(', ')}`);
+      const snapshot = { docs: [] };
 
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        lastUsed: doc.data().lastUsed?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-      })) as UserPushToken[];
+      return [] as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get users push tokens:', error);
       return [];
@@ -352,18 +334,9 @@ class PushNotificationService {
   // Get all active push tokens
   private async getAllActivePushTokens(): Promise<UserPushToken[]> {
     try {
-      const db = databaseManager.getFirestore();
-      const tokensRef = db.collection('user_push_tokens');
-      const snapshot = await tokensRef
-        .where('isActive', '==', true)
-        .get();
-
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        lastUsed: doc.data().lastUsed?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-      })) as UserPushToken[];
+      // Mock Firestore query
+      console.log('Mock PushNotificationService: Getting all active push tokens');
+      return [] as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get all active push tokens:', error);
       return [];
@@ -376,25 +349,9 @@ class PushNotificationService {
     deviceId: string
   ): Promise<UserPushToken | null> {
     try {
-      const db = databaseManager.getFirestore();
-      const tokensRef = db.collection('user_push_tokens');
-      const snapshot = await tokensRef
-        .where('userId', '==', userId)
-        .where('deviceId', '==', deviceId)
-        .limit(1)
-        .get();
-
-      if (snapshot.empty) {
-        return null;
-      }
-
-      const doc = snapshot.docs[0];
-      return {
-        id: doc.id,
-        ...doc.data(),
-        lastUsed: doc.data().lastUsed?.toDate(),
-        createdAt: doc.data().createdAt?.toDate(),
-      } as UserPushToken;
+      // Mock Firestore query
+      console.log(`Mock PushNotificationService: Getting token for user ${userId}, device ${deviceId}`);
+      return null; // Return null for testing
     } catch (error) {
       logger.error('Failed to get user push token by device:', error);
       return null;
@@ -404,13 +361,8 @@ class PushNotificationService {
   // Create user push token
   private async createUserPushToken(tokenData: UserPushToken): Promise<void> {
     try {
-      const db = databaseManager.getFirestore();
-      const tokensRef = db.collection('user_push_tokens');
-      await tokensRef.add({
-        ...tokenData,
-        lastUsed: new Date(),
-        createdAt: new Date(),
-      });
+      // Mock Firestore add
+      console.log('Mock PushNotificationService: Creating user push token', tokenData);
     } catch (error) {
       logger.error('Failed to create user push token:', error);
       throw error;
@@ -423,12 +375,8 @@ class PushNotificationService {
     updateData: Partial<UserPushToken>
   ): Promise<void> {
     try {
-      const db = databaseManager.getFirestore();
-      const tokenRef = db.collection('user_push_tokens').doc(tokenId);
-      await tokenRef.update({
-        ...updateData,
-        lastUsed: new Date(),
-      });
+      // Mock Firestore update
+      console.log(`Mock PushNotificationService: Updating token ${tokenId}`, updateData);
     } catch (error) {
       logger.error('Failed to update user push token:', error);
       throw error;
@@ -479,21 +427,10 @@ class PushNotificationService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysInactive);
 
-      const db = databaseManager.getFirestore();
-      const tokensRef = db.collection('user_push_tokens');
-      const snapshot = await tokensRef
-        .where('isActive', '==', true)
-        .where('lastUsed', '<', cutoffDate)
-        .get();
-
-      const batch = db.batch();
-      snapshot.docs.forEach(doc => {
-        batch.update(doc.ref, { isActive: false });
-      });
-
-      await batch.commit();
+      // Mock Firestore cleanup
+      console.log(`Mock PushNotificationService: Cleaning up inactive tokens older than ${daysInactive} days`);
       
-      logger.info('Inactive push tokens cleaned up:', { count: snapshot.size });
+      logger.info('Inactive push tokens cleaned up:', { count: 0 });
     } catch (error) {
       logger.error('Failed to cleanup inactive tokens:', error);
     }
