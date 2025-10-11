@@ -124,7 +124,18 @@ function createGoogleAuthRouter() {
             });
             // Mock Firebase custom token for client-side auth
             console.log(`Mock Google Auth: Creating custom token for user ${user.id}`);
-            const firebaseToken = 'mock_firebase_token_' + user.id;
+            // Create a mock JWT token with proper format (header.payload.signature)
+            const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+            const tokenPayload = Buffer.from(JSON.stringify({
+                iss: 'mock-issuer',
+                sub: user.id,
+                aud: 'mock-audience',
+                iat: Math.floor(Date.now() / 1000),
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                uid: user.id
+            })).toString('base64url');
+            const signature = 'mock_signature';
+            const firebaseToken = `${header}.${tokenPayload}.${signature}`;
             await (0, redis_1.setJson)(`gls:${state}`, {
                 ready: true,
                 accessToken: tokens.accessToken,
