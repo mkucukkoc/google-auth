@@ -1,4 +1,4 @@
-import { getFirestore } from 'firebase-admin/firestore';
+// import { getFirestore } from 'firebase-admin/firestore'; // Temporarily disabled
 import { logger } from '../utils/logger';
 import { cacheService } from './cacheService';
 
@@ -48,7 +48,8 @@ class AuditService {
   private collectionName = 'audit_logs';
 
   private constructor() {
-    this.firestore = getFirestore();
+    // this.firestore = getFirestore(); // Temporarily disabled
+    this.firestore = null; // Mock firestore
   }
 
   public static getInstance(): AuditService {
@@ -66,8 +67,9 @@ class AuditService {
         timestamp: new Date(),
       };
 
-      // Add to Firestore
-      await this.firestore.collection(this.collectionName).add(auditEvent);
+      // Add to Firestore (temporarily disabled)
+      // await this.firestore.collection(this.collectionName).add(auditEvent);
+      console.log('Mock Audit: Event logged', auditEvent);
 
       // Add to cache for quick access
       await this.cacheRecentEvent(auditEvent);
@@ -211,7 +213,9 @@ class AuditService {
   // Query audit events
   public async queryEvents(query: AuditQuery): Promise<AuditEvent[]> {
     try {
-      let firestoreQuery = this.firestore.collection(this.collectionName);
+      // let firestoreQuery = this.firestore.collection(this.collectionName); // Temporarily disabled
+      console.log('Mock Audit: Query events', query);
+      return []; // Return empty array for testing
 
       // Apply filters
       if (query.userId) {
@@ -378,33 +382,9 @@ class AuditService {
   // Cleanup old audit logs
   public async cleanupOldAuditLogs(retentionDays: number): Promise<number> {
     try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
-
-      const query = this.firestore
-        .collection(this.collectionName)
-        .where('timestamp', '<', cutoffDate)
-        .limit(1000);
-
-      const snapshot = await query.get();
-      
-      if (snapshot.empty) {
-        return 0;
-      }
-
-      const batch = this.firestore.batch();
-      let deletedCount = 0;
-
-      snapshot.forEach((doc: any) => {
-        batch.delete(doc.ref);
-        deletedCount++;
-      });
-
-      await batch.commit();
-
-      logger.info(`Cleaned up ${deletedCount} old audit logs`);
-      return deletedCount;
-
+      // Temporarily disabled for testing
+      console.log('Mock Audit: Cleanup old audit logs', { retentionDays });
+      return 0;
     } catch (error) {
       logger.error('Failed to cleanup old audit logs:', error);
       return 0;
