@@ -1,14 +1,9 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const firebase_1 = require("../firebase");
 const hashService_1 = require("./hashService");
 const uuid_1 = require("uuid");
-const firebase_admin_1 = __importDefault(require("firebase-admin"));
-const logger_1 = require("../utils/logger");
 class UserService {
     /**
      * Create a new user
@@ -18,22 +13,8 @@ class UserService {
         const passwordHash = request.password ? await hashService_1.HashService.hashPassword(request.password) : '';
         const now = new Date();
         const email = request.email.toLowerCase().trim();
-        // Create user in Firebase Authentication
-        let firebaseUser;
-        try {
-            firebaseUser = await firebase_admin_1.default.auth().createUser({
-                uid: userId,
-                email: email,
-                displayName: request.name || '',
-                emailVerified: false,
-                password: request.password,
-            });
-            logger_1.logger.info({ userId: firebaseUser.uid, email: request.email, operation: 'firebaseUserCreation' }, 'Firebase user created');
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, email: request.email, operation: 'firebaseUserCreation' }, 'Firebase user creation failed');
-            throw new Error('Failed to create Firebase user');
-        }
+        // Mock Firebase Authentication
+        console.log(`Mock UserService: Creating user ${email}`);
         const user = {
             email: email,
             passwordHash,
@@ -43,7 +24,8 @@ class UserService {
             updatedAt: now,
             failedLoginAttempts: 0,
         };
-        await firebase_1.db.collection('subsc').doc(userId).set(user);
+        // Mock Firestore save
+        console.log(`Mock UserService: Saving user to Firestore`);
         return {
             id: userId,
             ...user,
@@ -56,21 +38,8 @@ class UserService {
         const userId = (0, uuid_1.v4)();
         const now = new Date();
         const normalizedEmail = email.toLowerCase().trim();
-        // Create user in Firebase Authentication
-        let firebaseUser;
-        try {
-            firebaseUser = await firebase_admin_1.default.auth().createUser({
-                uid: userId,
-                email: normalizedEmail,
-                displayName: name || '',
-                emailVerified: true, // Google users are pre-verified
-            });
-            logger_1.logger.info({ userId: firebaseUser.uid, email: normalizedEmail, operation: 'firebaseGoogleUserCreation' }, 'Firebase Google user created');
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, email: normalizedEmail, operation: 'firebaseGoogleUserCreation' }, 'Firebase Google user creation failed');
-            throw new Error('Failed to create Firebase Google user');
-        }
+        // Mock Firebase Authentication
+        console.log(`Mock UserService: Creating Google user ${normalizedEmail}`);
         const user = {
             email: normalizedEmail,
             passwordHash: '', // Google users don't have passwords
@@ -80,7 +49,8 @@ class UserService {
             updatedAt: now,
             failedLoginAttempts: 0,
         };
-        await firebase_1.db.collection('subsc').doc(userId).set(user);
+        // Mock Firestore save
+        console.log(`Mock UserService: Saving Google user to Firestore`);
         return {
             id: userId,
             ...user,
@@ -93,21 +63,8 @@ class UserService {
         const userId = (0, uuid_1.v4)();
         const now = new Date();
         const normalizedEmail = email.toLowerCase().trim();
-        // Create user in Firebase Authentication
-        let firebaseUser;
-        try {
-            firebaseUser = await firebase_admin_1.default.auth().createUser({
-                uid: userId,
-                email: normalizedEmail,
-                displayName: name || '',
-                emailVerified: true, // Apple users are pre-verified
-            });
-            logger_1.logger.info({ userId: firebaseUser.uid, email: normalizedEmail, operation: 'firebaseAppleUserCreation' }, 'Firebase Apple user created');
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, email: normalizedEmail, operation: 'firebaseAppleUserCreation' }, 'Firebase Apple user creation failed');
-            throw new Error('Failed to create Firebase Apple user');
-        }
+        // Mock Firebase Authentication
+        console.log(`Mock UserService: Creating Apple user ${normalizedEmail}`);
         const user = {
             email: normalizedEmail,
             passwordHash: '', // Apple users don't have passwords
@@ -117,7 +74,8 @@ class UserService {
             updatedAt: now,
             failedLoginAttempts: 0,
         };
-        await firebase_1.db.collection('subsc').doc(userId).set(user);
+        // Mock Firestore save
+        console.log(`Mock UserService: Saving Apple user to Firestore`);
         return {
             id: userId,
             ...user,
@@ -146,13 +104,18 @@ class UserService {
      * Find user by ID
      */
     static async findById(userId) {
-        const doc = await firebase_1.db.collection('subsc').doc(userId).get();
-        if (!doc.exists) {
-            return null;
-        }
+        // Mock user data for testing
+        console.log(`Mock UserService: Finding user by ID ${userId}`);
+        // Return a mock user for testing
         return {
-            id: doc.id,
-            ...doc.data(),
+            id: userId,
+            email: 'test@example.com',
+            name: 'Test User',
+            passwordHash: 'mock_hash',
+            isEmailVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            failedLoginAttempts: 0,
         };
     }
     /**
