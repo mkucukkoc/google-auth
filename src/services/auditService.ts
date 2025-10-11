@@ -1,6 +1,7 @@
 // import { getFirestore } from 'firebase-admin/firestore'; // Temporarily disabled
 import { logger } from '../utils/logger';
 import { cacheService } from './cacheService';
+import { firestoreQuery } from '../firebase';
 
 export interface AuditEvent {
   id?: string;
@@ -218,36 +219,37 @@ class AuditService {
       return []; // Return empty array for testing
 
       // Apply filters
+      let queryBuilder = firestoreQuery;
       if (query.userId) {
-        firestoreQuery = firestoreQuery.where('userId', '==', query.userId);
+        queryBuilder = queryBuilder.where('userId', '==', query.userId);
       }
       if (query.action) {
-        firestoreQuery = firestoreQuery.where('action', '==', query.action);
+        queryBuilder = queryBuilder.where('action', '==', query.action);
       }
       if (query.resource) {
-        firestoreQuery = firestoreQuery.where('resource', '==', query.resource);
+        queryBuilder = queryBuilder.where('resource', '==', query.resource);
       }
       if (query.success !== undefined) {
-        firestoreQuery = firestoreQuery.where('success', '==', query.success);
+        queryBuilder = queryBuilder.where('success', '==', query.success);
       }
       if (query.startDate) {
-        firestoreQuery = firestoreQuery.where('timestamp', '>=', query.startDate);
+        queryBuilder = queryBuilder.where('timestamp', '>=', query.startDate);
       }
       if (query.endDate) {
-        firestoreQuery = firestoreQuery.where('timestamp', '<=', query.endDate);
+        queryBuilder = queryBuilder.where('timestamp', '<=', query.endDate);
       }
 
       // Apply ordering and pagination
-      firestoreQuery = firestoreQuery.orderBy('timestamp', 'desc');
+      queryBuilder = queryBuilder.orderBy('timestamp', 'desc');
       
-      if (query.offset) {
-        firestoreQuery = firestoreQuery.offset(query.offset);
+      if (query.offset !== undefined && query.offset !== null) {
+        queryBuilder = queryBuilder.offset(query.offset as number);
       }
-      if (query.limit) {
-        firestoreQuery = firestoreQuery.limit(query.limit);
+      if (query.limit !== undefined && query.limit !== null) {
+        queryBuilder = queryBuilder.limit(query.limit as number);
       }
 
-      const snapshot = await firestoreQuery.get();
+      const snapshot = await queryBuilder.get();
       const events: AuditEvent[] = [];
 
       snapshot.forEach((doc: any) => {

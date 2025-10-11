@@ -377,8 +377,8 @@ function createAuthRouter() {
             }
             // Sort by createdAt in memory and get the most recent
             const sortedDocs = recordSnap.docs.sort((a, b) => {
-                const aTime = a.data().createdAt?.toDate?.() || new Date(0);
-                const bTime = b.data().createdAt?.toDate?.() || new Date(0);
+                const aTime = a.data().createdAt?.toDate ? a.data().createdAt.toDate() : (a.data().createdAt || new Date(0));
+                const bTime = b.data().createdAt?.toDate ? b.data().createdAt.toDate() : (b.data().createdAt || new Date(0));
                 return bTime.getTime() - aTime.getTime();
             });
             const doc = sortedDocs[0];

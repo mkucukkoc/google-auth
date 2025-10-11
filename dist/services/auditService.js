@@ -1,13 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.auditService = void 0;
-const firestore_1 = require("firebase-admin/firestore");
+// import { getFirestore } from 'firebase-admin/firestore'; // Temporarily disabled
 const logger_1 = require("../utils/logger");
 const cacheService_1 = require("./cacheService");
+const firebase_1 = require("../firebase");
 class AuditService {
     constructor() {
         this.collectionName = 'audit_logs';
-        this.firestore = (0, firestore_1.getFirestore)();
+        // this.firestore = getFirestore(); // Temporarily disabled
+        this.firestore = null; // Mock firestore
     }
     static getInstance() {
         if (!AuditService.instance) {
@@ -22,8 +24,9 @@ class AuditService {
                 ...event,
                 timestamp: new Date(),
             };
-            // Add to Firestore
-            await this.firestore.collection(this.collectionName).add(auditEvent);
+            // Add to Firestore (temporarily disabled)
+            // await this.firestore.collection(this.collectionName).add(auditEvent);
+            console.log('Mock Audit: Event logged', auditEvent);
             // Add to cache for quick access
             await this.cacheRecentEvent(auditEvent);
             logger_1.logger.info('Audit event logged', {
@@ -117,35 +120,38 @@ class AuditService {
     // Query audit events
     async queryEvents(query) {
         try {
-            let firestoreQuery = this.firestore.collection(this.collectionName);
+            // let firestoreQuery = this.firestore.collection(this.collectionName); // Temporarily disabled
+            console.log('Mock Audit: Query events', query);
+            return []; // Return empty array for testing
             // Apply filters
+            let queryBuilder = firebase_1.firestoreQuery;
             if (query.userId) {
-                firestoreQuery = firestoreQuery.where('userId', '==', query.userId);
+                queryBuilder = queryBuilder.where('userId', '==', query.userId);
             }
             if (query.action) {
-                firestoreQuery = firestoreQuery.where('action', '==', query.action);
+                queryBuilder = queryBuilder.where('action', '==', query.action);
             }
             if (query.resource) {
-                firestoreQuery = firestoreQuery.where('resource', '==', query.resource);
+                queryBuilder = queryBuilder.where('resource', '==', query.resource);
             }
             if (query.success !== undefined) {
-                firestoreQuery = firestoreQuery.where('success', '==', query.success);
+                queryBuilder = queryBuilder.where('success', '==', query.success);
             }
             if (query.startDate) {
-                firestoreQuery = firestoreQuery.where('timestamp', '>=', query.startDate);
+                queryBuilder = queryBuilder.where('timestamp', '>=', query.startDate);
             }
             if (query.endDate) {
-                firestoreQuery = firestoreQuery.where('timestamp', '<=', query.endDate);
+                queryBuilder = queryBuilder.where('timestamp', '<=', query.endDate);
             }
             // Apply ordering and pagination
-            firestoreQuery = firestoreQuery.orderBy('timestamp', 'desc');
-            if (query.offset) {
-                firestoreQuery = firestoreQuery.offset(query.offset);
+            queryBuilder = queryBuilder.orderBy('timestamp', 'desc');
+            if (query.offset !== undefined && query.offset !== null) {
+                queryBuilder = queryBuilder.offset(query.offset);
             }
-            if (query.limit) {
-                firestoreQuery = firestoreQuery.limit(query.limit);
+            if (query.limit !== undefined && query.limit !== null) {
+                queryBuilder = queryBuilder.limit(query.limit);
             }
-            const snapshot = await firestoreQuery.get();
+            const snapshot = await queryBuilder.get();
             const events = [];
             snapshot.forEach((doc) => {
                 events.push({
@@ -256,25 +262,9 @@ class AuditService {
     // Cleanup old audit logs
     async cleanupOldAuditLogs(retentionDays) {
         try {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
-            const query = this.firestore
-                .collection(this.collectionName)
-                .where('timestamp', '<', cutoffDate)
-                .limit(1000);
-            const snapshot = await query.get();
-            if (snapshot.empty) {
-                return 0;
-            }
-            const batch = this.firestore.batch();
-            let deletedCount = 0;
-            snapshot.forEach((doc) => {
-                batch.delete(doc.ref);
-                deletedCount++;
-            });
-            await batch.commit();
-            logger_1.logger.info(`Cleaned up ${deletedCount} old audit logs`);
-            return deletedCount;
+            // Temporarily disabled for testing
+            console.log('Mock Audit: Cleanup old audit logs', { retentionDays });
+            return 0;
         }
         catch (error) {
             logger_1.logger.error('Failed to cleanup old audit logs:', error);

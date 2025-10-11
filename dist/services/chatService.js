@@ -737,11 +737,12 @@ class ChatService {
                 .orderBy('timestamp', 'desc')
                 .limit(5)
                 .get();
-            const isDuplicate = recentMessages.docs.some(doc => {
+            const isDuplicate = recentMessages.docs.some((doc) => {
                 const data = doc.data();
+                const timestamp = (data.timestamp && typeof data.timestamp.toDate === 'function') ? data.timestamp.toDate() : data.timestamp;
                 return data.role === message.role &&
                     data.content === message.content &&
-                    Math.abs(new Date(data.timestamp?.toDate()).getTime() - new Date().getTime()) < 10000; // 10 saniye içinde
+                    Math.abs(new Date(timestamp).getTime() - new Date().getTime()) < 10000; // 10 saniye içinde
             });
             if (isDuplicate) {
                 logger_1.logger.info({

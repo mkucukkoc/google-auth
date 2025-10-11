@@ -144,7 +144,7 @@ export class SessionService {
     return {
       id: doc.id,
       ...sessionData,
-    } as Session;
+    } as any as Session;
   }
 
   /**
@@ -162,7 +162,7 @@ export class SessionService {
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-    })) as Session[];
+    })) as any as Session[];
   }
 
   /**

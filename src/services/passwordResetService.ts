@@ -85,7 +85,7 @@ export class PasswordResetService {
     }
 
     const doc = snapshot.docs[0];
-    const resetToken = { id: doc.id, ...doc.data() } as PasswordResetToken;
+    const resetToken = { id: doc.id, ...doc.data() } as any as PasswordResetToken;
 
     // Check if token is expired
     if (resetToken.expiresAt < new Date()) {
@@ -155,7 +155,7 @@ export class PasswordResetService {
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-    })) as PasswordResetToken[];
+    })) as any as PasswordResetToken[];
   }
 }
 

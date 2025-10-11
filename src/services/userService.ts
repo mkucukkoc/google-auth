@@ -150,7 +150,7 @@ export class UserService {
     return {
       id: doc.id,
       ...doc.data(),
-    } as User;
+    } as any as User;
   }
 
   /**
@@ -166,7 +166,7 @@ export class UserService {
     return {
       id: doc.id,
       ...doc.data(),
-    } as User;
+    } as any as User;
   }
 
   /**
