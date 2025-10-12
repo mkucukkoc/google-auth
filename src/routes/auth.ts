@@ -584,16 +584,32 @@ export function createAuthRouter(): Router {
         let user = await UserService.findByEmail(email);
         
         if (!user) {
-          // Create new Google user
+          // Create new Google user (this already handles Firebase Auth + subsc)
           user = await UserService.createGoogleUser(
             email,
             name || payload.name || payload.given_name || ''
           );
+          
+          logger.info('Google user created successfully', {
+            userId: user.id,
+            email: user.email,
+            operation: 'google_oauth'
+          });
         } else {
           // Update last login for existing user
           await UserService.updateUser(user.id, {
             lastLoginAt: new Date(),
           });
+          
+          // Also update Firebase Auth user if needed
+          try {
+            await admin.auth().updateUser(user.id, {
+              displayName: name || payload.name || payload.given_name || user.name,
+              emailVerified: true,
+            });
+          } catch (error) {
+            logger.warn('Failed to update Firebase Auth user', { error, userId: user.id });
+          }
         }
 
         // Create session

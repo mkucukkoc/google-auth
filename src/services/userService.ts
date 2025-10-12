@@ -69,10 +69,8 @@ export class UserService {
     }
 
 
-    // Mock Firebase Authentication
-    logger.info(`Mock UserService: Creating Google user ${normalizedEmail}`);
+    logger.info(`Creating Google user: ${normalizedEmail}`, { operation: 'createGoogleUser' });
     
- 
     const user: Omit<User, 'id'> = {
       email: normalizedEmail,
       passwordHash: '', // Google users don't have passwords
@@ -84,28 +82,44 @@ export class UserService {
       lastLoginAt: now,
     };
 
-    await db.collection('subsc').doc(userId).set(user);
+    // 1. Save to subsc collection (Firestore)
+    try {
+      await db.collection('subsc').doc(userId).set({
+        ...user,
+        id: userId, // Include ID in document
+        provider: 'google', // Add provider info
+        googleId: existingAuthUser?.uid || null, // Add Google ID if exists
+      });
+      logger.info('User saved to subsc collection', { userId, email: normalizedEmail });
+    } catch (error) {
+      logger.error('Failed to save user to subsc collection', { error, userId, email: normalizedEmail });
+      throw new Error('Failed to save user to database');
+    }
 
+    // 2. Create/Update Firebase Auth user
     try {
       if (existingAuthUser) {
+        // Update existing Firebase Auth user
         await admin.auth().updateUser(userId, {
           email: normalizedEmail,
           displayName: name,
           emailVerified: true,
         });
+        logger.info('Firebase Auth user updated', { userId, email: normalizedEmail });
       } else {
+        // Create new Firebase Auth user
         await admin.auth().createUser({
           uid: userId,
           email: normalizedEmail,
           displayName: name,
           emailVerified: true,
         });
+        logger.info('Firebase Auth user created', { userId, email: normalizedEmail });
       }
     } catch (error) {
-      logger.warn({ error, email: normalizedEmail, operation: 'createGoogleUser' }, 'Firebase Auth sync error');
+      logger.error('Firebase Auth sync error', { error, userId, email: normalizedEmail });
+      // Don't throw error here, user is already saved to subsc
     }
-    // Mock Firestore save
-    logger.info('Mock UserService: Saving Google user to Firestore');
 
     return {
       id: userId,
