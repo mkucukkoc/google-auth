@@ -5,7 +5,7 @@ import { validate, pdfSummarySchemas } from '../middleware/validationMiddleware'
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
-import { db } from '../firebase';
+import { db, FieldValue } from '../firebase';
 import { admin } from '../firebase';
 
 export function createPDFSummaryRouter(): Router {
@@ -160,7 +160,7 @@ export function createPDFSummaryRouter(): Router {
           .limit(50);
 
         const snapshot = await summariesRef.get();
-        const summaries = snapshot.docs.map(doc => ({
+        const summaries = snapshot.docs.map((doc: any) => ({
           id: doc.id,
           ...doc.data()
         }));
@@ -238,8 +238,8 @@ async function savePDFSummaryToFirestore(
       wordCount: summaryData.wordCount,
       extractedText: summaryData.extractedText.substring(0, 1000) + '...', // İlk 1000 karakter
       processingTime: summaryData.processingTime,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
     };
 
     await summaryRef.set(summaryDoc);

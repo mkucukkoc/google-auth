@@ -134,7 +134,7 @@ function createAppleAuthRouter() {
                 success: true,
             });
             // Firebase custom token no longer needed with new auth system
-            console.log(`Mock Apple Auth: Skipping Firebase custom token for user ${userRecord.id}`);
+            logger_1.logger.debug(`Mock Apple Auth: Skipping Firebase custom token for user ${userRecord.id}`);
             const firebaseToken = null;
             await (0, redis_1.setJson)(`als:${state}`, {
                 ready: true,

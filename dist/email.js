@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendOtpEmail = sendOtpEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
+const logger_1 = require("./utils/logger");
 // Email transporter configuration
 const transporter = nodemailer_1.default.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -42,10 +43,10 @@ async function sendOtpEmail(to, code) {
             text: `Avenia Email Doğrulama Kodu: ${code}\n\nBu kod 10 dakika geçerlidir.`
         };
         await transporter.sendMail(mailOptions);
-        console.log(`Verification email sent to ${to}`);
+        logger_1.logger.info(`Verification email sent to ${to}`);
     }
     catch (error) {
-        console.error('Failed to send verification email:', error);
+        logger_1.logger.error('Failed to send verification email:', error);
         throw error;
     }
 }

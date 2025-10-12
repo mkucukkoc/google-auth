@@ -129,7 +129,7 @@ export class PasswordResetService {
       .get();
 
     const batch = db.batch();
-    snapshot.docs.forEach(doc => {
+    snapshot.docs.forEach((doc: any) => {
       batch.delete(doc.ref);
     });
 
@@ -152,7 +152,7 @@ export class PasswordResetService {
       .where('expiresAt', '>', now)
       .get();
 
-    return snapshot.docs.map(doc => ({
+    return snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data(),
     })) as any as PasswordResetToken[];

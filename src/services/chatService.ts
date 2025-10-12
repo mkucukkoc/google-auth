@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
-import { admin, db } from '../firebase';
+import { admin, db, FieldValue } from '../firebase';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -224,7 +224,7 @@ export class ChatService {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: reply.content.trim(),
-          timestamp: admin.firestore.FieldValue.serverTimestamp()
+          timestamp: FieldValue.serverTimestamp()
         };
 
         logger.info({ 
@@ -644,7 +644,7 @@ export class ChatService {
         finalMessage: {
           role: 'assistant',
           content: followUpMessage.content.trim(),
-          timestamp: admin.firestore.FieldValue.serverTimestamp()
+          timestamp: FieldValue.serverTimestamp()
         }
       };
     }
@@ -830,7 +830,7 @@ export class ChatService {
       
       const messageData = {
         ...message,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: FieldValue.serverTimestamp()
       };
 
       logger.debug({

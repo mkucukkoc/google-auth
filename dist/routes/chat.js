@@ -10,12 +10,12 @@ const auditService_1 = require("../services/auditService");
 const logger_1 = require("../utils/logger");
 function createChatRouter() {
     const r = (0, express_1.Router)();
-    console.log('[ChatRouter] Creating chat router with routes:');
-    console.log('[ChatRouter] - POST /send');
-    console.log('[ChatRouter] - POST /tts');
-    console.log('[ChatRouter] - GET /history');
-    console.log('[ChatRouter] - GET /history/:chatId');
-    console.log('[ChatRouter] - DELETE /history/:chatId');
+    logger_1.logger.debug('[ChatRouter] Creating chat router with routes:');
+    logger_1.logger.debug('[ChatRouter] - POST /send');
+    logger_1.logger.debug('[ChatRouter] - POST /tts');
+    logger_1.logger.debug('[ChatRouter] - GET /history');
+    logger_1.logger.debug('[ChatRouter] - GET /history/:chatId');
+    logger_1.logger.debug('[ChatRouter] - DELETE /history/:chatId');
     // POST /chat/send - ChatGPT'ye mesaj gönder
     r.post('/send', authMiddleware_1.authenticateToken, rateLimitMiddleware_1.authRateLimits.general, (0, validationMiddleware_1.validate)(validationMiddleware_1.chatSchemas.sendMessage), async (req, res) => {
         const requestId = Math.random().toString(36).substring(7);

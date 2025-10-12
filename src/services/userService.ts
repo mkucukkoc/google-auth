@@ -124,11 +124,11 @@ export class UserService {
       }
     } catch (error) {
       logger.error('Firebase Auth sync error', { 
-        error: error.message, 
-        errorCode: error.code,
+        error: error instanceof Error ? error.message : String(error), 
+        errorCode: (error as any)?.code || 'UNKNOWN',
         userId, 
         email: normalizedEmail,
-        stack: error.stack
+        stack: error instanceof Error ? error.stack : undefined
       });
       // Don't throw error here, user is already saved to subsc
     }

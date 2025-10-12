@@ -1,7 +1,4 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAuthRouter = createAuthRouter;
 const express_1 = require("express");
@@ -12,11 +9,11 @@ const authMiddleware_1 = require("../middleware/authMiddleware");
 const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const response_1 = require("../types/response");
-const firebase_admin_1 = __importDefault(require("firebase-admin"));
+const firebase_1 = require("../firebase");
 const crypto_1 = require("crypto");
 const email_1 = require("../email");
 const redis_1 = require("../redis");
-const firebase_1 = require("../firebase");
+const firebase_2 = require("../firebase");
 const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 function createAuthRouter() {
@@ -125,7 +122,7 @@ function createAuthRouter() {
             await userService_1.UserService.resetFailedAttempts(user.id);
             // Verify Firebase authentication user exists
             try {
-                const firebaseUser = await firebase_admin_1.default.auth().getUser(user.id);
+                const firebaseUser = await firebase_1.admin.auth().getUser(user.id);
                 logger_1.logger.info({ userId: firebaseUser.uid, email: firebaseUser.email, operation: 'firebaseVerification' }, 'Firebase user verified for login');
             }
             catch (error) {
@@ -237,7 +234,7 @@ function createAuthRouter() {
             res.json({ success });
         }
         catch (error) {
-            console.error('Logout error:', error);
+            logger_1.logger.error('Logout error:', error);
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Logout failed'
@@ -260,7 +257,7 @@ function createAuthRouter() {
             res.json({ success: true });
         }
         catch (error) {
-            console.error('Logout all error:', error);
+            logger_1.logger.error('Logout all error:', error);
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Logout failed'
@@ -289,7 +286,7 @@ function createAuthRouter() {
             });
         }
         catch (error) {
-            console.error('Get user error:', error);
+            logger_1.logger.error('Get user error:', error);
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Failed to get user information'
@@ -327,7 +324,7 @@ function createAuthRouter() {
             // Generate and store OTP
             const code = ((0, crypto_1.randomInt)(0, 999999) + '').padStart(6, '0');
             const codeHash = sha256(code);
-            await firebase_1.db.collection('registerOtpCodes').add({
+            await firebase_2.db.collection('registerOtpCodes').add({
                 email,
                 codeHash,
                 expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
@@ -338,7 +335,7 @@ function createAuthRouter() {
                 await (0, email_1.sendOtpEmail)(email, code);
             }
             catch (emailError) {
-                console.error('Failed to send verification email:', emailError);
+                logger_1.logger.error('Failed to send verification email:', emailError);
                 // Don't fail the request if email sending fails
             }
             res.json({
@@ -347,7 +344,7 @@ function createAuthRouter() {
             });
         }
         catch (error) {
-            console.error('Send registration OTP error:', error);
+            logger_1.logger.error('Send registration OTP error:', error);
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Failed to send verification code'
@@ -365,7 +362,7 @@ function createAuthRouter() {
                 });
             }
             // Verify OTP - Get all records for email and sort in memory
-            const recordSnap = await firebase_1.db
+            const recordSnap = await firebase_2.db
                 .collection('registerOtpCodes')
                 .where('email', '==', email)
                 .get();
@@ -434,7 +431,7 @@ function createAuthRouter() {
             res.status(201).json(response);
         }
         catch (error) {
-            console.error('Verify registration OTP error:', error);
+            logger_1.logger.error('Verify registration OTP error:', error);
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Registration verification failed'
@@ -462,7 +459,7 @@ function createAuthRouter() {
                 });
             }
             catch (error) {
-                console.error('Google ID token verification failed:', error);
+                logger_1.logger.error('Google ID token verification failed:', error);
                 return res.status(401).json({
                     error: 'invalid_token',
                     message: 'Invalid Google ID token'
@@ -480,14 +477,29 @@ function createAuthRouter() {
             // Check if user exists
             let user = await userService_1.UserService.findByEmail(email);
             if (!user) {
-                // Create new Google user
+                // Create new Google user (this already handles Firebase Auth + subsc)
                 user = await userService_1.UserService.createGoogleUser(email, name || payload.name || payload.given_name || '');
+                logger_1.logger.info('Google user created successfully', {
+                    userId: user.id,
+                    email: user.email,
+                    operation: 'google_oauth'
+                });
             }
             else {
                 // Update last login for existing user
                 await userService_1.UserService.updateUser(user.id, {
                     lastLoginAt: new Date(),
                 });
+                // Also update Firebase Auth user if needed
+                try {
+                    await firebase_1.admin.auth().updateUser(user.id, {
+                        displayName: name || payload.name || payload.given_name || user.name,
+                        emailVerified: true,
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.warn('Failed to update Firebase Auth user', { error, userId: user.id });
+                }
             }
             // Create session
             const deviceInfo = {
@@ -520,10 +532,45 @@ function createAuthRouter() {
             res.json(response);
         }
         catch (error) {
-            console.error('Google auth error:', error);
+            logger_1.logger.error('Google auth error:', error);
             res.status(500).json({
                 error: 'internal_error',
                 message: 'Google authentication failed'
+            });
+        }
+    });
+    // Test Firebase connection endpoint
+    r.get('/test-firebase', async (req, res) => {
+        try {
+            // Test Firestore connection
+            const testDoc = await firebase_2.db.collection('test').doc('connection').set({
+                timestamp: new Date(),
+                message: 'Firebase connection test'
+            });
+            // Test Firebase Auth
+            const testUser = await firebase_1.admin.auth().createUser({
+                uid: 'test-user-' + Date.now(),
+                email: 'test@example.com',
+                displayName: 'Test User',
+                emailVerified: false
+            });
+            // Clean up test user
+            await firebase_1.admin.auth().deleteUser(testUser.uid);
+            res.json({
+                success: true,
+                message: 'Firebase connection successful',
+                firestore: 'Connected',
+                auth: 'Connected',
+                timestamp: new Date().toISOString()
+            });
+        }
+        catch (error) {
+            console.error('Firebase test error:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Firebase connection failed',
+                error: error.message || 'Unknown error',
+                timestamp: new Date().toISOString()
             });
         }
     });

@@ -148,7 +148,7 @@ const handleUncaughtException = () => {
             stack: err.stack,
             name: err.name
         }, 'Uncaught Exception');
-        console.error('Uncaught Exception:', err);
+        logger_1.logger.error({ err }, 'Uncaught Exception (fallback logging)');
         process.exit(1);
     });
 };

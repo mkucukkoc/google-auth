@@ -137,7 +137,7 @@ class SessionService {
             .where('revokedAt', '==', null)
             .where('expiresAt', '>', now)
             .get();
-        return snapshot.docs.map(doc => ({
+        return snapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
         }));
@@ -394,7 +394,7 @@ class SessionService {
             .where('revokedAt', '==', null)
             .get();
         const batch = firebase_1.db.batch();
-        snapshot.docs.forEach(doc => {
+        snapshot.docs.forEach((doc) => {
             batch.update(doc.ref, { revokedAt: now });
         });
         if (!snapshot.empty) {
@@ -412,7 +412,7 @@ class SessionService {
             .where('revokedAt', '==', null)
             .get();
         const batch = firebase_1.db.batch();
-        snapshot.docs.forEach(doc => {
+        snapshot.docs.forEach((doc) => {
             batch.update(doc.ref, { revokedAt: now });
         });
         if (!snapshot.empty) {

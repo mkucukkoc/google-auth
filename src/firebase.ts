@@ -1,8 +1,8 @@
 import { logger } from './utils/logger';
-import * as admin from 'firebase-admin';
+import * as firebaseAdmin from 'firebase-admin';
 
 // Initialize Firebase Admin SDK
-if (!admin.apps.length) {
+if (!firebaseAdmin.apps.length) {
   try {
     // Try to initialize with service account
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY 
@@ -10,14 +10,14 @@ if (!admin.apps.length) {
       : null;
 
     if (serviceAccount) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+      firebaseAdmin.initializeApp({
+        credential: firebaseAdmin.credential.cert(serviceAccount),
         databaseURL: process.env.FIREBASE_DATABASE_URL
       });
       logger.info('Firebase Admin SDK initialized with service account');
     } else {
       // Fallback to default credentials (for local development)
-      admin.initializeApp();
+      firebaseAdmin.initializeApp();
       logger.info('Firebase Admin SDK initialized with default credentials');
     }
   } catch (error) {
@@ -261,7 +261,7 @@ const mockFirestore = () => ({
   })
 });
 
-export const db = isFirebaseInitialized ? admin.firestore() : mockFirestore();
+// db is now exported above
 
 export const firestoreQuery = {
   where: () => firestoreQuery,
@@ -346,15 +346,17 @@ const mockAuth = () => ({
 });
 
 // Use real Firebase Admin SDK if available, otherwise fallback to mock
-const isFirebaseInitialized = admin.apps.length > 0;
+const isFirebaseInitialized = firebaseAdmin.apps.length > 0;
 
 export const admin = {
-  auth: isFirebaseInitialized ? admin.auth() : mockAuth(),
-  firestore: isFirebaseInitialized ? admin.firestore() : mockFirestore(),
-  FieldValue: {
-    serverTimestamp: () => new Date()
-  }
+  auth: () => isFirebaseInitialized ? firebaseAdmin.auth() : mockAuth(),
+  firestore: () => isFirebaseInitialized ? firebaseAdmin.firestore() : mockFirestore()
 };
 
-// Export Firestore instance (already defined above)
+export const FieldValue = {
+  serverTimestamp: () => new Date()
+};
+
+// Export Firestore instance
+export const db = admin.firestore();
 

@@ -12,7 +12,7 @@ async function migrateUsersToFirebase() {
     
     // Get all users from Firestore
     const usersSnapshot = await db.collection('subsc').get();
-    const users = usersSnapshot.docs.map(doc => ({
+    const users = usersSnapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     })) as any[];

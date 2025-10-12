@@ -14,24 +14,25 @@ const userService_1 = require("../services/userService");
 const sessionService_1 = require("../services/sessionService");
 const auditService_1 = require("../services/auditService");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
+const firebase_1 = require("../firebase");
 const logger_1 = require("../utils/logger");
 function createGoogleAuthRouter() {
     const r = (0, express_1.Router)();
     r.post('/start', rateLimitMiddleware_1.authRateLimits.general, async (req, res) => {
         try {
-            console.log('[GoogleAuth] /start endpoint called:', {
+            logger_1.logger.debug('[GoogleAuth] /start endpoint called:', {
                 body: req.body,
                 headers: req.headers
             });
             const { device_id } = req.body || {};
             if (!device_id) {
-                console.log('[GoogleAuth] Missing device_id');
+                logger_1.logger.debug('[GoogleAuth] Missing device_id');
                 return res.status(400).json({ error: 'invalid_request' });
             }
             const id = (0, uuid_1.v4)();
-            console.log('[GoogleAuth] Generated state ID:', id);
+            logger_1.logger.debug('[GoogleAuth] Generated state ID:', id);
             await (0, redis_1.setJson)(`gls:${id}`, { device_id }, 600);
-            console.log('[GoogleAuth] Stored session in Redis');
+            logger_1.logger.debug('[GoogleAuth] Stored session in Redis');
             const params = new URLSearchParams({
                 client_id: config_1.config.google.clientId,
                 redirect_uri: config_1.config.google.redirectUri,
@@ -40,29 +41,29 @@ function createGoogleAuthRouter() {
                 state: id,
             });
             const authUrl = `https://accounts.google.com/o/oauth2/auth?${params}`;
-            console.log('[GoogleAuth] Generated auth URL:', authUrl);
+            logger_1.logger.debug('[GoogleAuth] Generated auth URL:', authUrl);
             return res.json({ url: authUrl });
         }
         catch (error) {
-            console.log('[GoogleAuth] /start error:', error);
+            logger_1.logger.debug('[GoogleAuth] /start error:', error);
             logger_1.logger.error({ error }, 'Google auth start error');
             return res.status(500).json({ error: 'internal_error' });
         }
     });
     r.get('/status/:id', async (req, res) => {
         try {
-            console.log('[GoogleAuth] /status endpoint called for ID:', req.params.id);
+            logger_1.logger.debug('[GoogleAuth] /status endpoint called for ID:', req.params.id);
             const session = await (0, redis_1.getJson)(`gls:${req.params.id}`);
-            console.log('[GoogleAuth] Retrieved session:', session);
+            logger_1.logger.debug('[GoogleAuth] Retrieved session:', session);
             if (!session || !session.ready) {
-                console.log('[GoogleAuth] Session not ready');
+                logger_1.logger.debug('[GoogleAuth] Session not ready');
                 return res.json({ ready: false });
             }
-            console.log('[GoogleAuth] Session ready, returning data');
+            logger_1.logger.debug('[GoogleAuth] Session ready, returning data');
             return res.json(session);
         }
         catch (error) {
-            console.log('[GoogleAuth] /status error:', error);
+            logger_1.logger.debug('[GoogleAuth] /status error:', error);
             logger_1.logger.error({ error }, 'Google auth status check error');
             return res.status(500).json({ error: 'internal_error' });
         }
@@ -96,14 +97,29 @@ function createGoogleAuthRouter() {
             // Check if user exists in our new auth system
             let user = await userService_1.UserService.findByEmail(email);
             if (!user) {
-                // Create new Google user in our auth system
+                // Create new Google user in our auth system (this already handles Firebase Auth + subsc)
                 user = await userService_1.UserService.createGoogleUser(email, payload?.name || payload?.given_name || '');
+                logger_1.logger.info('Google user created successfully via callback', {
+                    userId: user.id,
+                    email: user.email,
+                    operation: 'google_oauth_callback'
+                });
             }
             else {
                 // Update last login for existing user
                 await userService_1.UserService.updateUser(user.id, {
                     lastLoginAt: new Date(),
                 });
+                // Also update Firebase Auth user if needed
+                try {
+                    await firebase_1.admin.auth().updateUser(user.id, {
+                        displayName: payload?.name || payload?.given_name || user.name,
+                        emailVerified: true,
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.warn('Failed to update Firebase Auth user via callback', { error, userId: user.id });
+                }
             }
             // Create session using new session system
             const deviceInfo = {
@@ -123,7 +139,7 @@ function createGoogleAuthRouter() {
                 success: true,
             });
             // Firebase custom token no longer needed with new auth system
-            console.log(`Mock Google Auth: Skipping Firebase custom token for user ${user.id}`);
+            logger_1.logger.debug(`Mock Google Auth: Skipping Firebase custom token for user ${user.id}`);
             const firebaseToken = null;
             await (0, redis_1.setJson)(`gls:${state}`, {
                 ready: true,

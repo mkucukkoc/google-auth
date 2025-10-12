@@ -1,7 +1,4 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createPDFSummaryRouter = createPDFSummaryRouter;
 const express_1 = require("express");
@@ -12,7 +9,6 @@ const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const auditService_1 = require("../services/auditService");
 const logger_1 = require("../utils/logger");
 const firebase_1 = require("../firebase");
-const firebase_admin_1 = __importDefault(require("firebase-admin"));
 function createPDFSummaryRouter() {
     const router = (0, express_1.Router)();
     /**
@@ -139,7 +135,7 @@ function createPDFSummaryRouter() {
                 .orderBy('createdAt', 'desc')
                 .limit(50);
             const snapshot = await summariesRef.get();
-            const summaries = snapshot.docs.map(doc => ({
+            const summaries = snapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data()
             }));
@@ -204,8 +200,8 @@ async function savePDFSummaryToFirestore(userId, chatId, summaryData, requestId)
             wordCount: summaryData.wordCount,
             extractedText: summaryData.extractedText.substring(0, 1000) + '...', // İlk 1000 karakter
             processingTime: summaryData.processingTime,
-            createdAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
+            createdAt: firebase_1.FieldValue.serverTimestamp(),
+            updatedAt: firebase_1.FieldValue.serverTimestamp()
         };
         await summaryRef.set(summaryDoc);
         logger_1.logger.info({

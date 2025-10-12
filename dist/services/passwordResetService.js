@@ -127,7 +127,7 @@ class PasswordResetService {
             .where('expiresAt', '<', now)
             .get();
         const batch = firebase_1.db.batch();
-        snapshot.docs.forEach(doc => {
+        snapshot.docs.forEach((doc) => {
             batch.delete(doc.ref);
         });
         if (!snapshot.empty) {
@@ -146,7 +146,7 @@ class PasswordResetService {
             .where('usedAt', '==', null)
             .where('expiresAt', '>', now)
             .get();
-        return snapshot.docs.map(doc => ({
+        return snapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
         }));

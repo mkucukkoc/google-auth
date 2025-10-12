@@ -23,7 +23,7 @@ class DatabaseManager {
     async initialize(config) {
         try {
             // Mock Firebase initialization for testing
-            console.log('Mock DatabaseManager: Initializing Firebase services');
+            logger_1.logger.debug('Mock DatabaseManager: Initializing Firebase services');
             this.app = { name: 'mock-app' };
             this.firestore = null;
             this.auth = null;
@@ -39,21 +39,21 @@ class DatabaseManager {
     }
     getFirestore() {
         if (!this.firestore) {
-            console.log('Mock DatabaseManager: Firestore not initialized, returning mock');
+            logger_1.logger.debug('Mock DatabaseManager: Firestore not initialized, returning mock');
             return null;
         }
         return this.firestore;
     }
     getAuth() {
         if (!this.auth) {
-            console.log('Mock DatabaseManager: Auth not initialized, returning mock');
+            logger_1.logger.debug('Mock DatabaseManager: Auth not initialized, returning mock');
             return null;
         }
         return this.auth;
     }
     getStorage() {
         if (!this.storage) {
-            console.log('Mock DatabaseManager: Storage not initialized, returning mock');
+            logger_1.logger.debug('Mock DatabaseManager: Storage not initialized, returning mock');
             return null;
         }
         return this.storage;
@@ -66,7 +66,7 @@ class DatabaseManager {
     }
     async testConnection() {
         try {
-            console.log('Mock DatabaseManager: Testing connection');
+            logger_1.logger.debug('Mock DatabaseManager: Testing connection');
             return true;
         }
         catch (error) {
@@ -76,7 +76,7 @@ class DatabaseManager {
     }
     async close() {
         try {
-            console.log('Mock DatabaseManager: Closing connections');
+            logger_1.logger.debug('Mock DatabaseManager: Closing connections');
             this.isConnected = false;
             logger_1.logger.info('Database connections closed');
         }

@@ -41,7 +41,6 @@ const axios_1 = __importDefault(require("axios"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
 const firebase_1 = require("../firebase");
-const firebase_admin_1 = __importDefault(require("firebase-admin"));
 class ChatService {
     /**
      * ChatGPT'ye mesaj gönder ve cevap al
@@ -212,7 +211,7 @@ class ChatService {
                 const assistantMessage = {
                     role: 'assistant',
                     content: reply.content.trim(),
-                    timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
+                    timestamp: firebase_1.FieldValue.serverTimestamp()
                 };
                 logger_1.logger.info({
                     requestId,
@@ -587,7 +586,7 @@ class ChatService {
                 finalMessage: {
                     role: 'assistant',
                     content: followUpMessage.content.trim(),
-                    timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
+                    timestamp: firebase_1.FieldValue.serverTimestamp()
                 }
             };
         }
@@ -757,7 +756,7 @@ class ChatService {
             }
             const messageData = {
                 ...message,
-                timestamp: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
+                timestamp: firebase_1.FieldValue.serverTimestamp()
             };
             logger_1.logger.debug({
                 requestId,
