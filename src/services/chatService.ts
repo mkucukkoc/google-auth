@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
-import { db } from '../firebase';
-import admin from 'firebase-admin';
+import { admin, db } from '../firebase';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';

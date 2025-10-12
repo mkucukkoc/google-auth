@@ -329,7 +329,7 @@ class BackupService {
 
     // Get all collections from Firestore (mocked)
     const collections: string[] = [];
-    console.log('Mock BackupService: Getting collections list');
+    logger.debug('Mock BackupService: Getting collections list');
     
     // Mock collections for testing
     const mockCollections = ['users', 'chats', 'sessions', 'audit_logs'];
@@ -347,7 +347,7 @@ class BackupService {
     await this.ensureDirectoryExists(collectionDir);
 
     // Mock Firestore collection data
-    console.log(`Mock BackupService: Backing up collection ${collection}`);
+    logger.debug(`Mock BackupService: Backing up collection ${collection}`);
     const docsSnapshot = snapshot || { docs: [] };
     const documents = [];
 
@@ -388,7 +388,7 @@ class BackupService {
       const docData = JSON.parse(await fs.promises.readFile(docPath, 'utf8'));
 
       // Mock Firestore document restoration
-      console.log(`Mock BackupService: Restoring document ${docData.id} to collection ${collection}`);
+      logger.debug(`Mock BackupService: Restoring document ${docData.id} to collection ${collection}`);
       // await this.firestore.collection(collection).doc(docData.id).set(docData.data);
     }
   }
@@ -430,11 +430,11 @@ class BackupService {
   private async uploadToCloudStorage(backupPath: string, backupId: string): Promise<void> {
     if (this.config.storageType === 'gcs') {
       // Mock Google Cloud Storage upload
-      console.log(`Mock BackupService: Uploading ${backupPath} to GCS bucket`);
+      logger.debug(`Mock BackupService: Uploading ${backupPath} to GCS bucket`);
       const fileName = `backups/${backupId}/${path.basename(backupPath)}`;
       
       // Mock upload - just log the action
-      console.log(`Mock BackupService: Would upload to ${fileName}`);
+      logger.debug(`Mock BackupService: Would upload to ${fileName}`);
     }
     // Add S3 support if needed
   }

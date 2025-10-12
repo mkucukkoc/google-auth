@@ -1,5 +1,6 @@
-import admin from 'firebase-admin';
+import { admin } from './firebase';
 import { db } from './firebase';
+import { logger } from './utils/logger';
 
 /**
  * Migration script to create Firebase Authentication users for existing database users
@@ -7,7 +8,7 @@ import { db } from './firebase';
  */
 async function migrateUsersToFirebase() {
   try {
-    console.log('Starting user migration to Firebase Authentication...');
+    logger.info('Starting user migration to Firebase Authentication...');
     
     // Get all users from Firestore
     const usersSnapshot = await db.collection('subsc').get();
@@ -16,7 +17,7 @@ async function migrateUsersToFirebase() {
       ...doc.data()
     })) as any[];
 
-    console.log(`Found ${users.length} users to migrate`);
+    logger.info(`Found ${users.length} users to migrate`);
 
     let successCount = 0;
     let errorCount = 0;
@@ -26,7 +27,7 @@ async function migrateUsersToFirebase() {
         // Check if user already exists in Firebase Authentication
         try {
           await admin.auth().getUser(user.id);
-          console.log(`User ${user.id} already exists in Firebase Authentication, skipping...`);
+          logger.warn(`User ${user.id} already exists in Firebase Authentication, skipping...`);
           continue;
         } catch (error) {
           // User doesn't exist, create it
@@ -41,19 +42,19 @@ async function migrateUsersToFirebase() {
           // Don't set password for existing users, they'll use the existing auth system
         });
 
-        console.log(`Successfully created Firebase user: ${firebaseUser.uid} (${firebaseUser.email})`);
+        logger.info(`Successfully created Firebase user: ${firebaseUser.uid} (${firebaseUser.email})`);
         successCount++;
 
       } catch (error) {
-        console.error(`Failed to create Firebase user for ${user.id}:`, error);
+        logger.error(`Failed to create Firebase user for ${user.id}:`, error);
         errorCount++;
       }
     }
 
-    console.log(`Migration completed. Success: ${successCount}, Errors: ${errorCount}`);
+    logger.info(`Migration completed. Success: ${successCount}, Errors: ${errorCount}`);
 
   } catch (error) {
-    console.error('Migration failed:', error);
+    logger.error('Migration failed:', error);
   }
 }
 
@@ -61,11 +62,11 @@ async function migrateUsersToFirebase() {
 if (require.main === module) {
   migrateUsersToFirebase()
     .then(() => {
-      console.log('Migration script completed');
+      logger.info('Migration script completed');
       process.exit(0);
     })
     .catch((error) => {
-      console.error('Migration script failed:', error);
+      logger.error('Migration script failed:', error);
       process.exit(1);
     });
 }

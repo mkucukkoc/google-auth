@@ -245,7 +245,7 @@ class DataRetentionService {
       }
 
       // Delete documents in batches (mocked)
-      console.log(`Mock DataRetentionService: Would delete ${Math.min(snapshot.docs.length, policy.batchSize)} documents from ${policy.collection}`);
+      logger.debug(`Mock DataRetentionService: Would delete ${Math.min(snapshot.docs.length, policy.batchSize)} documents from ${policy.collection}`);
       const docsToDelete = snapshot.docs.slice(0, policy.batchSize);
 
       for (const doc of docsToDelete) {
@@ -254,7 +254,7 @@ class DataRetentionService {
       }
 
       // Mock batch commit
-      console.log(`Mock DataRetentionService: Committed batch delete for ${policy.collection}`);
+      logger.debug(`Mock DataRetentionService: Committed batch delete for ${policy.collection}`);
 
       // If we deleted a full batch, there might be more documents
       if (snapshot.size === policy.batchSize) {
@@ -345,14 +345,14 @@ class DataRetentionService {
       }
 
       // Mock batch delete
-      console.log(`Mock DataRetentionService: Would delete ${snapshot.docs.length} documents from ${collection}`);
+      logger.debug(`Mock DataRetentionService: Would delete ${snapshot.docs.length} documents from ${collection}`);
       for (const doc of snapshot.docs) {
         // Mock batch delete
         deletedCount++;
       }
 
       // Mock batch commit
-      console.log(`Mock DataRetentionService: Committed batch delete for ${collection}`);
+      logger.debug(`Mock DataRetentionService: Committed batch delete for ${collection}`);
 
       return {
         collection,
@@ -409,14 +409,14 @@ class DataRetentionService {
       }
 
       // Mock batch update
-      console.log(`Mock DataRetentionService: Would archive ${snapshot.docs.length} documents from ${policy.collection}`);
+      logger.debug(`Mock DataRetentionService: Would archive ${snapshot.docs.length} documents from ${policy.collection}`);
       for (const doc of snapshot.docs) {
         // Mock batch update
         archivedCount++;
       }
 
       // Mock batch commit
-      console.log(`Mock DataRetentionService: Committed batch archive for ${policy.collection}`);
+      logger.debug(`Mock DataRetentionService: Committed batch archive for ${policy.collection}`);
 
       return {
         collection: policy.collection,
@@ -448,7 +448,7 @@ class DataRetentionService {
       };
 
       // Mock Firestore stats save
-      console.log('Mock DataRetentionService: Would save cleanup stats to Firestore');
+      logger.debug('Mock DataRetentionService: Would save cleanup stats to Firestore');
       
       // Store in cache for quick access
       await cacheService.set('cleanup:last_run', stats, 86400); // 24 hours

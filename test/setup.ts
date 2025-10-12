@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, jest } from '@jest/globals';
 import 'dotenv/config';
+import { logger } from '../src/utils/logger';
 
 // Set test environment variables FIRST - before any imports
 process.env.NODE_ENV = 'test';
@@ -85,13 +86,13 @@ jest.mock('ioredis', () => {
 export { mockFirestore, mockRedis, mockDocRef, mockCollectionRef, mockBatch };
 
 beforeAll(async () => {
-  console.log('🧪 Setting up test environment...');
-  console.log('✅ Firebase Admin mocked');
-  console.log('✅ Redis mocked');
-  console.log('✅ Test environment variables set');
+  logger.info('🧪 Setting up test environment...');
+  logger.info('✅ Firebase Admin mocked');
+  logger.info('✅ Redis mocked');
+  logger.info('✅ Test environment variables set');
 });
 
 afterAll(async () => {
-  console.log('🧹 Cleaning up test environment...');
+  logger.info('🧹 Cleaning up test environment...');
   jest.clearAllMocks();
 });

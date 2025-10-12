@@ -10,7 +10,7 @@ import { UserService } from '../services/userService';
 import { SessionService } from '../services/sessionService';
 import { auditService } from '../services/auditService';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
-import admin from 'firebase-admin';
+import { admin } from '../firebase';
 import { logger } from '../utils/logger';
 import * as jwt from 'jsonwebtoken';
 
@@ -130,7 +130,7 @@ export function createAppleAuthRouter(): Router {
         });
 
         // Firebase custom token no longer needed with new auth system
-        console.log(`Mock Apple Auth: Skipping Firebase custom token for user ${userRecord.id}`);
+        logger.debug(`Mock Apple Auth: Skipping Firebase custom token for user ${userRecord.id}`);
         const firebaseToken = null;
         
         await setJson(`als:${state}`, {

@@ -36,7 +36,7 @@ class DatabaseManager {
   public async initialize(config: DatabaseConfig): Promise<void> {
     try {
       // Mock Firebase initialization for testing
-      console.log('Mock DatabaseManager: Initializing Firebase services');
+      logger.debug('Mock DatabaseManager: Initializing Firebase services');
       this.app = { name: 'mock-app' };
       this.firestore = null;
       this.auth = null;
@@ -54,7 +54,7 @@ class DatabaseManager {
 
   public getFirestore(): any {
     if (!this.firestore) {
-      console.log('Mock DatabaseManager: Firestore not initialized, returning mock');
+      logger.debug('Mock DatabaseManager: Firestore not initialized, returning mock');
       return null;
     }
     return this.firestore;
@@ -62,7 +62,7 @@ class DatabaseManager {
 
   public getAuth(): any {
     if (!this.auth) {
-      console.log('Mock DatabaseManager: Auth not initialized, returning mock');
+      logger.debug('Mock DatabaseManager: Auth not initialized, returning mock');
       return null;
     }
     return this.auth;
@@ -70,7 +70,7 @@ class DatabaseManager {
 
   public getStorage(): any {
     if (!this.storage) {
-      console.log('Mock DatabaseManager: Storage not initialized, returning mock');
+      logger.debug('Mock DatabaseManager: Storage not initialized, returning mock');
       return null;
     }
     return this.storage;
@@ -86,7 +86,7 @@ class DatabaseManager {
 
   public async testConnection(): Promise<boolean> {
     try {
-      console.log('Mock DatabaseManager: Testing connection');
+      logger.debug('Mock DatabaseManager: Testing connection');
       return true;
     } catch (error) {
       logger.error('Database connection test failed:', error);
@@ -96,7 +96,7 @@ class DatabaseManager {
 
   public async close(): Promise<void> {
     try {
-      console.log('Mock DatabaseManager: Closing connections');
+      logger.debug('Mock DatabaseManager: Closing connections');
       this.isConnected = false;
       logger.info('Database connections closed');
     } catch (error) {

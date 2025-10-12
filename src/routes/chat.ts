@@ -9,12 +9,12 @@ import { logger } from '../utils/logger';
 export function createChatRouter(): Router {
   const r = Router();
   
-  console.log('[ChatRouter] Creating chat router with routes:');
-  console.log('[ChatRouter] - POST /send');
-  console.log('[ChatRouter] - POST /tts');
-  console.log('[ChatRouter] - GET /history');
-  console.log('[ChatRouter] - GET /history/:chatId');
-  console.log('[ChatRouter] - DELETE /history/:chatId');
+  logger.debug('[ChatRouter] Creating chat router with routes:');
+  logger.debug('[ChatRouter] - POST /send');
+  logger.debug('[ChatRouter] - POST /tts');
+  logger.debug('[ChatRouter] - GET /history');
+  logger.debug('[ChatRouter] - GET /history/:chatId');
+  logger.debug('[ChatRouter] - DELETE /history/:chatId');
 
   // POST /chat/send - ChatGPT'ye mesaj gönder
   r.post('/send',

@@ -1,4 +1,5 @@
 require('dotenv/config');
+const { logger } = require('../src/utils/logger');
 
 // Set test environment variables FIRST - before any imports
 process.env.NODE_ENV = 'test';
@@ -57,7 +58,7 @@ module.exports = {
 };
 
 beforeAll(async () => {
-  console.log('🧪 Setting up test environment...');
+  logger.info('🧪 Setting up test environment...');
   
   // Initialize Firebase Admin with valid test credentials
   const admin = require('firebase-admin');
@@ -69,15 +70,15 @@ beforeAll(async () => {
         privateKey: process.env.FIREBASE_PRIVATE_KEY,
       }),
     });
-    console.log('✅ Firebase Admin initialized for testing');
+    logger.info('✅ Firebase Admin initialized for testing');
   }
-  
-  console.log('✅ Redis mocked');
-  console.log('✅ Test environment variables set');
+
+  logger.info('✅ Redis mocked');
+  logger.info('✅ Test environment variables set');
 });
 
 afterAll(async () => {
-  console.log('🧹 Cleaning up test environment...');
+  logger.info('🧹 Cleaning up test environment...');
   
   // Clean up Firebase app
   const admin = require('firebase-admin');

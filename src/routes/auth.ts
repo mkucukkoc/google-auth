@@ -7,7 +7,7 @@ import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse } from '../types/auth';
 import { StandardResponse, ResponseBuilder } from '../types/response';
-import admin from 'firebase-admin';
+import { admin } from '../firebase';
 import { randomInt, createHash } from 'crypto';
 import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
@@ -290,7 +290,7 @@ export function createAuthRouter(): Router {
 
         res.json({ success });
       } catch (error) {
-        console.error('Logout error:', error);
+        logger.error('Logout error:', error);
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Logout failed' 
@@ -320,7 +320,7 @@ export function createAuthRouter(): Router {
 
         res.json({ success: true });
       } catch (error) {
-        console.error('Logout all error:', error);
+        logger.error('Logout all error:', error);
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Logout failed' 
@@ -353,7 +353,7 @@ export function createAuthRouter(): Router {
           lastLoginAt: user.lastLoginAt,
         });
       } catch (error) {
-        console.error('Get user error:', error);
+        logger.error('Get user error:', error);
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Failed to get user information' 
@@ -409,7 +409,7 @@ export function createAuthRouter(): Router {
         try {
           await sendOtpEmail(email, code);
         } catch (emailError) {
-          console.error('Failed to send verification email:', emailError);
+          logger.error('Failed to send verification email:', emailError);
           // Don't fail the request if email sending fails
         }
 
@@ -418,7 +418,7 @@ export function createAuthRouter(): Router {
           message: 'Verification code sent to your email' 
         });
       } catch (error) {
-        console.error('Send registration OTP error:', error);
+        logger.error('Send registration OTP error:', error);
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Failed to send verification code' 
@@ -528,7 +528,7 @@ export function createAuthRouter(): Router {
 
         res.status(201).json(response);
       } catch (error) {
-        console.error('Verify registration OTP error:', error);
+        logger.error('Verify registration OTP error:', error);
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Registration verification failed' 
@@ -562,7 +562,7 @@ export function createAuthRouter(): Router {
             audience: config.google.clientId,
           });
         } catch (error) {
-          console.error('Google ID token verification failed:', error);
+          logger.error('Google ID token verification failed:', error);
           return res.status(401).json({ 
             error: 'invalid_token',
             message: 'Invalid Google ID token' 
@@ -635,7 +635,7 @@ export function createAuthRouter(): Router {
 
         res.json(response);
       } catch (error) {
-        console.error('Google auth error:', error);
+        logger.error('Google auth error:', error);
         res.status(500).json({ 
           error: 'internal_error',
           message: 'Google authentication failed' 

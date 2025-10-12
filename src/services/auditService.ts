@@ -70,7 +70,7 @@ class AuditService {
 
       // Add to Firestore (temporarily disabled)
       // await this.firestore.collection(this.collectionName).add(auditEvent);
-      console.log('Mock Audit: Event logged', auditEvent);
+      logger.debug('Mock Audit: Event logged', auditEvent);
 
       // Add to cache for quick access
       await this.cacheRecentEvent(auditEvent);
@@ -215,7 +215,7 @@ class AuditService {
   public async queryEvents(query: AuditQuery): Promise<AuditEvent[]> {
     try {
       // let firestoreQuery = this.firestore.collection(this.collectionName); // Temporarily disabled
-      console.log('Mock Audit: Query events', query);
+      logger.debug('Mock Audit: Query events', query);
       return []; // Return empty array for testing
 
       // Apply filters
@@ -385,7 +385,7 @@ class AuditService {
   public async cleanupOldAuditLogs(retentionDays: number): Promise<number> {
     try {
       // Temporarily disabled for testing
-      console.log('Mock Audit: Cleanup old audit logs', { retentionDays });
+      logger.debug('Mock Audit: Cleanup old audit logs', { retentionDays });
       return 0;
     } catch (error) {
       logger.error('Failed to cleanup old audit logs:', error);

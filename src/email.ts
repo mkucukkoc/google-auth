@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { logger } from './utils/logger';
 
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
@@ -40,9 +41,9 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent to ${to}`);
+    logger.info(`Verification email sent to ${to}`);
   } catch (error) {
-    console.error('Failed to send verification email:', error);
+    logger.error('Failed to send verification email:', error);
     throw error;
   }
 }

@@ -6,7 +6,7 @@ import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
 import { db } from '../firebase';
-import admin from 'firebase-admin';
+import { admin } from '../firebase';
 
 export function createPDFSummaryRouter(): Router {
   const router = Router();

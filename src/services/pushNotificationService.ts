@@ -309,7 +309,7 @@ class PushNotificationService {
   private async getUserPushTokens(userId: string): Promise<UserPushToken[]> {
     try {
       // Mock Firestore query
-      console.log(`Mock PushNotificationService: Getting tokens for user ${userId}`);
+      logger.debug(`Mock PushNotificationService: Getting tokens for user ${userId}`);
       return [] as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get user push tokens:', error);
@@ -321,7 +321,7 @@ class PushNotificationService {
   private async getUsersPushTokens(userIds: string[]): Promise<UserPushToken[]> {
     try {
       // Mock Firestore query
-      console.log(`Mock PushNotificationService: Getting tokens for users ${userIds.join(', ')}`);
+      logger.debug(`Mock PushNotificationService: Getting tokens for users ${userIds.join(', ')}`);
       const snapshot = { docs: [] };
 
       return [] as UserPushToken[];
@@ -335,7 +335,7 @@ class PushNotificationService {
   private async getAllActivePushTokens(): Promise<UserPushToken[]> {
     try {
       // Mock Firestore query
-      console.log('Mock PushNotificationService: Getting all active push tokens');
+      logger.debug('Mock PushNotificationService: Getting all active push tokens');
       return [] as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get all active push tokens:', error);
@@ -350,7 +350,7 @@ class PushNotificationService {
   ): Promise<UserPushToken | null> {
     try {
       // Mock Firestore query
-      console.log(`Mock PushNotificationService: Getting token for user ${userId}, device ${deviceId}`);
+      logger.debug(`Mock PushNotificationService: Getting token for user ${userId}, device ${deviceId}`);
       return null; // Return null for testing
     } catch (error) {
       logger.error('Failed to get user push token by device:', error);
@@ -362,7 +362,7 @@ class PushNotificationService {
   private async createUserPushToken(tokenData: UserPushToken): Promise<void> {
     try {
       // Mock Firestore add
-      console.log('Mock PushNotificationService: Creating user push token', tokenData);
+      logger.debug('Mock PushNotificationService: Creating user push token', tokenData);
     } catch (error) {
       logger.error('Failed to create user push token:', error);
       throw error;
@@ -376,7 +376,7 @@ class PushNotificationService {
   ): Promise<void> {
     try {
       // Mock Firestore update
-      console.log(`Mock PushNotificationService: Updating token ${tokenId}`, updateData);
+      logger.debug(`Mock PushNotificationService: Updating token ${tokenId}`, updateData);
     } catch (error) {
       logger.error('Failed to update user push token:', error);
       throw error;
@@ -428,7 +428,7 @@ class PushNotificationService {
       cutoffDate.setDate(cutoffDate.getDate() - daysInactive);
 
       // Mock Firestore cleanup
-      console.log(`Mock PushNotificationService: Cleaning up inactive tokens older than ${daysInactive} days`);
+      logger.debug(`Mock PushNotificationService: Cleaning up inactive tokens older than ${daysInactive} days`);
       
       logger.info('Inactive push tokens cleaned up:', { count: 0 });
     } catch (error) {

@@ -1,8 +1,7 @@
-import { db } from '../firebase';
+import { admin, db } from '../firebase';
 import { HashService } from './hashService';
 import { User, RegisterRequest } from '../types/auth';
 import { v4 as uuidv4 } from 'uuid';
-import admin from 'firebase-admin';
 import { logger } from '../utils/logger';
 
 export class UserService {
@@ -16,7 +15,7 @@ export class UserService {
     const email = request.email.toLowerCase().trim();
 
     // Mock Firebase Authentication
-    console.log(`Mock UserService: Creating user ${email}`);
+    logger.info(`Mock UserService: Creating user ${email}`);
     
     const user: Omit<User, 'id'> = {
       email: email,
@@ -28,8 +27,20 @@ export class UserService {
       failedLoginAttempts: 0,
     };
 
+    await db.collection('subsc').doc(userId).set(user);
+
+    try {
+      await admin.auth().createUser({
+        uid: userId,
+        email,
+        displayName: request.name,
+        emailVerified: false,
+      });
+    } catch (error) {
+      logger.warn({ error, userId, email, operation: 'createUser' }, 'Failed to sync user with Firebase Auth');
+    }
     // Mock Firestore save
-    console.log(`Mock UserService: Saving user to Firestore`);
+    logger.info('Mock UserService: Saving user to Firestore');
 
     return {
       id: userId,
@@ -41,13 +52,27 @@ export class UserService {
    * Create a Google user (without password)
    */
   static async createGoogleUser(email: string, name?: string): Promise<User> {
-    const userId = uuidv4();
+    let userId = uuidv4();
     const now = new Date();
     const normalizedEmail = email.toLowerCase().trim();
 
+    let existingAuthUser: any = null;
+    try {
+      existingAuthUser = await admin.auth().getUserByEmail(normalizedEmail);
+      if (existingAuthUser?.uid) {
+        userId = existingAuthUser.uid;
+      }
+    } catch (error: any) {
+      if (error?.code !== 'auth/user-not-found') {
+        logger.warn({ error, email: normalizedEmail, operation: 'lookupGoogleAuthUser' }, 'Failed to lookup Firebase Auth user by email');
+      }
+    }
+
+
     // Mock Firebase Authentication
-    console.log(`Mock UserService: Creating Google user ${normalizedEmail}`);
+    logger.info(`Mock UserService: Creating Google user ${normalizedEmail}`);
     
+ 
     const user: Omit<User, 'id'> = {
       email: normalizedEmail,
       passwordHash: '', // Google users don't have passwords
@@ -56,10 +81,31 @@ export class UserService {
       createdAt: now,
       updatedAt: now,
       failedLoginAttempts: 0,
+      lastLoginAt: now,
     };
 
+    await db.collection('subsc').doc(userId).set(user);
+
+    try {
+      if (existingAuthUser) {
+        await admin.auth().updateUser(userId, {
+          email: normalizedEmail,
+          displayName: name,
+          emailVerified: true,
+        });
+      } else {
+        await admin.auth().createUser({
+          uid: userId,
+          email: normalizedEmail,
+          displayName: name,
+          emailVerified: true,
+        });
+      }
+    } catch (error) {
+      logger.warn({ error, email: normalizedEmail, operation: 'createGoogleUser' }, 'Firebase Auth sync error');
+    }
     // Mock Firestore save
-    console.log(`Mock UserService: Saving Google user to Firestore`);
+    logger.info('Mock UserService: Saving Google user to Firestore');
 
     return {
       id: userId,
@@ -75,8 +121,9 @@ export class UserService {
     const now = new Date();
     const normalizedEmail = email.toLowerCase().trim();
 
+
     // Mock Firebase Authentication
-    console.log(`Mock UserService: Creating Apple user ${normalizedEmail}`);
+    logger.info(`Mock UserService: Creating Apple user ${normalizedEmail}`);
     
     const user: Omit<User, 'id'> = {
       email: normalizedEmail,
@@ -88,8 +135,21 @@ export class UserService {
       failedLoginAttempts: 0,
     };
 
+    await db.collection('subsc').doc(userId).set(user);
+
+    try {
+      await admin.auth().createUser({
+        uid: userId,
+        email: normalizedEmail,
+        displayName: name,
+        emailVerified: true,
+      });
+    } catch (error) {
+      logger.warn({ error, email: normalizedEmail, operation: 'createAppleUser' }, 'Failed to sync Apple user with Firebase Auth');
+    }
+
     // Mock Firestore save
-    console.log(`Mock UserService: Saving Apple user to Firestore`);
+    logger.info('Mock UserService: Saving Apple user to Firestore');
 
     return {
       id: userId,
@@ -123,19 +183,24 @@ export class UserService {
    * Find user by ID
    */
   static async findById(userId: string): Promise<User | null> {
+    const doc = await db.collection('subsc').doc(userId).get();
+    if (!doc.exists) {
+      return null;
+    }
+
+    const data = doc.data();
+    if (!data) {
+      return null;
+    }
+
+
     // Mock user data for testing
-    console.log(`Mock UserService: Finding user by ID ${userId}`);
+    logger.info(`Mock UserService: Finding user by ID ${userId}`);
     
     // Return a mock user for testing
     return {
-      id: userId,
-      email: 'test@example.com',
-      name: 'Test User',
-      passwordHash: 'mock_hash',
-      isEmailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      failedLoginAttempts: 0,
+      id: doc.id,
+      ...data,
     } as User;
   }
 
@@ -197,8 +262,31 @@ export class UserService {
    * Update user profile
    */
   static async updateUser(userId: string, updates: Partial<User>): Promise<void> {
+    const userRef = db.collection('subsc').doc(userId);
+    const existing = await userRef.get();
+
+    if (!existing.exists || !existing.data()) {
+      return;
+    }
+
+    await userRef.update({
+      ...updates,
+      updatedAt: new Date(),
+    });
+
+    try {
+      const firebaseUpdates: any = {};
+      if (updates.email) firebaseUpdates.email = updates.email;
+      if (updates.name) firebaseUpdates.displayName = updates.name;
+      if (Object.keys(firebaseUpdates).length > 0) {
+        await admin.auth().updateUser(userId, firebaseUpdates);
+      }
+    } catch (error) {
+      logger.warn({ error, userId, operation: 'updateUser' }, 'Failed to update Firebase Auth user');
+    }
+
     // Mock Firestore update
-    console.log(`Mock UserService: Updating user ${userId}`, updates);
+    logger.info(`Mock UserService: Updating user ${userId}`, updates);
   }
 
   /**

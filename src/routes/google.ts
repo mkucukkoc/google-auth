@@ -10,7 +10,7 @@ import { UserService } from '../services/userService';
 import { SessionService } from '../services/sessionService';
 import { auditService } from '../services/auditService';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
-import admin from 'firebase-admin';
+import { admin } from '../firebase';
 import { logger } from '../utils/logger';
 
 export function createGoogleAuthRouter(): Router {
@@ -20,22 +20,22 @@ export function createGoogleAuthRouter(): Router {
     authRateLimits.general,
     async (req, res) => {
       try {
-        console.log('[GoogleAuth] /start endpoint called:', {
+        logger.debug('[GoogleAuth] /start endpoint called:', {
           body: req.body,
           headers: req.headers
         });
         
         const { device_id } = req.body || {};
         if (!device_id) {
-          console.log('[GoogleAuth] Missing device_id');
+          logger.debug('[GoogleAuth] Missing device_id');
           return res.status(400).json({ error: 'invalid_request' });
         }
         
         const id = uuidv4();
-        console.log('[GoogleAuth] Generated state ID:', id);
+        logger.debug('[GoogleAuth] Generated state ID:', id);
         
         await setJson(`gls:${id}`, { device_id }, 600);
-        console.log('[GoogleAuth] Stored session in Redis');
+        logger.debug('[GoogleAuth] Stored session in Redis');
         
         const params = new URLSearchParams({
           client_id: config.google.clientId,
@@ -46,11 +46,11 @@ export function createGoogleAuthRouter(): Router {
         });
         
         const authUrl = `https://accounts.google.com/o/oauth2/auth?${params}`;
-        console.log('[GoogleAuth] Generated auth URL:', authUrl);
+        logger.debug('[GoogleAuth] Generated auth URL:', authUrl);
         
         return res.json({ url: authUrl });
       } catch (error) {
-        console.log('[GoogleAuth] /start error:', error);
+        logger.debug('[GoogleAuth] /start error:', error);
         logger.error({ error }, 'Google auth start error');
         return res.status(500).json({ error: 'internal_error' });
       }
@@ -59,19 +59,19 @@ export function createGoogleAuthRouter(): Router {
 
   r.get('/status/:id', async (req, res) => {
     try {
-      console.log('[GoogleAuth] /status endpoint called for ID:', req.params.id);
+      logger.debug('[GoogleAuth] /status endpoint called for ID:', req.params.id);
       const session = await getJson<any>(`gls:${req.params.id}`);
-      console.log('[GoogleAuth] Retrieved session:', session);
+      logger.debug('[GoogleAuth] Retrieved session:', session);
       
       if (!session || !session.ready) {
-        console.log('[GoogleAuth] Session not ready');
+        logger.debug('[GoogleAuth] Session not ready');
         return res.json({ ready: false });
       }
       
-      console.log('[GoogleAuth] Session ready, returning data');
+      logger.debug('[GoogleAuth] Session ready, returning data');
       return res.json(session);
     } catch (error) {
-      console.log('[GoogleAuth] /status error:', error);
+      logger.debug('[GoogleAuth] /status error:', error);
       logger.error({ error }, 'Google auth status check error');
       return res.status(500).json({ error: 'internal_error' });
     }
@@ -155,7 +155,7 @@ export function createGoogleAuthRouter(): Router {
         });
 
         // Firebase custom token no longer needed with new auth system
-        console.log(`Mock Google Auth: Skipping Firebase custom token for user ${user.id}`);
+        logger.debug(`Mock Google Auth: Skipping Firebase custom token for user ${user.id}`);
         const firebaseToken = null;
         
         await setJson(`gls:${state}`, {
