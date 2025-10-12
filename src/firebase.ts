@@ -1,3 +1,5 @@
+import { logger } from './utils/logger';
+
 type DocumentData = Record<string, any>;
 
 interface Filter {
@@ -17,18 +19,18 @@ const collections = new Map<string, Map<string, DocumentData>>();
 
 const randomId = () => `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-const getCollectionStore = (name: string): Map<string, DocumentData> => {
+function getCollectionStore(name: string): Map<string, DocumentData> {
   if (!collections.has(name)) {
     collections.set(name, new Map());
   }
   return collections.get(name)!;
-};
+}
 
-const getFieldValue = (data: DocumentData, field: string): any => {
+function getFieldValue(data: DocumentData, field: string): any {
   return field.split('.').reduce((value: any, part: string) => (value ? value[part] : undefined), data);
-};
+}
 
-const matchesFilter = (data: DocumentData, filter: Filter): boolean => {
+function matchesFilter(data: DocumentData, filter: Filter): boolean {
   const fieldValue = getFieldValue(data, filter.field);
   switch (filter.operator) {
     case '==':
@@ -49,12 +51,12 @@ const matchesFilter = (data: DocumentData, filter: Filter): boolean => {
     default:
       return false;
   }
-};
+}
 
-const sortDocuments = (
+function sortDocuments(
   docs: Array<{ id: string; data: DocumentData }>,
   orderBy?: { field: string; direction: 'asc' | 'desc' }
-) => {
+) {
   if (!orderBy) {
     return docs;
   }
@@ -70,262 +72,165 @@ const sortDocuments = (
     const direction = orderBy.direction === 'desc' ? -1 : 1;
     return aValue > bValue ? direction : -direction;
   });
-};
+}
 
-const createDocRef = (collectionName: string, docId: string) => ({
-  id: docId,
-  collectionName,
-  async set(data: DocumentData): Promise<void> {
-    const store = getCollectionStore(collectionName);
-    store.set(docId, { ...data });
-  },
-  async get() {
-    const store = getCollectionStore(collectionName);
-    const data = store.get(docId);
-    return {
-      id: docId,
-      exists: data !== undefined,
-      data: () => (data !== undefined ? { ...data } : undefined),
-      ref: createDocRef(collectionName, docId)
-    };
-  },
-  async update(data: DocumentData): Promise<void> {
-    const store = getCollectionStore(collectionName);
-    const existing = store.get(docId);
-    if (!existing) {
-      throw new Error(`Document ${docId} does not exist in collection ${collectionName}`);
-// Firebase temporarily disabled for testing
-// import admin from 'firebase-admin';
-import { logger } from './utils/logger';
+function logDocAction(action: string, collectionName: string, docId: string, data?: DocumentData) {
+  const path = `${collectionName}/${docId}`;
+  const message = `Mock Firebase: ${action} document ${path}`;
+  if (data !== undefined) {
+    logger.debug({ collection: collectionName, docId, data }, message);
+  } else {
+    logger.debug({ collection: collectionName, docId }, message);
+  }
+}
 
-// Mock document factory
-const createMockDoc = (id: string, collectionPath: string) => ({
-  id,
-  exists: false,
-  data: () => ({
-    createdAt: new Date(),
-    role: 'user',
-    content: 'mock content',
-    timestamp: new Date(),
-    userId: 'mock_user',
-    deviceId: 'mock_device',
-    lastUsedAt: new Date(),
-    expiresAt: new Date(),
-    revokedAt: undefined,
-    ipAddress: '127.0.0.1',
-    tokenHash: 'mock_token_hash',
-    refreshTokenHash: 'mock_refresh_token_hash',
-    deviceInfo: 'mock_device_info',
-    email: 'mock@example.com',
-    passwordHash: 'mock_password_hash',
-    isEmailVerified: true,
-    updatedAt: new Date(),
-    failedLoginAttempts: 0
-  }),
-  ref: {
-    delete: async () => {
-      logger.debug(`Mock Firebase: Deleting document ${id} in collection ${collectionPath}`);
-      return Promise.resolve();
+function createQuery(collectionName: string, options: QueryOptions = { filters: [] }) {
+  return {
+    where(field: string, operator: string, value: any) {
+      return createQuery(collectionName, {
+        ...options,
+        filters: [...options.filters, { field, operator, value }]
+      });
     },
-    update: async (data: any) => {
-      logger.debug(`Mock Firebase: Updating document ${id} in collection ${collectionPath}`, data);
-      return Promise.resolve();
-    }
-    store.set(docId, { ...existing, ...data });
-  },
-  async delete(): Promise<void> {
-    const store = getCollectionStore(collectionName);
-    store.delete(docId);
-  },
-  collection(subName: string) {
-    return createCollection(`${collectionName}/${docId}/${subName}`);
-  }
-});
+    orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
+      return createQuery(collectionName, {
+        ...options,
+        orderBy: { field, direction }
+      });
+    },
+    limit(count: number) {
+      return createQuery(collectionName, {
+        ...options,
+        limit: count
+      });
+    },
+    offset(count: number) {
+      return createQuery(collectionName, {
+        ...options,
+        offset: count
+      });
+    },
+    async get() {
+      const store = getCollectionStore(collectionName);
+      let docs = Array.from(store.entries()).map(([id, data]) => ({ id, data }));
 
-const createQuery = (
-  collectionName: string,
-  options: QueryOptions = { filters: [] }
-) => ({
-  where(field: string, operator: string, value: any) {
-    return createQuery(collectionName, {
-      ...options,
-      filters: [...options.filters, { field, operator, value }]
-    });
-  },
-  orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
-    return createQuery(collectionName, {
-      ...options,
-      orderBy: { field, direction }
-    });
-  },
-  limit(count: number) {
-    return createQuery(collectionName, {
-      ...options,
-      limit: count
-    });
-  },
-  offset(count: number) {
-    return createQuery(collectionName, {
-      ...options,
-      offset: count
-    });
-  },
-  async get() {
-    const store = getCollectionStore(collectionName);
-    let docs = Array.from(store.entries()).map(([id, data]) => ({ id, data }));
-
-    if (options.filters.length > 0) {
-      docs = docs.filter(({ data }) => options.filters.every(filter => matchesFilter(data, filter)));
-    }
-
-    docs = sortDocuments(docs, options.orderBy);
-
-    if (options.offset && options.offset > 0) {
-      docs = docs.slice(options.offset);
-    }
-
-    if (options.limit !== undefined) {
-      docs = docs.slice(0, options.limit);
-    }
-
-    const snapshots = docs.map(({ id, data }) => ({
-      id,
-      exists: true,
-      data: () => ({ ...data }),
-      ref: createDocRef(collectionName, id)
-    }));
-
-    return {
-      empty: snapshots.length === 0,
-      size: snapshots.length,
-      docs: snapshots,
-      forEach: (callback: (doc: any) => void) => {
-        snapshots.forEach(callback);
+      if (options.filters.length > 0) {
+        docs = docs.filter(({ data }) => options.filters.every(filter => matchesFilter(data, filter)));
       }
-    };
-  }
-});
 
-const createCollection = (collectionName: string) => ({
-  doc(id?: string) {
-    const docId = id || randomId();
-    return createDocRef(collectionName, docId);
-  },
-  async add(data: DocumentData) {
-    const docId = randomId();
-    await createDocRef(collectionName, docId).set(data);
-    return { id: docId };
-  },
-  where(field: string, operator: string, value: any) {
-    return createQuery(collectionName, { filters: [{ field, operator, value }] });
-  },
-  orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
-    return createQuery(collectionName, { filters: [], orderBy: { field, direction } });
-  },
-  async get() {
-    return createQuery(collectionName, { filters: [] }).get();
-  }
-});
+      docs = sortDocuments(docs, options.orderBy);
+
+      if (options.offset && options.offset > 0) {
+        docs = docs.slice(options.offset);
+      }
+
+      if (options.limit !== undefined) {
+        docs = docs.slice(0, options.limit);
+      }
+
+      logger.debug({ collection: collectionName, options }, 'Mock Firebase: query get');
+
+      const snapshots = docs.map(({ id, data }) => ({
+        id,
+        exists: true,
+        data: () => ({ ...data }),
+        ref: createDocRef(collectionName, id)
+      }));
+
+      return {
+        empty: snapshots.length === 0,
+        size: snapshots.length,
+        docs: snapshots,
+        forEach(callback: (doc: any) => void) {
+          snapshots.forEach(callback);
+        }
+      };
+    }
+  };
+}
+
+function createDocRef(collectionName: string, docId: string) {
+  return {
+    id: docId,
+    collectionName,
+    async set(data: DocumentData): Promise<void> {
+      const store = getCollectionStore(collectionName);
+      logDocAction('set', collectionName, docId, data);
+      store.set(docId, { ...data });
+    },
+    async get() {
+      const store = getCollectionStore(collectionName);
+      const data = store.get(docId);
+      const exists = data !== undefined;
+      logger.debug({ collection: collectionName, docId, exists }, 'Mock Firebase: get document');
+      return {
+        id: docId,
+        exists,
+        data: () => (exists ? { ...data! } : undefined),
+        ref: createDocRef(collectionName, docId)
+      };
+    },
+    async update(data: DocumentData): Promise<void> {
+      const store = getCollectionStore(collectionName);
+      const existing = store.get(docId);
+      if (!existing) {
+        throw new Error(`Document ${docId} does not exist in collection ${collectionName}`);
+      }
+      logDocAction('update', collectionName, docId, data);
+      store.set(docId, { ...existing, ...data });
+    },
+    async delete(): Promise<void> {
+      const store = getCollectionStore(collectionName);
+      logDocAction('delete', collectionName, docId);
+      store.delete(docId);
+    },
+    collection(subName: string) {
+      return createCollection(`${collectionName}/${docId}/${subName}`);
+    }
+  };
+}
+
+function createCollection(collectionName: string) {
+  return {
+    doc(id?: string) {
+      const docId = id || randomId();
+      return createDocRef(collectionName, docId);
+    },
+    async add(data: DocumentData) {
+      const docId = randomId();
+      logger.debug({ collection: collectionName, docId, data }, 'Mock Firebase: add document');
+      await createDocRef(collectionName, docId).set(data);
+      return { id: docId };
+    },
+    where(field: string, operator: string, value: any) {
+      return createQuery(collectionName, { filters: [{ field, operator, value }] });
+    },
+    orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
+      return createQuery(collectionName, { filters: [], orderBy: { field, direction } });
+    },
+    async get() {
+      return createQuery(collectionName, { filters: [] }).get();
+    }
+  };
+}
 
 export const db = {
   collection: (name: string) => createCollection(name),
   batch: () => ({
     async set(docRef: any, data: DocumentData) {
+      logger.debug({ data }, 'Mock Firebase: batch set document');
       await docRef.set(data);
     },
     async update(docRef: any, data: DocumentData) {
+      logger.debug({ data }, 'Mock Firebase: batch update document');
       await docRef.update(data);
     },
     async delete(docRef: any) {
+      logger.debug('Mock Firebase: batch delete document');
       await docRef.delete();
     },
-    async commit() {}
-
-  collection: (name: string) => ({
-    doc: (id?: string) => {
-      const docId = id || `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      return {
-        id: docId,
-        set: async (data: any) => {
-          logger.debug(`Mock Firebase: Setting document ${docId} in collection ${name}`, data);
-          return Promise.resolve();
-        },
-        get: async () => createMockDoc(docId, name),
-        update: async (data: any) => {
-          logger.debug(`Mock Firebase: Updating document ${docId} in collection ${name}`, data);
-          return Promise.resolve();
-        },
-        collection: (subName: string) => ({
-          doc: (subId?: string) => {
-            const subDocId = subId || `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            return {
-              id: subDocId,
-              set: async (data: any) => {
-                logger.debug(`Mock Firebase: Setting document ${subDocId} in collection ${name}/${docId}/${subName}`, data);
-                return Promise.resolve();
-              },
-              get: async () => createMockDoc(subDocId, `${name}/${docId}/${subName}`),
-              update: async (data: any) => {
-                logger.debug(`Mock Firebase: Updating document ${subDocId} in collection ${name}/${docId}/${subName}`, data);
-                return Promise.resolve();
-              },
-              collection: (subSubName: string) => ({
-                doc: (subSubId?: string) => {
-                  const subSubDocId = subSubId || `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                  return {
-                    id: subSubDocId,
-                    set: async (data: any) => {
-                      logger.debug(`Mock Firebase: Setting document ${subSubDocId} in collection ${name}/${docId}/${subName}/${subSubName}`, data);
-                      return Promise.resolve();
-                    },
-                    get: async () => createMockDoc(subSubDocId, `${name}/${docId}/${subName}/${subSubName}`),
-                    update: async (data: any) => {
-                      logger.debug(`Mock Firebase: Updating document ${subSubDocId} in collection ${name}/${docId}/${subName}/${subSubName}`, data);
-                      return Promise.resolve();
-                    }
-                  };
-                },
-                add: async (data: any) => {
-                  const subSubId = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                  logger.debug(`Mock Firebase: Adding document ${subSubId} to collection ${name}/${docId}/${subName}/${subSubName}`, data);
-                  return Promise.resolve({ id: subSubId });
-                },
-                where: (field: string, operator: string, value: any) => createMockQueryBuilder(),
-                orderBy: (field: string, direction: string) => createMockQueryBuilder()
-              })
-            };
-          },
-          add: async (data: any) => {
-            const subId = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            logger.debug(`Mock Firebase: Adding document ${subId} to collection ${name}/${docId}/${subName}`, data);
-            return Promise.resolve({ id: subId });
-          },
-          where: (field: string, operator: string, value: any) => createMockQueryBuilder(),
-          orderBy: (field: string, direction: string) => createMockQueryBuilder()
-        })
-      };
-    },
-    add: async (data: any) => {
-      const id = `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      logger.debug(`Mock Firebase: Adding document ${id} to collection ${name}`, data);
-      return Promise.resolve({ id });
-    },
-    get: async () => createMockQueryResult(),
-    where: (field: string, operator: string, value: any) => createMockQueryBuilder()
-  }),
-  batch: () => ({
-    set: (docRef: any, data: any) => {
-      logger.debug(`Mock Firebase: Batch setting document`, data);
-    },
-    update: (docRef: any, data: any) => {
-      logger.debug(`Mock Firebase: Batch updating document`, data);
-    },
-    delete: (docRef: any) => {
-      logger.debug(`Mock Firebase: Batch deleting document`);
-    },
-    commit: async () => {
-      logger.debug(`Mock Firebase: Committing batch`);
-      return Promise.resolve();
+    async commit() {
+      logger.debug('Mock Firebase: batch commit');
     }
   })
 };
@@ -336,6 +241,7 @@ export const firestoreQuery = {
   limit: () => firestoreQuery,
   offset: () => firestoreQuery,
   async get() {
+    logger.debug('Mock Firebase: empty query get');
     return {
       empty: true,
       size: 0,
@@ -361,6 +267,7 @@ const mockAuth = () => ({
     if (!user) {
       throw Object.assign(new Error(`User ${uid} not found`), { code: 'auth/user-not-found' });
     }
+    logger.debug({ uid }, 'Mock Firebase Auth: getUser');
     return { ...user };
   },
   async getUserByEmail(email: string) {
@@ -368,6 +275,7 @@ const mockAuth = () => ({
     if (!found) {
       throw Object.assign(new Error(`User with email ${email} not found`), { code: 'auth/user-not-found' });
     }
+    logger.debug({ email }, 'Mock Firebase Auth: getUserByEmail');
     return { ...found };
   },
   async createUser(data: Partial<MockUserRecord>) {
@@ -386,6 +294,7 @@ const mockAuth = () => ({
       disabled: data.disabled ?? false
     };
     authUsers.set(uid, record);
+    logger.debug({ uid, email: record.email }, 'Mock Firebase Auth: createUser');
     return { ...record };
   },
   async updateUser(uid: string, data: Partial<MockUserRecord>) {
@@ -399,10 +308,12 @@ const mockAuth = () => ({
       uid
     };
     authUsers.set(uid, updated);
+    logger.debug({ uid }, 'Mock Firebase Auth: updateUser');
     return { ...updated };
   },
   async deleteUser(uid: string) {
     authUsers.delete(uid);
+    logger.debug({ uid }, 'Mock Firebase Auth: deleteUser');
   }
 });
 
@@ -414,3 +325,4 @@ export const admin = {
     }
   }
 };
+
