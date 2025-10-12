@@ -37,6 +37,41 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
+// Polyfill for DOMMatrix (required by pdf-parse in server environment)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+    globalThis.DOMMatrix = class DOMMatrix {
+        constructor(init) {
+            // Simple DOMMatrix implementation for server-side
+            this.a = 1;
+            this.b = 0;
+            this.c = 0;
+            this.d = 1;
+            this.e = 0;
+            this.f = 0;
+            if (init) {
+                if (typeof init === 'string') {
+                    // Parse matrix string
+                    const values = init.replace(/matrix\(|\)/g, '').split(',').map(Number);
+                    if (values.length === 6) {
+                        [this.a, this.b, this.c, this.d, this.e, this.f] = values;
+                    }
+                }
+                else if (Array.isArray(init) && init.length === 6) {
+                    [this.a, this.b, this.c, this.d, this.e, this.f] = init;
+                }
+            }
+        }
+        scale(scaleX, scaleY = scaleX) {
+            return new DOMMatrix([this.a * scaleX, this.b * scaleY, this.c * scaleX, this.d * scaleY, this.e, this.f]);
+        }
+        translate(tx, ty) {
+            return new DOMMatrix([this.a, this.b, this.c, this.d, this.e + tx, this.f + ty]);
+        }
+        toString() {
+            return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`;
+        }
+    };
+}
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));

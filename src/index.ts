@@ -1,4 +1,50 @@
 import 'dotenv/config';
+
+// Polyfill for DOMMatrix (required by pdf-parse in server environment)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor(init?: string | number[]) {
+      // Simple DOMMatrix implementation for server-side
+      this.a = 1;
+      this.b = 0;
+      this.c = 0;
+      this.d = 1;
+      this.e = 0;
+      this.f = 0;
+      
+      if (init) {
+        if (typeof init === 'string') {
+          // Parse matrix string
+          const values = init.replace(/matrix\(|\)/g, '').split(',').map(Number);
+          if (values.length === 6) {
+            [this.a, this.b, this.c, this.d, this.e, this.f] = values;
+          }
+        } else if (Array.isArray(init) && init.length === 6) {
+          [this.a, this.b, this.c, this.d, this.e, this.f] = init;
+        }
+      }
+    }
+    
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+    e: number;
+    f: number;
+    
+    scale(scaleX: number, scaleY: number = scaleX) {
+      return new DOMMatrix([this.a * scaleX, this.b * scaleY, this.c * scaleX, this.d * scaleY, this.e, this.f]);
+    }
+    
+    translate(tx: number, ty: number) {
+      return new DOMMatrix([this.a, this.b, this.c, this.d, this.e + tx, this.f + ty]);
+    }
+    
+    toString() {
+      return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`;
+    }
+  } as any;
+}
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
