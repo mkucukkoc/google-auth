@@ -660,6 +660,44 @@ export function createAuthRouter(): Router {
     }
   );
 
+  // Test Firebase connection endpoint
+  r.get('/test-firebase', async (req, res) => {
+    try {
+      // Test Firestore connection
+      const testDoc = await db.collection('test').doc('connection').set({
+        timestamp: new Date(),
+        message: 'Firebase connection test'
+      });
+      
+      // Test Firebase Auth
+      const testUser = await admin.auth().createUser({
+        uid: 'test-user-' + Date.now(),
+        email: 'test@example.com',
+        displayName: 'Test User',
+        emailVerified: false
+      });
+      
+      // Clean up test user
+      await admin.auth().deleteUser(testUser.uid);
+      
+      res.json({
+        success: true,
+        message: 'Firebase connection successful',
+        firestore: 'Connected',
+        auth: 'Connected',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('Firebase test error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Firebase connection failed',
+        error: error.message || 'Unknown error',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   return r;
 }
 

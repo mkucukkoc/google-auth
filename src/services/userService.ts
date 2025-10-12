@@ -100,24 +100,36 @@ export class UserService {
     try {
       if (existingAuthUser) {
         // Update existing Firebase Auth user
+        logger.info('Updating existing Firebase Auth user', { userId, email: normalizedEmail });
         await admin.auth().updateUser(userId, {
           email: normalizedEmail,
           displayName: name,
           emailVerified: true,
         });
-        logger.info('Firebase Auth user updated', { userId, email: normalizedEmail });
+        logger.info('Firebase Auth user updated successfully', { userId, email: normalizedEmail });
       } else {
         // Create new Firebase Auth user
-        await admin.auth().createUser({
+        logger.info('Creating new Firebase Auth user', { userId, email: normalizedEmail });
+        const firebaseUser = await admin.auth().createUser({
           uid: userId,
           email: normalizedEmail,
           displayName: name,
           emailVerified: true,
         });
-        logger.info('Firebase Auth user created', { userId, email: normalizedEmail });
+        logger.info('Firebase Auth user created successfully', { 
+          userId, 
+          email: normalizedEmail,
+          firebaseUid: firebaseUser.uid 
+        });
       }
     } catch (error) {
-      logger.error('Firebase Auth sync error', { error, userId, email: normalizedEmail });
+      logger.error('Firebase Auth sync error', { 
+        error: error.message, 
+        errorCode: error.code,
+        userId, 
+        email: normalizedEmail,
+        stack: error.stack
+      });
       // Don't throw error here, user is already saved to subsc
     }
 
