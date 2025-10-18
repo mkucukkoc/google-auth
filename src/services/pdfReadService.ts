@@ -3,6 +3,80 @@ import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
+export interface PPTThemePayload {
+  mode?: 'light' | 'dark';
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+  title_font?: string;
+  body_font?: string;
+}
+
+export interface BrandKitPayload {
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+  title_font?: string;
+  body_font?: string;
+  logo_url?: string;
+}
+
+export interface PPTAdvancedPayload {
+  prompt: string;
+  language?: 'tr' | 'en';
+  audience?: string;
+  purpose?: string;
+  title?: string;
+  outline?: string[];
+  slide_goal?: number;
+  charts_allowed?: boolean;
+  image_policy?: 'generate' | 'none';
+  image_style?: string;
+  speaker_notes?: boolean;
+  aspect_ratio?: '16:9' | '4:3';
+  include_cover?: boolean;
+  include_agenda?: boolean;
+  include_summary?: boolean;
+  include_qna?: boolean;
+  include_closing?: boolean;
+  slide_numbers?: boolean;
+  header_text?: string;
+  footer_text?: string;
+  logo_url?: string;
+  theme?: PPTThemePayload;
+  brand_kit?: BrandKitPayload;
+  references?: string[];
+}
+
+export interface DocAdvancedMargins {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}
+
+export interface DocAdvancedPayload {
+  prompt: string;
+  language?: 'tr' | 'en';
+  title?: string;
+  page_goal?: number;
+  include_cover?: boolean;
+  include_toc?: boolean;
+  header_text?: string;
+  footer_text?: string;
+  page_numbers?: boolean;
+  paper_size?: string;
+  orientation?: 'portrait' | 'landscape';
+  margins_mm?: DocAdvancedMargins;
+  font?: string;
+  font_size_pt?: number;
+  line_spacing?: number;
+  outline?: string[];
+  references?: string[];
+  reference_style?: string;
+  watermark_text?: string;
+}
+
 export class PDFReadService {
   private static readonly PDFREAD_BASE_URL = config.api.pdfRead.baseUrl;
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
@@ -361,11 +435,9 @@ export class PDFReadService {
   /**
    * Gelişmiş Word belgesi oluşturur
    */
-  static async generateDocAdvanced(prompt: string): Promise<StandardResponse<any>> {
+  static async generateDocAdvanced(payload: DocAdvancedPayload): Promise<StandardResponse<any>> {
     try {
-      const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-doc-advanced`, {
-        prompt
-      }, {
+      const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-doc-advanced`, payload, {
         headers: {
           'Content-Type': 'application/json',
           ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -375,7 +447,8 @@ export class PDFReadService {
 
       return ResponseBuilder.success(response.data, 'Advanced Word document generated successfully');
     } catch (error: any) {
-      logger.error({ err: error, promptLength: prompt.length, operation: 'generateDocAdvanced' }, 'Generate advanced doc error');
+      const promptLength = payload?.prompt ? payload.prompt.length : 0;
+      logger.error({ err: error, promptLength, operation: 'generateDocAdvanced' }, 'Generate advanced doc error');
       return ResponseBuilder.error(
         'generate_doc_advanced_failed',
         error.response?.data?.detail || 'Failed to generate advanced Word document'
@@ -386,11 +459,9 @@ export class PDFReadService {
   /**
    * Gelişmiş PowerPoint belgesi oluşturur
    */
-  static async generatePPTAdvanced(prompt: string): Promise<StandardResponse<any>> {
+  static async generatePPTAdvanced(payload: PPTAdvancedPayload): Promise<StandardResponse<any>> {
     try {
-      const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-ppt-advanced`, {
-        prompt
-      }, {
+      const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-ppt-advanced`, payload, {
         headers: {
           'Content-Type': 'application/json',
           ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -400,7 +471,8 @@ export class PDFReadService {
 
       return ResponseBuilder.success(response.data, 'Advanced PowerPoint document generated successfully');
     } catch (error: any) {
-      logger.error({ err: error, promptLength: prompt.length, operation: 'generatePPTAdvanced' }, 'Generate advanced PPT error');
+      const promptLength = payload?.prompt ? payload.prompt.length : 0;
+      logger.error({ err: error, promptLength, operation: 'generatePPTAdvanced' }, 'Generate advanced PPT error');
       return ResponseBuilder.error(
         'generate_ppt_advanced_failed',
         error.response?.data?.detail || 'Failed to generate advanced PowerPoint document'

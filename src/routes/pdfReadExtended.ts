@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { PDFReadService } from '../services/pdfReadService';
+import { PDFReadService, PPTAdvancedPayload, DocAdvancedPayload } from '../services/pdfReadService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
 import { validate, pdfReadSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
@@ -152,20 +152,22 @@ export function createPDFReadExtendedRouter(): Router {
   r.post('/generate/doc-advanced',
     authRateLimits.general,
     authenticateToken,
-    validate(pdfReadSchemas.generateDoc),
+    validate(pdfReadSchemas.generateDocAdvanced),
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
-        const { prompt } = req.body;
+        const payload = req.body as DocAdvancedPayload;
+        const { prompt } = payload;
+        const promptLength = prompt?.length ?? 0;
 
-        const result = await PDFReadService.generateDocAdvanced(prompt);
+        const result = await PDFReadService.generateDocAdvanced(payload);
 
         // Log the action
         await auditService.logUserAction(
           authReq.user!.id,
           'pdf_generate_doc_advanced',
           {
-            promptLength: prompt.length,
+            promptLength,
             success: result.success
           }
         );
@@ -189,20 +191,22 @@ export function createPDFReadExtendedRouter(): Router {
   r.post('/generate/ppt-advanced',
     authRateLimits.general,
     authenticateToken,
-    validate(pdfReadSchemas.generateDoc),
+    validate(pdfReadSchemas.generatePPTAdvanced),
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
-        const { prompt } = req.body;
+        const payload = req.body as PPTAdvancedPayload;
+        const { prompt } = payload;
+        const promptLength = prompt?.length ?? 0;
 
-        const result = await PDFReadService.generatePPTAdvanced(prompt);
+        const result = await PDFReadService.generatePPTAdvanced(payload);
 
         // Log the action
         await auditService.logUserAction(
           authReq.user!.id,
           'pdf_generate_ppt_advanced',
           {
-            promptLength: prompt.length,
+            promptLength,
             success: result.success
           }
         );
