@@ -506,7 +506,6 @@ export class PDFReadService {
   static async generateDocAdvanced(payload: DocAdvancedPayload): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/generate-doc-advanced', payload, {
-      const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-doc-advanced`, payload, {
         headers: {
           'Content-Type': 'application/json',
           ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -531,7 +530,6 @@ export class PDFReadService {
   static async generatePPTAdvanced(payload: PPTAdvancedPayload): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/generate-ppt-advanced', payload, {
-      const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-ppt-advanced`, payload, {
         headers: {
           'Content-Type': 'application/json',
           ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
