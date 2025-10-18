@@ -38,6 +38,7 @@ export const config = {
     baseUrl: process.env.API_BASE_URL || 'https://google-auth-e4er.onrender.com',
     pdfRead: {
       baseUrl: process.env.PDFREAD_BASE_URL || 'https://avenia.onrender.com',
+      fallbackBaseUrl: process.env.PDFREAD_FALLBACK_BASE_URL || 'https://google-auth-e4er.onrender.com',
       apiKey: process.env.PDFREAD_API_KEY || '',
     },
     openai: {
