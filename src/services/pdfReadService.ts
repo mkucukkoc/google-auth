@@ -531,7 +531,6 @@ export class PDFReadService {
   static async generatePPTAdvanced(payload: PPTAdvancedPayload): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/generate-ppt-advanced', payload, {
-
       const response = await axios.post(`${this.PDFREAD_BASE_URL}/generate-ppt-advanced`, payload, {
         headers: {
           'Content-Type': 'application/json',
@@ -718,7 +717,10 @@ export class PDFReadService {
 
       return ResponseBuilder.success(response.data, 'Video prompt generated successfully');
     } catch (error: any) {
-      logger.error({ err: error, promptLength: prompt.length, operation: 'generateVideoPrompt' }, 'Generate video prompt error');
+      logger.error(
+        { err: error, promptLength: prompt.length, operation: 'generateVideoPrompt' },
+        'Generate video prompt error'
+      );
       return ResponseBuilder.error(
         'generate_video_prompt_failed',
         error.response?.data?.detail || 'Failed to generate video prompt'
@@ -745,7 +747,10 @@ export class PDFReadService {
 
       return ResponseBuilder.success(response.data, 'Question answered with embeddings successfully');
     } catch (error: any) {
-      logger.error({ err: error, questionLength: question.length, chatId, operation: 'askWithEmbeddings' }, 'Ask with embeddings error');
+      logger.error(
+        { err: error, questionLength: question.length, chatId, operation: 'askWithEmbeddings' },
+        'Ask with embeddings error'
+      );
       return ResponseBuilder.error(
         'ask_with_embeddings_failed',
         error.response?.data?.detail || 'Failed to answer question with embeddings'
@@ -1000,7 +1005,16 @@ export class PDFReadService {
 
       return ResponseBuilder.success(response.data, 'File question answered successfully');
     } catch (error: any) {
-      logger.error({ err: error, filename, questionLength: question.length, mimeType, operation: 'askFileQuestion' }, 'Ask file question error');
+      logger.error(
+        {
+          err: error,
+          filename,
+          questionLength: question.length,
+          mimeType,
+          operation: 'askFileQuestion'
+        },
+        'Ask file question error'
+      );
       return ResponseBuilder.error(
         'ask_file_question_failed',
         error.response?.data?.detail || 'Failed to answer file question'
