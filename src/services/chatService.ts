@@ -279,6 +279,8 @@ export class ChatService {
 
         contentParts.push({
           type: 'image_url',
+          image_url: fileUrl
+
           image_url: { url: fileUrl }
         });
 

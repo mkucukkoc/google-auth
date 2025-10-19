@@ -10,7 +10,7 @@ export interface AgentToolDefinition {
 export interface AgentMessageContent {
   type: string;
   text?: string;
-  image_url?: string;
+  image_url?: string | { url?: string } | null;
   [key: string]: any;
 }
 
@@ -250,8 +250,8 @@ export class OpenAIAgentService {
       return { type: 'input_text', text: part.text ?? '' };
     }
 
-    if (part.type === 'image_url') {
-      const imageUrl = typeof part.image_url === 'string' ? part.image_url : part.image_url?.url;
+    if (part.type === 'image_url' || part.type === 'input_image') {
+      const imageUrl = this.extractImageUrl(part);
       if (!imageUrl) {
         return null;
       }
@@ -261,10 +261,6 @@ export class OpenAIAgentService {
           url: imageUrl
         }
       };
-    }
-
-    if (part.type === 'input_image') {
-      return part;
     }
 
     if (part.type === 'output_text' && part.text?.value) {
@@ -286,6 +282,28 @@ export class OpenAIAgentService {
         parameters: tool.parameters
       }
     }));
+  }
+
+  private static extractImageUrl(part: AgentMessageContent): string | undefined {
+    if (!part) {
+      return undefined;
+    }
+
+    const rawUrl = part.image_url;
+
+    if (!rawUrl) {
+      return undefined;
+    }
+
+    if (typeof rawUrl === 'string') {
+      return rawUrl;
+    }
+
+    if (typeof rawUrl === 'object') {
+      return rawUrl.url;
+    }
+
+    return undefined;
   }
 
   private static extractOutputText(response: any): string | undefined {
