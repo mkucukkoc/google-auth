@@ -223,20 +223,20 @@ export class OpenAIAgentService {
 
         return {
           role: message.role,
-          content: content.length > 0 ? content : [{ type: 'text', text: '' }]
+          content: content.length > 0 ? content : [{ type: 'input_text', text: '' }]
         };
       }
 
       if (typeof message.content === 'string') {
         return {
           role: message.role,
-          content: [{ type: 'text', text: message.content }]
+          content: [{ type: 'input_text', text: message.content }]
         };
       }
 
       return {
         role: message.role,
-        content: []
+        content: [{ type: 'input_text', text: '' }]
       };
     });
   }
@@ -247,7 +247,7 @@ export class OpenAIAgentService {
     }
 
     if (part.type === 'text' || part.type === 'input_text') {
-      return { type: 'text', text: part.text ?? '' };
+      return { type: 'input_text', text: part.text ?? '' };
     }
 
     if (part.type === 'image_url') {
@@ -266,7 +266,7 @@ export class OpenAIAgentService {
     }
 
     return {
-      type: 'text',
+      type: 'input_text',
       text: part.text || ''
     };
   }
