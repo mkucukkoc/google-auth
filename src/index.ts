@@ -290,6 +290,9 @@ const startServer = async () => {
   }
 };
 
+// Export app for testing
+export { app };
+
 // Start the server
 startServer().catch(err => {
   logger.error({ error: err }, 'Failed to start server');
