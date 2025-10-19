@@ -1,4 +1,5 @@
 import axios from 'axios';
+import FormData from 'form-data';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { config } from '../config';
@@ -149,21 +150,52 @@ export class PDFReadService {
     return this.requestWithFallback('get', path, null, axiosConfig);
   }
 
+  private static appendFile(
+    formData: FormData,
+    file: Buffer,
+    filename: string,
+    mimeType?: string
+  ) {
+    const options: { filename: string; contentType?: string } = { filename };
+    if (mimeType) {
+      options.contentType = mimeType;
+    }
+    formData.append('file', file, options);
+  }
+
+  private static buildMultipartConfig(formData: FormData, timeout: number) {
+    return {
+      headers: {
+        ...formData.getHeaders(),
+        ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
+      },
+      timeout
+    };
+  }
+
+  private static buildJsonConfig(timeout: number) {
+    return {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
+      },
+      timeout
+    };
+  }
+
   /**
    * PDF dosyasını özetler
    */
   static async summarizePDF(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/summarize-pdf/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 30000 // 30 saniye timeout
-      });
+      const response = await this.postWithFallback(
+        '/summarize-pdf/',
+        formData,
+        this.buildMultipartConfig(formData, 30000)
+      );
 
       logger.info({ filename, fileSize: file.length }, 'PDF summarized successfully');
       return ResponseBuilder.success(response.data, 'PDF summarized successfully');
@@ -190,13 +222,11 @@ export class PDFReadService {
       formData.append('pdf_text', pdfText);
       formData.append('question', question);
 
-      const response = await this.postWithFallback('/ask-pdf-question/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 30000
-      });
+      const response = await this.postWithFallback(
+        '/ask-pdf-question/',
+        formData,
+        this.buildMultipartConfig(formData, 30000)
+      );
 
       logger.info({ 
         questionLength: question.length, 
@@ -223,16 +253,14 @@ export class PDFReadService {
   static async detectAIDocument(file: Buffer, filename: string, mimeType: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename, mimeType);
       formData.append('mime_type', mimeType);
 
-      const response = await this.postWithFallback('/check-ai', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 30000
-      });
+      const response = await this.postWithFallback(
+        '/check-ai',
+        formData,
+        this.buildMultipartConfig(formData, 30000)
+      );
 
       return ResponseBuilder.success(response.data, 'AI document detection completed');
     } catch (error: any) {
@@ -249,15 +277,13 @@ export class PDFReadService {
    */
   static async analyzeImage(imageBase64: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/analyze-image', {
-        image_base64: imageBase64
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/analyze-image',
+        {
+          image_base64: imageBase64
         },
-        timeout: 30000
-      });
+        this.buildJsonConfig(30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Image analysis completed');
     } catch (error: any) {
@@ -275,15 +301,13 @@ export class PDFReadService {
   static async pdfToWord(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/pdf-to-word', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000 // 60 saniye timeout
-      });
+      const response = await this.postWithFallback(
+        '/pdf-to-word',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PDF converted to Word successfully');
     } catch (error: any) {
@@ -301,15 +325,13 @@ export class PDFReadService {
   static async pdfToExcel(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/pdf-to-excel', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      const response = await this.postWithFallback(
+        '/pdf-to-excel',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PDF converted to Excel successfully');
     } catch (error: any) {
@@ -327,15 +349,13 @@ export class PDFReadService {
   static async pdfToPPT(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/pdf-to-ppt', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      const response = await this.postWithFallback(
+        '/pdf-to-ppt',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PDF converted to PPT successfully');
     } catch (error: any) {
@@ -353,15 +373,13 @@ export class PDFReadService {
   static async wordToPDF(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/word-to-pdf', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      const response = await this.postWithFallback(
+        '/word-to-pdf',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Word converted to PDF successfully');
     } catch (error: any) {
@@ -379,15 +397,13 @@ export class PDFReadService {
   static async excelToPDF(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/excel-to-pdf', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      const response = await this.postWithFallback(
+        '/excel-to-pdf',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Excel converted to PDF successfully');
     } catch (error: any) {
@@ -405,15 +421,13 @@ export class PDFReadService {
   static async pptToPDF(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename);
 
-      const response = await this.postWithFallback('/ppt-to-pdf', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      const response = await this.postWithFallback(
+        '/ppt-to-pdf',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PPT converted to PDF successfully');
     } catch (error: any) {
@@ -430,15 +444,13 @@ export class PDFReadService {
    */
   static async generateDoc(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/generate-doc', {
-        prompt
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/generate-doc',
+        {
+          prompt
         },
-        timeout: 60000
-      });
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Word document generated successfully');
     } catch (error: any) {
@@ -455,15 +467,13 @@ export class PDFReadService {
    */
   static async generateExcel(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/generate-excel', {
-        prompt
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/generate-excel',
+        {
+          prompt
         },
-        timeout: 60000
-      });
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Excel document generated successfully');
     } catch (error: any) {
@@ -480,15 +490,13 @@ export class PDFReadService {
    */
   static async generatePPT(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/generate-ppt', {
-        prompt
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/generate-ppt',
+        {
+          prompt
         },
-        timeout: 60000
-      });
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PowerPoint document generated successfully');
     } catch (error: any) {
@@ -505,6 +513,11 @@ export class PDFReadService {
    */
   static async generateDocAdvanced(payload: DocAdvancedPayload): Promise<StandardResponse<any>> {
     try {
+      const response = await this.postWithFallback(
+        '/generate-doc-advanced',
+        payload,
+        this.buildJsonConfig(60000)
+      );
       const response = await this.postWithFallback('/generate-doc-advanced', payload, {
         headers: {
           'Content-Type': 'application/json',
@@ -512,6 +525,7 @@ export class PDFReadService {
         },
         timeout: 60000
       });
+ 
 
       return ResponseBuilder.success(response.data, 'Advanced Word document generated successfully');
     } catch (error: any) {
@@ -529,6 +543,11 @@ export class PDFReadService {
    */
   static async generatePPTAdvanced(payload: PPTAdvancedPayload): Promise<StandardResponse<any>> {
     try {
+      const response = await this.postWithFallback(
+        '/generate-ppt-advanced',
+        payload,
+        this.buildJsonConfig(60000)
+      );
       const response = await this.postWithFallback('/generate-ppt-advanced', payload, {
         headers: {
           'Content-Type': 'application/json',
@@ -553,15 +572,13 @@ export class PDFReadService {
    */
   static async speechToText(audioBase64: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/stt', {
-        base64: audioBase64
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/stt',
+        {
+          base64: audioBase64
         },
-        timeout: 30000
-      });
+        this.buildJsonConfig(30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Speech converted to text successfully');
     } catch (error: any) {
@@ -578,15 +595,13 @@ export class PDFReadService {
    */
   static async textToSpeech(messages: Array<{role: string, content: string}>): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/tts-chat', {
-        messages
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/tts-chat',
+        {
+          messages
         },
-        timeout: 30000
-      });
+        this.buildJsonConfig(30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Text converted to speech successfully');
     } catch (error: any) {
@@ -603,15 +618,13 @@ export class PDFReadService {
    */
   static async imageCaption(imageBase64: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/image-caption', {
-        image_base64: imageBase64
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/image-caption',
+        {
+          image_base64: imageBase64
         },
-        timeout: 30000
-      });
+        this.buildJsonConfig(30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Image caption generated successfully');
     } catch (error: any) {
@@ -628,15 +641,13 @@ export class PDFReadService {
    */
   static async analyzeVideo(videoBase64: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/analyze-video', {
-        video_base64: videoBase64
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/analyze-video',
+        {
+          video_base64: videoBase64
         },
-        timeout: 60000
-      });
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Video analysis completed successfully');
     } catch (error: any) {
@@ -653,15 +664,13 @@ export class PDFReadService {
    */
   static async audioIsolation(audioBase64: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/audio-isolation', {
-        base64: audioBase64
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/audio-isolation',
+        {
+          base64: audioBase64
         },
-        timeout: 60000
-      });
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Audio isolation completed successfully');
     } catch (error: any) {
@@ -678,15 +687,14 @@ export class PDFReadService {
    */
   static async generateVideo(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/generate-video', {
-        prompt
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      // 2 dakika timeout
+      const response = await this.postWithFallback(
+        '/generate-video',
+        {
+          prompt
         },
-        timeout: 120000 // 2 dakika timeout
-      });
+        this.buildJsonConfig(120000)
+      );
 
       return ResponseBuilder.success(response.data, 'Video generated successfully');
     } catch (error: any) {
@@ -703,15 +711,13 @@ export class PDFReadService {
    */
   static async generateVideoPrompt(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/generate-video-prompt', {
-        prompt
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
+      const response = await this.postWithFallback(
+        '/generate-video-prompt',
+        {
+          prompt
         },
-        timeout: 30000
-      });
+        this.buildJsonConfig(30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Video prompt generated successfully');
     } catch (error: any) {
@@ -735,13 +741,11 @@ export class PDFReadService {
       formData.append('question', question);
       formData.append('chat_id', chatId);
 
-      const response = await this.postWithFallback('/ask-with-embeddings/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 30000
-      });
+      const response = await this.postWithFallback(
+        '/ask-with-embeddings/',
+        formData,
+        this.buildMultipartConfig(formData, 30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Question answered with embeddings successfully');
     } catch (error: any) {
@@ -765,13 +769,11 @@ export class PDFReadService {
       formData.append('query', query);
       formData.append('chat_id', chatId);
 
-      const response = await this.postWithFallback('/search-docs', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 30000
-      });
+      const response = await this.postWithFallback(
+        '/search-docs',
+        formData,
+        this.buildMultipartConfig(formData, 30000)
+      );
 
       return ResponseBuilder.success(response.data, 'Document search completed successfully');
     } catch (error: any) {
@@ -790,13 +792,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-pdf-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PDF URL summarized successfully');
     } catch (error: any) {
@@ -815,13 +813,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-word-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Word URL summarized successfully');
     } catch (error: any) {
@@ -840,13 +834,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-excel-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Excel URL summarized successfully');
     } catch (error: any) {
@@ -865,13 +855,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-ppt-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'PPT URL summarized successfully');
     } catch (error: any) {
@@ -890,13 +876,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-html-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'HTML URL summarized successfully');
     } catch (error: any) {
@@ -915,13 +897,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-json-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'JSON URL summarized successfully');
     } catch (error: any) {
@@ -940,13 +918,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-csv-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'CSV URL summarized successfully');
     } catch (error: any) {
@@ -965,13 +939,9 @@ export class PDFReadService {
     try {
       const response = await this.postWithFallback('/summarize-txt-url/', {
         url
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'TXT URL summarized successfully');
     } catch (error: any) {
@@ -989,17 +959,15 @@ export class PDFReadService {
   static async askFileQuestion(file: Buffer, filename: string, question: string, mimeType: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
-      formData.append('file', new Blob([file.buffer as ArrayBuffer]), filename);
+      this.appendFile(formData, file, filename, mimeType);
       formData.append('question', question);
       formData.append('mime_type', mimeType);
 
-      const response = await this.postWithFallback('/ask-file-question/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      const response = await this.postWithFallback(
+        '/ask-file-question/',
+        formData,
+        this.buildMultipartConfig(formData, 60000)
+      );
 
       return ResponseBuilder.success(response.data, 'File question answered successfully');
     } catch (error: any) {
@@ -1028,13 +996,9 @@ export class PDFReadService {
       const response = await this.postWithFallback('/export-chat', {
         chat_id: chatId,
         format
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
+      },
+        this.buildJsonConfig(60000)
+      );
 
       return ResponseBuilder.success(response.data, 'Chat exported successfully');
     } catch (error: any) {

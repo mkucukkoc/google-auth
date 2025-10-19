@@ -28,12 +28,8 @@ module.exports = {
   },
   setupFilesAfterEnv: ['<rootDir>/test/setup.js'],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
-    '^pdf-parse$': '<rootDir>/test/__mocks__/pdf-parse.js'
+    '^@/(.*)$': '<rootDir>/src/$1'
   },
-  transformIgnorePatterns: [
-    'node_modules/(?!(pdfjs-dist)/)'
-  ],
   testTimeout: 10000,
   verbose: true,
   forceExit: true,

@@ -60,7 +60,6 @@ import { createPDFReadExtendedRouter } from './routes/pdfReadExtended';
 import { createPDFSummaryRouter } from './routes/pdfSummary';
 import { createChatRouter } from './routes/chat';
 import { createPresentationRouter } from './routes/presentation';
-import { createFileUploadRouter } from './routes/fileUpload';
 import notificationRouter from './routes/notifications';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
@@ -183,7 +182,6 @@ const startServer = async () => {
     app.use(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter());
     app.use(`/api/${API_VERSION}/chat`, createChatRouter());
     app.use(`/api/${API_VERSION}/presentation`, createPresentationRouter());
-    app.use(`/api/${API_VERSION}/upload`, createFileUploadRouter());
 
     // Legacy routes (backward compatibility)
     app.use('/auth', createAuthRouter());
@@ -195,7 +193,6 @@ const startServer = async () => {
     app.use('/pdfread', createPDFReadExtendedRouter());
     app.use('/pdf', createPDFSummaryRouter());
     app.use('/presentation', createPresentationRouter());
-    app.use('/upload', createFileUploadRouter());
     app.use('/notifications', notificationRouter);
 
     // 404 handler (must be before error handler)
@@ -292,9 +289,6 @@ const startServer = async () => {
     process.exit(1);
   }
 };
-
-// Export app for testing
-export { app };
 
 // Start the server
 startServer().catch(err => {

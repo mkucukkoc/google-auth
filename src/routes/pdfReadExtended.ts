@@ -304,61 +304,21 @@ export function createPDFReadExtendedRouter(): Router {
   r.post('/image-caption',
     authRateLimits.general,
     authenticateToken,
+    validate(pdfReadSchemas.analyzeImage),
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
-        const { imageBase64, fileUrl, prompt, chatId } = req.body;
+        const { imageBase64 } = req.body;
 
-        logger.info({
-          userId: authReq.user!.id,
-          chatId,
-          hasImageBase64: !!imageBase64,
-          hasFileUrl: !!fileUrl,
-          prompt,
-          operation: 'imageCaption'
-        }, 'Image caption request received');
-
-        let imageData = imageBase64;
-
-        // If fileUrl is provided instead of imageBase64, download and convert
-        if (fileUrl && !imageBase64) {
-          try {
-            logger.debug('Downloading image from URL for caption:', { fileUrl });
-            const response = await fetch(fileUrl);
-            if (!response.ok) {
-              throw new Error(`Failed to download image: ${response.statusText}`);
-            }
-            const imageBuffer = await response.arrayBuffer();
-            imageData = Buffer.from(imageBuffer).toString('base64');
-            logger.debug('Image downloaded and converted to base64 for caption');
-          } catch (downloadError) {
-            logger.error('Failed to download image for caption:', { downloadError, fileUrl });
-            return res.status(400).json({
-              success: false,
-              error: 'download_failed',
-              message: 'Failed to download image from URL'
-            });
-          }
-        }
-
-        if (!imageData) {
-          return res.status(400).json({
-            success: false,
-            error: 'no_image_data',
-            message: 'No image data provided (imageBase64 or fileUrl required)'
-          });
-        }
-
-        const result = await PDFReadService.imageCaption(imageData);
+        const result = await PDFReadService.imageCaption(imageBase64);
 
         // Log the action
         await auditService.logUserAction(
           authReq.user!.id,
           'pdf_image_caption',
           {
-            imageSize: imageData.length,
-            success: result.success,
-            source: fileUrl ? 'url' : 'base64'
+            imageSize: imageBase64.length,
+            success: result.success
           }
         );
 
@@ -370,7 +330,6 @@ export function createPDFReadExtendedRouter(): Router {
       } catch (error) {
         logger.error({ err: error, userId: authReq.user!.id, operation: 'imageCaption' }, 'Image caption error');
         res.status(500).json({
-          success: false,
           error: 'internal_error',
           message: 'Failed to generate image caption'
         });

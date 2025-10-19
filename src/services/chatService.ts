@@ -2,7 +2,11 @@ import axios from 'axios';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { admin, db, FieldValue } from '../firebase';
-import { OpenAIAgentService } from './openAIAgentService';
+import {
+  OpenAIAgentService,
+  AgentMessage,
+  AgentMessageContent
+} from './openAIAgentService';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -70,13 +74,17 @@ export class ChatService {
 
       // AI detection kontrolü
       const isAIDetectionRequest = this.isAIDetectionRequest(request.messages);
-      
+
       // Image kontrolü - daha esnek
-      const hasImageInMessages = request.messages.some(msg => 
-        msg.content.includes('[Dosya Bağlantısı]') || 
-        msg.fileUrl || 
-        request.imageFileUrl
-      );
+      const hasImageInMessages =
+        request.messages.some(msg => {
+          const inlineMatch = msg.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
+          if (inlineMatch?.[1]) {
+            return true;
+          }
+
+          return Boolean(this.normalizeImageUrl(msg.fileUrl));
+        }) || Boolean(this.normalizeImageUrl(request.imageFileUrl));
       
       if (isAIDetectionRequest && (request.hasImage || hasImageInMessages)) {
         logger.info({ 
@@ -109,23 +117,35 @@ export class ChatService {
       // Mesajları formatla
       const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
       
-      logger.info({ 
+      logger.info({
         requestId,
         formattedMessagesCount: formattedMessages.length,
         hasArrayContent: formattedMessages.some(m => Array.isArray(m.content)),
         formattedMessages: formattedMessages.map((msg, index) => ({
           index,
           role: msg.role,
-          contentType: Array.isArray(msg.content) ? 'multimodal' : 'text',
-          contentLength: Array.isArray(msg.content) ? 
-            msg.content.reduce((total: number, part: any) => total + (part.text?.length || 0), 0) : 
-            msg.content.length,
-          contentPreview: Array.isArray(msg.content) ? 
-            msg.content.map((part: any) => part.text || `[${part.type}]`).join(' ') :
-            msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : ''),
-          hasImage: Array.isArray(msg.content) && msg.content.some((part: any) => part.type === 'image_url')
+          contentType: Array.isArray(msg.content)
+            ? 'multimodal'
+            : typeof msg.content === 'string'
+              ? 'text'
+              : 'empty',
+          contentLength: Array.isArray(msg.content)
+            ? msg.content.reduce((total: number, part: AgentMessageContent) => total + (part.text?.length || 0), 0)
+            : typeof msg.content === 'string'
+              ? msg.content.length
+              : 0,
+          contentPreview: Array.isArray(msg.content)
+            ? msg.content
+              .map((part: AgentMessageContent) => part.text || `[${part.type}]`)
+              .join(' ')
+            : typeof msg.content === 'string'
+              ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '')
+              : '',
+          hasImage: Array.isArray(msg.content) && msg.content.some((part: AgentMessageContent) =>
+            part.type === 'input_image' || part.type === 'image_url'
+          )
         })),
-        operation: 'messageFormatting' 
+        operation: 'messageFormatting'
       }, 'Messages formatted for OpenAI API');
 
       // Agent functions (PDF, Excel, Word işlemleri)
@@ -255,18 +275,45 @@ export class ChatService {
   /**
    * Mesajları OpenAI formatına çevir
    */
-  private static async formatMessages(messages: ChatMessage[], imageFileUrl?: string): Promise<any[]> {
-    const formattedMessages = [];
-    
-    for (const msg of messages) {
-      // Dosya bağlantısı kontrolü
-      const match = msg.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
-      const fileUrl = match?.[1]?.trim() || imageFileUrl;
+  private static async formatMessages(
+    messages: ChatMessage[],
+    imageFileUrl?: string
+  ): Promise<AgentMessage[]> {
+    const formattedMessages: AgentMessage[] = [];
 
-      // Görsel kontrolü
-      const isImage = fileUrl && fileUrl.match(/\.(jpeg|jpg|png|gif|webp)/i);
+    for (const msg of messages) {
+      // Inline formatta ("[Dosya Bağlantısı]: <url>") gönderilen görsel linkini yakala
+      const inlineUrlCandidate = this.extractInlineImageUrl(msg.content);
+      // Yakaladığımız veya doğrudan gelen URL'leri tek formatta normalize et
+      const inlineUrl = this.normalizeImageUrl(inlineUrlCandidate);
+      const messageLevelUrl = this.normalizeImageUrl(msg.fileUrl);
+      const fallbackUrl = this.normalizeImageUrl(imageFileUrl);
+      const fileUrl = inlineUrl || messageLevelUrl || fallbackUrl;
+
+      // Seçilen URL'nin gerçekten görsel olup olmadığını teyit et
+      const isImage = this.isImageUrl(fileUrl);
 
       if (fileUrl && isImage) {
+        // Kullanıcı mesajındaki görsel referansını temizleyip sadece açıklama metnini bırak
+        const textPart = this.stripInlineFileReference(msg.content);
+
+        // OpenAI Responses API'ye hem metin hem de görseli ayrı parçalarda göndereceğiz
+        const contentParts: AgentMessageContent[] = [];
+
+        if (textPart) {
+          // Açıklama metnini `input_text` tipinde ekle
+          contentParts.push({ type: 'input_text', text: textPart });
+        }
+
+        if (fileUrl) {
+          // Normalize edilmiş URL'yi `input_image` tipinde gönder
+          contentParts.push({
+            type: 'input_image',
+            image_url: fileUrl
+          });
+        }
+
+
         const parts = msg.content.split('[Dosya Bağlantısı]:');
         const textPart = (parts[0] || '').trim();
 
@@ -289,11 +336,98 @@ export class ChatService {
           content: contentParts
         });
       } else {
+        // Görsel bulunmadığında mesajı olduğu gibi OpenAI'ye yönlendir
         formattedMessages.push({ role: msg.role, content: msg.content });
       }
     }
 
     return formattedMessages;
+  }
+
+  private static normalizeImageUrl(raw?: unknown): string | undefined {
+    if (!raw) {
+      return undefined;
+    }
+
+    if (typeof raw === 'string') {
+      // String olarak gelirse baştaki/sondaki boşlukları temizle
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    if (Array.isArray(raw)) {
+      // Dizi halinde gelirse ilk geçerli URL'yi bul
+      for (const entry of raw) {
+        const normalized = this.normalizeImageUrl(entry);
+        if (normalized) {
+          return normalized;
+        }
+      }
+      return undefined;
+    }
+
+    if (typeof raw === 'object') {
+      // { url: "..." } gibi nesneleri işle
+      const possibleUrl = (raw as { url?: unknown }).url;
+      if (typeof possibleUrl === 'string') {
+        const trimmed = possibleUrl.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      }
+
+      // { image_url: "..." } ya da { image_url: { url: "..." } } yapılarını ele al
+      const imageUrlField = (raw as { image_url?: unknown }).image_url;
+      if (typeof imageUrlField === 'string') {
+        const trimmed = imageUrlField.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      }
+
+      if (typeof imageUrlField === 'object') {
+        return this.normalizeImageUrl(imageUrlField);
+      }
+
+      // CamelCase yazılmış alternatif anahtarları da destekle
+      const camelCaseImageUrl = (raw as { imageUrl?: unknown }).imageUrl;
+      if (typeof camelCaseImageUrl === 'string') {
+        const trimmed = camelCaseImageUrl.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      }
+
+      if (typeof camelCaseImageUrl === 'object') {
+        return this.normalizeImageUrl(camelCaseImageUrl);
+      }
+    }
+
+    return undefined;
+  }
+
+  private static extractInlineImageUrl(content: string): string | undefined {
+    if (!content) {
+      return undefined;
+    }
+
+    // Markdown benzeri "[Dosya Bağlantısı]: <url>" kalıbını eşleştir
+    const match = content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/i);
+    return match?.[1];
+  }
+
+  private static stripInlineFileReference(content: string): string {
+    if (!content) {
+      return '';
+    }
+
+    // Mesaj metninden görsel referansını çıkartarak sadece açıklamayı bırak
+    const withoutReference = content.replace(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/gi, '').trim();
+
+    return withoutReference;
+  }
+
+  private static isImageUrl(url?: string): boolean {
+    if (!url) {
+      return false;
+    }
+
+    // Uzantı bazlı basit doğrulama ile görsel olup olmadığını kontrol et
+    return /(\.)(jpeg|jpg|png|gif|webp|bmp|heic|heif|tif|tiff)(\?|$)/i.test(url);
   }
 
   /**

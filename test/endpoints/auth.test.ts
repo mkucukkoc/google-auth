@@ -23,14 +23,7 @@ describe('🔐 Auth Endpoints - Comprehensive Test Suite', () => {
           email: 'test@example.com',
           password: 'TestPassword123!',
           firstName: 'Test',
-          lastName: 'User',
-          device: {
-            deviceId: 'test-device-123',
-            deviceType: 'mobile',
-            os: 'iOS',
-            osVersion: '15.0',
-            appVersion: '1.0.0'
-          }
+          lastName: 'User'
         },
         expectedStatus: 201,
         shouldSucceed: true
@@ -41,14 +34,7 @@ describe('🔐 Auth Endpoints - Comprehensive Test Suite', () => {
           email: 'invalid-email',
           password: 'TestPassword123!',
           firstName: 'Test',
-          lastName: 'User',
-          device: {
-            deviceId: 'test-device-123',
-            deviceType: 'mobile',
-            os: 'iOS',
-            osVersion: '15.0',
-            appVersion: '1.0.0'
-          }
+          lastName: 'User'
         },
         expectedStatus: 400,
         shouldSucceed: false
