@@ -265,6 +265,10 @@ export class OpenAIAgentService {
       return part;
     }
 
+    if (part.type === 'output_text' && part.text?.value) {
+      return { type: 'output_text', text: { value: part.text.value } };
+    }
+
     return {
       type: 'input_text',
       text: part.text || ''
