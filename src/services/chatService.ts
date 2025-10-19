@@ -2,6 +2,7 @@ import axios from 'axios';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { admin, db, FieldValue } from '../firebase';
+import { OpenAIAgentService } from './openAIAgentService';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -142,111 +143,96 @@ export class ChatService {
         operation: 'agentFunctions' 
       }, 'Agent functions prepared for OpenAI');
 
-      // OpenAI API'ye istek gönder
-      const response = await this.callOpenAI(requestId, modelToUse, formattedMessages, agentFunctions);
-      
-      logger.info({ 
-        requestId,
-        hasResponse: !!response?.data,
-        choicesCount: response?.data?.choices?.length,
-        responseStatus: response?.status,
-        responseStatusText: response?.statusText,
-        responseHeaders: {
-          contentType: response?.headers?.['content-type'],
-          openaiVersion: response?.headers?.['openai-version'],
-          requestId: response?.headers?.['x-request-id']
-        },
-        operation: 'openaiResponse' 
-      }, 'OpenAI API response received');
+      const functionMap = this.getFunctionMap(request);
 
-      const reply = response.data.choices?.[0]?.message;
-      
-      if (!reply) {
-        logger.error({
-          requestId,
-          responseData: response.data,
-          operation: 'openaiResponse'
-        }, 'No message in OpenAI response');
-        throw new Error('No response from OpenAI');
-      }
+      const agentResult = await OpenAIAgentService.runAgent({
+        requestId,
+        model: modelToUse,
+        messages: formattedMessages,
+        tools: agentFunctions,
+        executeTool: async (name: string, args: any) => {
+          const toolFn = functionMap[name];
+          if (!toolFn) {
+            throw new Error(`Tool not found: ${name}`);
+          }
+          return await toolFn(args);
+        }
+      });
+
+      const rawAgentResponse = agentResult.rawResponse;
 
       logger.info({
         requestId,
-        replyRole: reply.role,
-        hasContent: !!reply.content,
-        contentLength: reply.content?.length || 0,
-        contentPreview: reply.content ? reply.content.substring(0, 200) + (reply.content.length > 200 ? '...' : '') : 'none',
-        hasToolCalls: !!reply.tool_calls,
-        toolCallsCount: reply.tool_calls?.length || 0,
-        toolCalls: reply.tool_calls?.map((tc: any) => ({
-          id: tc.id,
-          type: tc.type,
-          functionName: tc.function?.name,
-          functionArguments: tc.function?.arguments
-        })) || [],
-        operation: 'openaiMessageAnalysis'
-      }, 'OpenAI message analysis completed');
+        responseId: rawAgentResponse?.id,
+        responseStatus: rawAgentResponse?.status,
+        model: rawAgentResponse?.model || modelToUse,
+        hasOutput: !!agentResult.outputText,
+        toolCallsCount: agentResult.toolCalls.length,
+        operation: 'openaiAgentAnalysis'
+      }, 'OpenAI agent response received');
 
-      // Tool calls varsa işle
-      if (reply.tool_calls?.length > 0) {
-        logger.info({ 
+      if (agentResult.toolCalls.length > 0) {
+        logger.info({
           requestId,
-          toolCallsCount: reply.tool_calls.length,
-          toolCalls: reply.tool_calls.map((tc: any) => ({
-            id: tc.id,
-            functionName: tc.function?.name,
-            functionArguments: tc.function?.arguments
+          toolCallsCount: agentResult.toolCalls.length,
+          toolCalls: agentResult.toolCalls.map(call => ({
+            id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+            hasResult: call.result !== undefined
           })),
-          operation: 'toolCalls' 
-        }, 'Tool calls detected, processing...');
-
-        const toolResult = await this.processToolCalls(requestId, reply.tool_calls, request);
-        
-        if (toolResult.finalMessage) {
-          logger.info({
-            requestId,
-            finalMessageRole: toolResult.finalMessage.role,
-            finalMessageLength: toolResult.finalMessage.content.length,
-            finalMessagePreview: toolResult.finalMessage.content.substring(0, 200) + '...',
-            processingTimeMs: Date.now() - startTime,
-            operation: 'toolCallsCompleted'
-          }, 'Tool calls processing completed successfully');
-
-          return ResponseBuilder.success({
-            message: toolResult.finalMessage,
-            toolCalls: reply.tool_calls
-          }, 'Message processed with tools');
-        }
+          operation: 'openaiAgentToolSummary'
+        }, 'OpenAI agent tool calls executed');
       }
 
-      // Direkt cevap
-      if (reply.content) {
-        const assistantMessage: ChatMessage = {
-          role: 'assistant',
-          content: reply.content.trim(),
-          timestamp: FieldValue.serverTimestamp()
-        };
-
-        logger.info({ 
+      if (!agentResult.outputText) {
+        logger.error({
           requestId,
-          contentLength: assistantMessage.content.length,
-          contentPreview: assistantMessage.content.substring(0, 200) + (assistantMessage.content.length > 200 ? '...' : ''),
-          processingTimeMs: Date.now() - startTime,
-          operation: 'directResponse' 
-        }, 'Direct assistant response received and processed');
-
-        return ResponseBuilder.success({
-          message: assistantMessage
-        }, 'Message processed successfully');
+          rawAgentResponse,
+          operation: 'openaiAgentAnalysis'
+        }, 'No content in OpenAI agent response');
+        throw new Error('No content generated from OpenAI agent');
       }
 
-      logger.error({
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: agentResult.outputText.trim(),
+        timestamp: FieldValue.serverTimestamp()
+      };
+
+      const responseToolCalls = agentResult.toolCalls.map(call => ({
+        id: call.id,
+        type: 'function',
+        function: {
+          name: call.name,
+          arguments: JSON.stringify(call.arguments ?? {})
+        },
+        result: call.result
+      }));
+
+      const processingTime = Date.now() - startTime;
+
+      logger.info({
         requestId,
-        reply,
-        processingTimeMs: Date.now() - startTime,
-        operation: 'openaiResponse'
-      }, 'No content in OpenAI response');
-      throw new Error('No content in OpenAI response');
+        contentLength: assistantMessage.content.length,
+        contentPreview: assistantMessage.content.substring(0, 200) + (assistantMessage.content.length > 200 ? '...' : ''),
+        processingTimeMs: processingTime,
+        toolCallsCount: responseToolCalls.length,
+        operation: 'openaiAgentResponse'
+      }, 'Assistant response prepared');
+
+      const responsePayload: any = {
+        message: assistantMessage
+      };
+
+      if (responseToolCalls.length > 0) {
+        responsePayload.toolCalls = responseToolCalls;
+      }
+
+      return ResponseBuilder.success(
+        responsePayload,
+        responseToolCalls.length > 0 ? 'Message processed with tools' : 'Message processed successfully'
+      );
 
     } catch (error: any) {
       const processingTime = Date.now() - startTime;
@@ -346,320 +332,6 @@ export class ChatService {
   }
 
   /**
-   * OpenAI API'ye istek gönder
-   */
-  private static async callOpenAI(requestId: string, model: string, messages: any[], tools: any[]): Promise<any> {
-    const startTime = Date.now();
-    const requestData = {
-      model,
-      messages,
-      tools: tools.map(fn => ({
-        type: 'function',
-        function: {
-          name: fn.name,
-          description: fn.description,
-          parameters: fn.parameters
-        }
-      })),
-      tool_choice: 'auto'
-    };
-
-    // Request size kontrolü
-    const requestSize = JSON.stringify(requestData).length;
-    const maxRequestSize = 200000; // 200KB limit
-    
-    if (requestSize > maxRequestSize) {
-      logger.warn({
-        requestId,
-        requestSize,
-        maxRequestSize,
-        messageCount: messages.length,
-        operation: 'openaiRequestSizeCheck'
-      }, 'Request size exceeds limit, truncating messages');
-      
-      // Mesajları kısalt
-      const truncatedMessages = messages.map(msg => {
-        if (typeof msg.content === 'string' && msg.content.length > 3000) {
-          return {
-            ...msg,
-            content: msg.content.substring(0, 3000) + '... [truncated]'
-          };
-        } else if (Array.isArray(msg.content)) {
-          // Multimodal content için text kısmını kısalt
-          const truncatedContent = msg.content.map((part: any) => {
-            if (part.type === 'text' && part.text && part.text.length > 3000) {
-              return {
-                ...part,
-                text: part.text.substring(0, 3000) + '... [truncated]'
-              };
-            }
-            return part;
-          });
-          return {
-            ...msg,
-            content: truncatedContent
-          };
-        }
-        return msg;
-      });
-      
-      requestData.messages = truncatedMessages;
-    }
-
-    logger.info({ 
-      requestId,
-      model, 
-      messageCount: messages.length, 
-      toolCount: tools.length,
-      requestData: {
-        model: requestData.model,
-        messageCount: requestData.messages.length,
-        toolCount: requestData.tools.length,
-        toolChoice: requestData.tool_choice,
-        messages: requestData.messages.map((msg, index) => ({
-          index,
-          role: msg.role,
-          contentType: Array.isArray(msg.content) ? 'multimodal' : 'text',
-          contentLength: Array.isArray(msg.content) ? 
-            msg.content.reduce((total: number, part: any) => total + (part.text?.length || 0), 0) : 
-            (msg.content?.length || 0),
-          contentPreview: Array.isArray(msg.content) ? 
-            msg.content.map((part: any) => part.text || `[${part.type}]`).join(' ').substring(0, 100) + '...' :
-            (msg.content ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '') : 'null'),
-          hasImage: Array.isArray(msg.content) && msg.content.some((part: any) => part.type === 'image_url')
-        })),
-        tools: requestData.tools.map(tool => ({
-          type: tool.type,
-          functionName: tool.function.name,
-          functionDescription: tool.function.description
-        }))
-      },
-      operation: 'openaiRequest' 
-    }, 'Sending detailed request to OpenAI API');
-
-    try {
-      const response = await axios.post('https://api.openai.com/v1/chat/completions', requestData, {
-        headers: {
-          'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 60000 // 60 saniye timeout
-      });
-
-      const processingTime = Date.now() - startTime;
-      logger.info({
-        requestId,
-        model,
-        responseStatus: response.status,
-        responseStatusText: response.statusText,
-        responseHeaders: {
-          contentType: response.headers['content-type'],
-          openaiVersion: response.headers['openai-version'],
-          requestId: response.headers['x-request-id'],
-          ratelimitLimit: response.headers['x-ratelimit-limit-requests'],
-          ratelimitRemaining: response.headers['x-ratelimit-remaining-requests'],
-          ratelimitReset: response.headers['x-ratelimit-reset-requests']
-        },
-        responseData: {
-          id: (response.data as any).id,
-          object: (response.data as any).object,
-          created: (response.data as any).created,
-          model: (response.data as any).model,
-          choicesCount: (response.data as any).choices?.length || 0,
-          usage: (response.data as any).usage ? {
-            promptTokens: (response.data as any).usage.prompt_tokens,
-            completionTokens: (response.data as any).usage.completion_tokens,
-            totalTokens: (response.data as any).usage.total_tokens
-          } : null,
-          choices: (response.data as any).choices?.map((choice: any, index: number) => ({
-            index,
-            finishReason: choice.finish_reason,
-            messageRole: choice.message?.role,
-            hasContent: !!choice.message?.content,
-            contentLength: choice.message?.content?.length || 0,
-            contentPreview: choice.message?.content ? 
-              choice.message.content.substring(0, 200) + (choice.message.content.length > 200 ? '...' : '') : 'none',
-            hasToolCalls: !!choice.message?.tool_calls,
-            toolCallsCount: choice.message?.tool_calls?.length || 0
-          })) || []
-        },
-        processingTimeMs: processingTime,
-        operation: 'openaiResponse'
-      }, 'OpenAI API response received with full details');
-
-      return response;
-    } catch (error: any) {
-      const processingTime = Date.now() - startTime;
-      logger.error({
-        requestId,
-        model,
-        requestSize: JSON.stringify(requestData).length,
-        messageCount: messages.length,
-        error: {
-          message: error.message,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data
-        },
-        processingTimeMs: processingTime,
-        operation: 'openaiRequestError'
-      }, 'OpenAI API request failed');
-      
-      throw error;
-    }
-  }
-
-  /**
-   * Tool calls işle
-   */
-  private static async processToolCalls(requestId: string, toolCalls: any[], request: ChatRequest): Promise<{ finalMessage?: ChatMessage }> {
-    const startTime = Date.now();
-    const functionMap = this.getFunctionMap();
-    const toolResponses = [];
-
-    logger.info({
-      requestId,
-      toolCallsCount: toolCalls.length,
-      toolCalls: toolCalls.map(tc => ({
-        id: tc.id,
-        type: tc.type,
-        functionName: tc.function?.name,
-        functionArguments: tc.function?.arguments
-      })),
-      operation: 'toolCallsProcessing'
-    }, 'Starting tool calls processing');
-
-    for (const call of toolCalls) {
-      const toolStartTime = Date.now();
-      const name = call.function.name;
-      const args = JSON.parse(call.function.arguments);
-
-      logger.info({ 
-        requestId,
-        toolId: call.id,
-        toolName: name, 
-        args,
-        operation: 'toolExecution' 
-      }, 'Executing individual tool call');
-
-      let functionResult = null;
-
-      if (functionMap[name]) {
-        try {
-          functionResult = await functionMap[name](args);
-          
-          const toolProcessingTime = Date.now() - toolStartTime;
-          logger.info({ 
-            requestId,
-            toolId: call.id,
-            toolName: name, 
-            success: true,
-            resultType: typeof functionResult,
-            resultKeys: functionResult && typeof functionResult === 'object' ? Object.keys(functionResult) : [],
-            processingTimeMs: toolProcessingTime,
-            operation: 'toolExecution' 
-          }, 'Tool executed successfully');
-        } catch (error: any) {
-          const toolProcessingTime = Date.now() - toolStartTime;
-          logger.error({ 
-            requestId,
-            toolId: call.id,
-            err: error, 
-            toolName: name,
-            processingTimeMs: toolProcessingTime,
-            operation: 'toolExecution' 
-          }, 'Tool execution failed');
-          
-          functionResult = { error: `Tool execution failed: ${error.message}` };
-        }
-      } else {
-        logger.warn({ 
-          requestId,
-          toolId: call.id,
-          toolName: name,
-          operation: 'toolExecution' 
-        }, 'Tool not found in function map');
-        
-        functionResult = { error: `Tool not found: ${name}` };
-      }
-
-      const toolResponse = {
-        tool_call_id: call.id,
-        role: 'tool',
-        content: JSON.stringify(functionResult)
-      };
-
-      toolResponses.push(toolResponse);
-
-      logger.debug({
-        requestId,
-        toolId: call.id,
-        toolName: name,
-        responseLength: toolResponse.content.length,
-        responsePreview: toolResponse.content.substring(0, 200) + (toolResponse.content.length > 200 ? '...' : ''),
-        operation: 'toolResponse'
-      }, 'Tool response prepared');
-    }
-
-    logger.info({
-      requestId,
-      toolResponsesCount: toolResponses.length,
-      totalProcessingTimeMs: Date.now() - startTime,
-      operation: 'toolCallsCompleted'
-    }, 'All tool calls completed, preparing follow-up request');
-
-    // Tool cevaplarını modele geri gönder
-    // Önce orijinal mesajları, sonra assistant'ın tool call'ını, sonra tool cevaplarını ekle
-    const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
-    const followUpMessages = [
-      ...formattedMessages,
-      {
-        role: 'assistant',
-        content: null,
-        tool_calls: toolCalls
-      },
-      ...toolResponses
-    ];
-
-    const followUpResponse = await this.callOpenAI(
-      requestId,
-      request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID,
-      followUpMessages,
-      this.getAgentFunctions()
-    );
-
-    const followUpMessage = followUpResponse.data.choices?.[0]?.message;
-    
-    if (followUpMessage?.content) {
-      logger.info({
-        requestId,
-        finalMessageRole: followUpMessage.role,
-        finalMessageLength: followUpMessage.content.length,
-        finalMessagePreview: followUpMessage.content.substring(0, 200) + '...',
-        totalProcessingTimeMs: Date.now() - startTime,
-        operation: 'toolCallsFinalResponse'
-      }, 'Tool calls processing completed with final response');
-
-      return {
-        finalMessage: {
-          role: 'assistant',
-          content: followUpMessage.content.trim(),
-          timestamp: FieldValue.serverTimestamp()
-        }
-      };
-    }
-
-    logger.warn({
-      requestId,
-      followUpResponse: followUpResponse.data,
-      totalProcessingTimeMs: Date.now() - startTime,
-      operation: 'toolCallsFinalResponse'
-    }, 'Tool calls processing completed but no final message content');
-
-    return {};
-  }
-
-  /**
    * Agent functions listesi
    */
   private static getAgentFunctions(): any[] {
@@ -727,15 +399,18 @@ export class ChatService {
   /**
    * Function map (gerçek implementasyonlar)
    */
-  private static getFunctionMap(): Record<string, Function> {
+  private static getFunctionMap(request?: ChatRequest): Record<string, (args: any) => Promise<any>> {
+    const userId = request?.userId || 'system';
+    const chatId = request?.chatId || 'system';
+
     return {
       summarize_pdf: async (args: any) => {
         // Gerçek PDF özetleme implementasyonu
         const { PDFService } = await import('./pdfService');
         const result = await PDFService.extractAndSummarizePDF({
           fileUrl: args.fileUrl,
-          userId: 'system', // Chat context'ten alınabilir
-          chatId: 'system'  // Chat context'ten alınabilir
+          userId,
+          chatId
         });
         
         if (result.success) {
