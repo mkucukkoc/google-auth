@@ -257,7 +257,9 @@ export class OpenAIAgentService {
       }
       return {
         type: 'input_image',
-        image_url: imageUrl
+        image_url: {
+          url: imageUrl
+        }
       };
     }
 

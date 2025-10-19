@@ -269,39 +269,28 @@ export class ChatService {
       if (fileUrl && isImage) {
         const parts = msg.content.split('[Dosya Bağlantısı]:');
         const textPart = (parts[0] || '').trim();
-        
-        try {
-          // Image URL'ini base64'e çevir
-          const base64Image = await this.convertImageUrlToBase64(fileUrl);
-          
-          formattedMessages.push({
-            role: msg.role,
-            content: [
-              { type: 'text', text: textPart },
-              { 
-                type: 'image_url', 
-                image_url: { url: base64Image } 
-              }
-            ]
-          });
-        } catch (error: any) {
-          logger.error({ 
-            fileUrl, 
-            error: error?.message || 'Unknown error',
-            operation: 'imageConversion' 
-          }, 'Failed to convert image to base64, using text only');
-          
-          // Hata durumunda sadece text olarak gönder
-          formattedMessages.push({
-            role: msg.role,
-            content: msg.content
-          });
+
+        // Görsel OpenAI'ye doğrudan URL olarak iletiliyor
+        const contentParts: any[] = [];
+
+        if (textPart) {
+          contentParts.push({ type: 'text', text: textPart });
         }
+
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: fileUrl }
+        });
+
+        formattedMessages.push({
+          role: msg.role,
+          content: contentParts
+        });
       } else {
         formattedMessages.push({ role: msg.role, content: msg.content });
       }
     }
-    
+
     return formattedMessages;
   }
 
