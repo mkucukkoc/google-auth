@@ -295,6 +295,15 @@ export class ChatService {
 
       if (fileUrl && isImage) {
         // Kullanıcı mesajındaki görsel referansını temizleyip sadece açıklama metnini bırak
+        const cleanedTextPart = this.stripInlineFileReference(msg.content);
+
+        // OpenAI Responses API'ye hem metin hem de görseli ayrı parçalarda göndereceğiz
+        const messageContentParts: AgentMessageContent[] = [];
+
+        if (cleanedTextPart) {
+          // Açıklama metnini `input_text` tipinde ekle
+          messageContentParts.push({ type: 'input_text', text: cleanedTextPart });
+
         const textPart = this.stripInlineFileReference(msg.content);
 
         // OpenAI Responses API'ye hem metin hem de görseli ayrı parçalarda göndereceğiz
@@ -307,6 +316,15 @@ export class ChatService {
 
         if (fileUrl) {
           // Normalize edilmiş URL'yi `input_image` tipinde gönder
+          messageContentParts.push({
+            type: 'input_image',
+            image_url: fileUrl
+          });
+        }
+
+        formattedMessages.push({
+          role: msg.role,
+          content: messageContentParts
           contentParts.push({
             type: 'input_image',
             image_url: fileUrl
@@ -326,6 +344,8 @@ export class ChatService {
 
         contentParts.push({
           type: 'image_url',
+          image_url: fileUrl
+
           image_url: { url: fileUrl }
         });
 
