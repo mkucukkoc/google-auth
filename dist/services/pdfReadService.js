@@ -9,6 +9,47 @@ const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
 class PDFReadService {
+    static getBaseUrls() {
+        const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL].filter((url) => Boolean(url && url.trim()));
+        return [...new Set(urls)];
+    }
+    static async requestWithFallback(method, path, data, axiosConfig) {
+        const baseUrls = this.getBaseUrls();
+        let lastError = null;
+        for (let index = 0; index < baseUrls.length; index += 1) {
+            const baseUrl = baseUrls[index];
+            try {
+                if (method === 'post') {
+                    return await axios_1.default.post(`${baseUrl}${path}`, data, axiosConfig);
+                }
+                return await axios_1.default.get(`${baseUrl}${path}`, axiosConfig);
+            }
+            catch (error) {
+                lastError = error;
+                const status = error?.response?.status;
+                const isLastAttempt = index === baseUrls.length - 1;
+                const shouldRetry = !isLastAttempt && (!status || [404, 500, 502, 503].includes(status));
+                if (!shouldRetry) {
+                    throw error;
+                }
+                logger_1.logger.warn({
+                    baseUrl,
+                    status,
+                    path,
+                    method,
+                    errorMessage: error?.message,
+                    operation: 'pdfread_request_fallback'
+                }, 'Primary PDFRead endpoint failed, retrying with fallback');
+            }
+        }
+        throw lastError;
+    }
+    static postWithFallback(path, data, axiosConfig) {
+        return this.requestWithFallback('post', path, data, axiosConfig);
+    }
+    static getWithFallback(path, axiosConfig) {
+        return this.requestWithFallback('get', path, null, axiosConfig);
+    }
     /**
      * PDF dosyasını özetler
      */
@@ -16,7 +57,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-pdf/`, formData, {
+            const response = await this.postWithFallback('/summarize-pdf/', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -44,7 +85,7 @@ class PDFReadService {
             const formData = new FormData();
             formData.append('pdf_text', pdfText);
             formData.append('question', question);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/ask-pdf-question/`, formData, {
+            const response = await this.postWithFallback('/ask-pdf-question/', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -75,7 +116,7 @@ class PDFReadService {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
             formData.append('mime_type', mimeType);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/check-ai`, formData, {
+            const response = await this.postWithFallback('/check-ai', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -94,7 +135,7 @@ class PDFReadService {
      */
     static async analyzeImage(imageBase64) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/analyze-image`, {
+            const response = await this.postWithFallback('/analyze-image', {
                 image_base64: imageBase64
             }, {
                 headers: {
@@ -117,7 +158,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/pdf-to-word`, formData, {
+            const response = await this.postWithFallback('/pdf-to-word', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -138,7 +179,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/pdf-to-excel`, formData, {
+            const response = await this.postWithFallback('/pdf-to-excel', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -159,7 +200,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/pdf-to-ppt`, formData, {
+            const response = await this.postWithFallback('/pdf-to-ppt', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -180,7 +221,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/word-to-pdf`, formData, {
+            const response = await this.postWithFallback('/word-to-pdf', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -201,7 +242,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/excel-to-pdf`, formData, {
+            const response = await this.postWithFallback('/excel-to-pdf', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -222,7 +263,7 @@ class PDFReadService {
         try {
             const formData = new FormData();
             formData.append('file', new Blob([file.buffer]), filename);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/ppt-to-pdf`, formData, {
+            const response = await this.postWithFallback('/ppt-to-pdf', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -241,7 +282,7 @@ class PDFReadService {
      */
     static async generateDoc(prompt) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-doc`, {
+            const response = await this.postWithFallback('/generate-doc', {
                 prompt
             }, {
                 headers: {
@@ -262,7 +303,7 @@ class PDFReadService {
      */
     static async generateExcel(prompt) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-excel`, {
+            const response = await this.postWithFallback('/generate-excel', {
                 prompt
             }, {
                 headers: {
@@ -283,7 +324,7 @@ class PDFReadService {
      */
     static async generatePPT(prompt) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-ppt`, {
+            const response = await this.postWithFallback('/generate-ppt', {
                 prompt
             }, {
                 headers: {
@@ -302,11 +343,9 @@ class PDFReadService {
     /**
      * Gelişmiş Word belgesi oluşturur
      */
-    static async generateDocAdvanced(prompt) {
+    static async generateDocAdvanced(payload) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-doc-advanced`, {
-                prompt
-            }, {
+            const response = await this.postWithFallback('/generate-doc-advanced', payload, {
                 headers: {
                     'Content-Type': 'application/json',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -316,18 +355,17 @@ class PDFReadService {
             return response_1.ResponseBuilder.success(response.data, 'Advanced Word document generated successfully');
         }
         catch (error) {
-            logger_1.logger.error({ err: error, promptLength: prompt.length, operation: 'generateDocAdvanced' }, 'Generate advanced doc error');
+            const promptLength = payload?.prompt ? payload.prompt.length : 0;
+            logger_1.logger.error({ err: error, promptLength, operation: 'generateDocAdvanced' }, 'Generate advanced doc error');
             return response_1.ResponseBuilder.error('generate_doc_advanced_failed', error.response?.data?.detail || 'Failed to generate advanced Word document');
         }
     }
     /**
      * Gelişmiş PowerPoint belgesi oluşturur
      */
-    static async generatePPTAdvanced(prompt) {
+    static async generatePPTAdvanced(payload) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-ppt-advanced`, {
-                prompt
-            }, {
+            const response = await this.postWithFallback('/generate-ppt-advanced', payload, {
                 headers: {
                     'Content-Type': 'application/json',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -337,7 +375,8 @@ class PDFReadService {
             return response_1.ResponseBuilder.success(response.data, 'Advanced PowerPoint document generated successfully');
         }
         catch (error) {
-            logger_1.logger.error({ err: error, promptLength: prompt.length, operation: 'generatePPTAdvanced' }, 'Generate advanced PPT error');
+            const promptLength = payload?.prompt ? payload.prompt.length : 0;
+            logger_1.logger.error({ err: error, promptLength, operation: 'generatePPTAdvanced' }, 'Generate advanced PPT error');
             return response_1.ResponseBuilder.error('generate_ppt_advanced_failed', error.response?.data?.detail || 'Failed to generate advanced PowerPoint document');
         }
     }
@@ -346,7 +385,7 @@ class PDFReadService {
      */
     static async speechToText(audioBase64) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/stt`, {
+            const response = await this.postWithFallback('/stt', {
                 base64: audioBase64
             }, {
                 headers: {
@@ -367,7 +406,7 @@ class PDFReadService {
      */
     static async textToSpeech(messages) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/tts-chat`, {
+            const response = await this.postWithFallback('/tts-chat', {
                 messages
             }, {
                 headers: {
@@ -388,7 +427,7 @@ class PDFReadService {
      */
     static async imageCaption(imageBase64) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/image-caption`, {
+            const response = await this.postWithFallback('/image-caption', {
                 image_base64: imageBase64
             }, {
                 headers: {
@@ -409,7 +448,7 @@ class PDFReadService {
      */
     static async analyzeVideo(videoBase64) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/analyze-video`, {
+            const response = await this.postWithFallback('/analyze-video', {
                 video_base64: videoBase64
             }, {
                 headers: {
@@ -430,7 +469,7 @@ class PDFReadService {
      */
     static async audioIsolation(audioBase64) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/audio-isolation`, {
+            const response = await this.postWithFallback('/audio-isolation', {
                 base64: audioBase64
             }, {
                 headers: {
@@ -451,7 +490,7 @@ class PDFReadService {
      */
     static async generateVideo(prompt) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-video`, {
+            const response = await this.postWithFallback('/generate-video', {
                 prompt
             }, {
                 headers: {
@@ -472,7 +511,7 @@ class PDFReadService {
      */
     static async generateVideoPrompt(prompt) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/generate-video-prompt`, {
+            const response = await this.postWithFallback('/generate-video-prompt', {
                 prompt
             }, {
                 headers: {
@@ -496,7 +535,7 @@ class PDFReadService {
             const formData = new FormData();
             formData.append('question', question);
             formData.append('chat_id', chatId);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/ask-with-embeddings/`, formData, {
+            const response = await this.postWithFallback('/ask-with-embeddings/', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -518,7 +557,7 @@ class PDFReadService {
             const formData = new FormData();
             formData.append('query', query);
             formData.append('chat_id', chatId);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/search-docs`, formData, {
+            const response = await this.postWithFallback('/search-docs', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -537,7 +576,7 @@ class PDFReadService {
      */
     static async summarizePDFUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-pdf-url/`, {
+            const response = await this.postWithFallback('/summarize-pdf-url/', {
                 url
             }, {
                 headers: {
@@ -558,7 +597,7 @@ class PDFReadService {
      */
     static async summarizeWordUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-word-url/`, {
+            const response = await this.postWithFallback('/summarize-word-url/', {
                 url
             }, {
                 headers: {
@@ -579,7 +618,7 @@ class PDFReadService {
      */
     static async summarizeExcelUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-excel-url/`, {
+            const response = await this.postWithFallback('/summarize-excel-url/', {
                 url
             }, {
                 headers: {
@@ -600,7 +639,7 @@ class PDFReadService {
      */
     static async summarizePPTUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-ppt-url/`, {
+            const response = await this.postWithFallback('/summarize-ppt-url/', {
                 url
             }, {
                 headers: {
@@ -621,7 +660,7 @@ class PDFReadService {
      */
     static async summarizeHTMLUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-html-url/`, {
+            const response = await this.postWithFallback('/summarize-html-url/', {
                 url
             }, {
                 headers: {
@@ -642,7 +681,7 @@ class PDFReadService {
      */
     static async summarizeJSONUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-json-url/`, {
+            const response = await this.postWithFallback('/summarize-json-url/', {
                 url
             }, {
                 headers: {
@@ -663,7 +702,7 @@ class PDFReadService {
      */
     static async summarizeCSVUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-csv-url/`, {
+            const response = await this.postWithFallback('/summarize-csv-url/', {
                 url
             }, {
                 headers: {
@@ -684,7 +723,7 @@ class PDFReadService {
      */
     static async summarizeTXTUrl(url) {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/summarize-txt-url/`, {
+            const response = await this.postWithFallback('/summarize-txt-url/', {
                 url
             }, {
                 headers: {
@@ -709,7 +748,7 @@ class PDFReadService {
             formData.append('file', new Blob([file.buffer]), filename);
             formData.append('question', question);
             formData.append('mime_type', mimeType);
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/ask-file-question/`, formData, {
+            const response = await this.postWithFallback('/ask-file-question/', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
@@ -719,7 +758,13 @@ class PDFReadService {
             return response_1.ResponseBuilder.success(response.data, 'File question answered successfully');
         }
         catch (error) {
-            logger_1.logger.error({ err: error, filename, questionLength: question.length, mimeType, operation: 'askFileQuestion' }, 'Ask file question error');
+            logger_1.logger.error({
+                err: error,
+                filename,
+                questionLength: question.length,
+                mimeType,
+                operation: 'askFileQuestion'
+            }, 'Ask file question error');
             return response_1.ResponseBuilder.error('ask_file_question_failed', error.response?.data?.detail || 'Failed to answer file question');
         }
     }
@@ -728,7 +773,7 @@ class PDFReadService {
      */
     static async exportChat(chatId, format = 'pdf') {
         try {
-            const response = await axios_1.default.post(`${this.PDFREAD_BASE_URL}/export-chat`, {
+            const response = await this.postWithFallback('/export-chat', {
                 chat_id: chatId,
                 format
             }, {
@@ -750,7 +795,7 @@ class PDFReadService {
      */
     static async healthCheck() {
         try {
-            const response = await axios_1.default.get(`${this.PDFREAD_BASE_URL}/healthz`, {
+            const response = await this.getWithFallback('/healthz', {
                 timeout: 10000
             });
             return response_1.ResponseBuilder.success(response.data, 'PDFRead service is healthy');
@@ -763,4 +808,5 @@ class PDFReadService {
 }
 exports.PDFReadService = PDFReadService;
 PDFReadService.PDFREAD_BASE_URL = config_1.config.api.pdfRead.baseUrl;
+PDFReadService.PDFREAD_FALLBACK_BASE_URL = config_1.config.api.pdfRead.fallbackBaseUrl;
 PDFReadService.PDFREAD_API_KEY = config_1.config.api.pdfRead.apiKey;

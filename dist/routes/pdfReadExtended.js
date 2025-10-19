@@ -119,14 +119,16 @@ function createPDFReadExtendedRouter() {
         }
     });
     // POST /pdfread/generate/doc-advanced
-    r.post('/generate/doc-advanced', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.generateDoc), async (req, res) => {
+    r.post('/generate/doc-advanced', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.generateDocAdvanced), async (req, res) => {
         const authReq = req;
         try {
-            const { prompt } = req.body;
-            const result = await pdfReadService_1.PDFReadService.generateDocAdvanced(prompt);
+            const payload = req.body;
+            const { prompt } = payload;
+            const promptLength = prompt?.length ?? 0;
+            const result = await pdfReadService_1.PDFReadService.generateDocAdvanced(payload);
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_generate_doc_advanced', {
-                promptLength: prompt.length,
+                promptLength,
                 success: result.success
             });
             if (result.success) {
@@ -145,14 +147,16 @@ function createPDFReadExtendedRouter() {
         }
     });
     // POST /pdfread/generate/ppt-advanced
-    r.post('/generate/ppt-advanced', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.generateDoc), async (req, res) => {
+    r.post('/generate/ppt-advanced', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.generatePPTAdvanced), async (req, res) => {
         const authReq = req;
         try {
-            const { prompt } = req.body;
-            const result = await pdfReadService_1.PDFReadService.generatePPTAdvanced(prompt);
+            const payload = req.body;
+            const { prompt } = payload;
+            const promptLength = prompt?.length ?? 0;
+            const result = await pdfReadService_1.PDFReadService.generatePPTAdvanced(payload);
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_generate_ppt_advanced', {
-                promptLength: prompt.length,
+                promptLength,
                 success: result.success
             });
             if (result.success) {
@@ -223,15 +227,53 @@ function createPDFReadExtendedRouter() {
         }
     });
     // POST /pdfread/image-caption
-    r.post('/image-caption', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
+    r.post('/image-caption', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, async (req, res) => {
         const authReq = req;
         try {
-            const { imageBase64 } = req.body;
-            const result = await pdfReadService_1.PDFReadService.imageCaption(imageBase64);
+            const { imageBase64, fileUrl, prompt, chatId } = req.body;
+            logger_1.logger.info({
+                userId: authReq.user.id,
+                chatId,
+                hasImageBase64: !!imageBase64,
+                hasFileUrl: !!fileUrl,
+                prompt,
+                operation: 'imageCaption'
+            }, 'Image caption request received');
+            let imageData = imageBase64;
+            // If fileUrl is provided instead of imageBase64, download and convert
+            if (fileUrl && !imageBase64) {
+                try {
+                    logger_1.logger.debug('Downloading image from URL for caption:', { fileUrl });
+                    const response = await fetch(fileUrl);
+                    if (!response.ok) {
+                        throw new Error(`Failed to download image: ${response.statusText}`);
+                    }
+                    const imageBuffer = await response.arrayBuffer();
+                    imageData = Buffer.from(imageBuffer).toString('base64');
+                    logger_1.logger.debug('Image downloaded and converted to base64 for caption');
+                }
+                catch (downloadError) {
+                    logger_1.logger.error('Failed to download image for caption:', { downloadError, fileUrl });
+                    return res.status(400).json({
+                        success: false,
+                        error: 'download_failed',
+                        message: 'Failed to download image from URL'
+                    });
+                }
+            }
+            if (!imageData) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'no_image_data',
+                    message: 'No image data provided (imageBase64 or fileUrl required)'
+                });
+            }
+            const result = await pdfReadService_1.PDFReadService.imageCaption(imageData);
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_image_caption', {
-                imageSize: imageBase64.length,
-                success: result.success
+                imageSize: imageData.length,
+                success: result.success,
+                source: fileUrl ? 'url' : 'base64'
             });
             if (result.success) {
                 res.json(result);
@@ -243,6 +285,7 @@ function createPDFReadExtendedRouter() {
         catch (error) {
             logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'imageCaption' }, 'Image caption error');
             res.status(500).json({
+                success: false,
                 error: 'internal_error',
                 message: 'Failed to generate image caption'
             });

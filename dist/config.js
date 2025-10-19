@@ -40,7 +40,8 @@ exports.config = {
     api: {
         baseUrl: process.env.API_BASE_URL || 'https://google-auth-e4er.onrender.com',
         pdfRead: {
-            baseUrl: process.env.PDFREAD_BASE_URL || 'https://google-auth-e4er.onrender.com',
+            baseUrl: process.env.PDFREAD_BASE_URL || 'https://avenia.onrender.com',
+            fallbackBaseUrl: process.env.PDFREAD_FALLBACK_BASE_URL || 'https://google-auth-e4er.onrender.com',
             apiKey: process.env.PDFREAD_API_KEY || '',
         },
         openai: {
@@ -50,7 +51,7 @@ exports.config = {
             assistantId: process.env.ASSISTANT_ID || '',
         },
         tts: {
-            baseUrl: process.env.TTS_BASE_URL || 'https://google-auth-e4er.onrender.com',
+            baseUrl: process.env.TTS_BASE_URL || 'https://avenia.onrender.com',
         },
     },
 };

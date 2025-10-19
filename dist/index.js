@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.app = void 0;
 require("dotenv/config");
 // Polyfill for DOMMatrix (required by pdf-parse in server environment)
 if (typeof globalThis.DOMMatrix === 'undefined') {
@@ -87,6 +88,7 @@ const pdfReadExtended_1 = require("./routes/pdfReadExtended");
 const pdfSummary_1 = require("./routes/pdfSummary");
 const chat_1 = require("./routes/chat");
 const presentation_1 = require("./routes/presentation");
+const fileUpload_1 = require("./routes/fileUpload");
 const notifications_1 = __importDefault(require("./routes/notifications"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
@@ -146,7 +148,7 @@ const startServer = async () => {
         // Initialize services first
         await initializeServices();
         // Create app after services are initialized
-        app = (0, express_1.default)();
+        exports.app = app = (0, express_1.default)();
         // Trust proxy for accurate IP addresses
         app.set('trust proxy', 1);
         // Request logging
@@ -188,6 +190,7 @@ const startServer = async () => {
         app.use(`/api/${API_VERSION}/pdf`, (0, pdfSummary_1.createPDFSummaryRouter)());
         app.use(`/api/${API_VERSION}/chat`, (0, chat_1.createChatRouter)());
         app.use(`/api/${API_VERSION}/presentation`, (0, presentation_1.createPresentationRouter)());
+        app.use(`/api/${API_VERSION}/upload`, (0, fileUpload_1.createFileUploadRouter)());
         // Legacy routes (backward compatibility)
         app.use('/auth', (0, auth_1.createAuthRouter)());
         app.use('/auth/email', (0, emailOtp_1.createEmailOtpRouter)());
@@ -198,6 +201,7 @@ const startServer = async () => {
         app.use('/pdfread', (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
         app.use('/pdf', (0, pdfSummary_1.createPDFSummaryRouter)());
         app.use('/presentation', (0, presentation_1.createPresentationRouter)());
+        app.use('/upload', (0, fileUpload_1.createFileUploadRouter)());
         app.use('/notifications', notifications_1.default);
         // 404 handler (must be before error handler)
         app.use(errorHandler_1.notFound);
@@ -206,8 +210,8 @@ const startServer = async () => {
         // Global error handler (must be last)
         app.use(errorHandler_1.globalErrorHandler);
         // Start server
-        const server = app.listen(config_1.config.port, () => {
-            logger_1.logger.info({ port: config_1.config.port }, 'Server listening');
+        const server = app.listen(config_1.config.port, '0.0.0.0', () => {
+            logger_1.logger.info({ port: config_1.config.port, host: '0.0.0.0' }, 'Server listening');
         });
         // Initialize WebSocket
         (0, websocketService_1.initializeWebSocket)(server);
