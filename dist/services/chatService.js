@@ -41,6 +41,7 @@ const axios_1 = __importDefault(require("axios"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
 const firebase_1 = require("../firebase");
+const openAIAgentService_1 = require("./openAIAgentService");
 class ChatService {
     /**
      * ChatGPT'ye mesaj gönder ve cevap al
@@ -79,9 +80,13 @@ class ChatService {
             // AI detection kontrolü
             const isAIDetectionRequest = this.isAIDetectionRequest(request.messages);
             // Image kontrolü - daha esnek
-            const hasImageInMessages = request.messages.some(msg => msg.content.includes('[Dosya Bağlantısı]') ||
-                msg.fileUrl ||
-                request.imageFileUrl);
+            const hasImageInMessages = request.messages.some(msg => {
+                const inlineMatch = msg.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
+                if (inlineMatch?.[1]) {
+                    return true;
+                }
+                return Boolean(this.normalizeImageUrl(msg.fileUrl));
+            }) || Boolean(this.normalizeImageUrl(request.imageFileUrl));
             if (isAIDetectionRequest && (request.hasImage || hasImageInMessages)) {
                 logger_1.logger.info({
                     requestId,
@@ -114,14 +119,24 @@ class ChatService {
                 formattedMessages: formattedMessages.map((msg, index) => ({
                     index,
                     role: msg.role,
-                    contentType: Array.isArray(msg.content) ? 'multimodal' : 'text',
-                    contentLength: Array.isArray(msg.content) ?
-                        msg.content.reduce((total, part) => total + (part.text?.length || 0), 0) :
-                        msg.content.length,
-                    contentPreview: Array.isArray(msg.content) ?
-                        msg.content.map((part) => part.text || `[${part.type}]`).join(' ') :
-                        msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : ''),
-                    hasImage: Array.isArray(msg.content) && msg.content.some((part) => part.type === 'image_url')
+                    contentType: Array.isArray(msg.content)
+                        ? 'multimodal'
+                        : typeof msg.content === 'string'
+                            ? 'text'
+                            : 'empty',
+                    contentLength: Array.isArray(msg.content)
+                        ? msg.content.reduce((total, part) => total + (part.text?.length || 0), 0)
+                        : typeof msg.content === 'string'
+                            ? msg.content.length
+                            : 0,
+                    contentPreview: Array.isArray(msg.content)
+                        ? msg.content
+                            .map((part) => part.text || `[${part.type}]`)
+                            .join(' ')
+                        : typeof msg.content === 'string'
+                            ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '')
+                            : '',
+                    hasImage: Array.isArray(msg.content) && msg.content.some((part) => part.type === 'input_image' || part.type === 'image_url')
                 })),
                 operation: 'messageFormatting'
             }, 'Messages formatted for OpenAI API');
@@ -138,99 +153,81 @@ class ChatService {
                 })),
                 operation: 'agentFunctions'
             }, 'Agent functions prepared for OpenAI');
-            // OpenAI API'ye istek gönder
-            const response = await this.callOpenAI(requestId, modelToUse, formattedMessages, agentFunctions);
+            const functionMap = this.getFunctionMap(request);
+            const agentResult = await openAIAgentService_1.OpenAIAgentService.runAgent({
+                requestId,
+                model: modelToUse,
+                messages: formattedMessages,
+                tools: agentFunctions,
+                executeTool: async (name, args) => {
+                    const toolFn = functionMap[name];
+                    if (!toolFn) {
+                        throw new Error(`Tool not found: ${name}`);
+                    }
+                    return await toolFn(args);
+                }
+            });
+            const rawAgentResponse = agentResult.rawResponse;
             logger_1.logger.info({
                 requestId,
-                hasResponse: !!response?.data,
-                choicesCount: response?.data?.choices?.length,
-                responseStatus: response?.status,
-                responseStatusText: response?.statusText,
-                responseHeaders: {
-                    contentType: response?.headers?.['content-type'],
-                    openaiVersion: response?.headers?.['openai-version'],
-                    requestId: response?.headers?.['x-request-id']
-                },
-                operation: 'openaiResponse'
-            }, 'OpenAI API response received');
-            const reply = response.data.choices?.[0]?.message;
-            if (!reply) {
+                responseId: rawAgentResponse?.id,
+                responseStatus: rawAgentResponse?.status,
+                model: rawAgentResponse?.model || modelToUse,
+                hasOutput: !!agentResult.outputText,
+                toolCallsCount: agentResult.toolCalls.length,
+                operation: 'openaiAgentAnalysis'
+            }, 'OpenAI agent response received');
+            if (agentResult.toolCalls.length > 0) {
+                logger_1.logger.info({
+                    requestId,
+                    toolCallsCount: agentResult.toolCalls.length,
+                    toolCalls: agentResult.toolCalls.map(call => ({
+                        id: call.id,
+                        name: call.name,
+                        arguments: call.arguments,
+                        hasResult: call.result !== undefined
+                    })),
+                    operation: 'openaiAgentToolSummary'
+                }, 'OpenAI agent tool calls executed');
+            }
+            if (!agentResult.outputText) {
                 logger_1.logger.error({
                     requestId,
-                    responseData: response.data,
-                    operation: 'openaiResponse'
-                }, 'No message in OpenAI response');
-                throw new Error('No response from OpenAI');
+                    rawAgentResponse,
+                    operation: 'openaiAgentAnalysis'
+                }, 'No content in OpenAI agent response');
+                throw new Error('No content generated from OpenAI agent');
             }
+            const assistantMessage = {
+                role: 'assistant',
+                content: agentResult.outputText.trim(),
+                timestamp: firebase_1.FieldValue.serverTimestamp()
+            };
+            const responseToolCalls = agentResult.toolCalls.map(call => ({
+                id: call.id,
+                type: 'function',
+                function: {
+                    name: call.name,
+                    arguments: JSON.stringify(call.arguments ?? {})
+                },
+                result: call.result
+            }));
+            const processingTime = Date.now() - startTime;
             logger_1.logger.info({
                 requestId,
-                replyRole: reply.role,
-                hasContent: !!reply.content,
-                contentLength: reply.content?.length || 0,
-                contentPreview: reply.content ? reply.content.substring(0, 200) + (reply.content.length > 200 ? '...' : '') : 'none',
-                hasToolCalls: !!reply.tool_calls,
-                toolCallsCount: reply.tool_calls?.length || 0,
-                toolCalls: reply.tool_calls?.map((tc) => ({
-                    id: tc.id,
-                    type: tc.type,
-                    functionName: tc.function?.name,
-                    functionArguments: tc.function?.arguments
-                })) || [],
-                operation: 'openaiMessageAnalysis'
-            }, 'OpenAI message analysis completed');
-            // Tool calls varsa işle
-            if (reply.tool_calls?.length > 0) {
-                logger_1.logger.info({
-                    requestId,
-                    toolCallsCount: reply.tool_calls.length,
-                    toolCalls: reply.tool_calls.map((tc) => ({
-                        id: tc.id,
-                        functionName: tc.function?.name,
-                        functionArguments: tc.function?.arguments
-                    })),
-                    operation: 'toolCalls'
-                }, 'Tool calls detected, processing...');
-                const toolResult = await this.processToolCalls(requestId, reply.tool_calls, request);
-                if (toolResult.finalMessage) {
-                    logger_1.logger.info({
-                        requestId,
-                        finalMessageRole: toolResult.finalMessage.role,
-                        finalMessageLength: toolResult.finalMessage.content.length,
-                        finalMessagePreview: toolResult.finalMessage.content.substring(0, 200) + '...',
-                        processingTimeMs: Date.now() - startTime,
-                        operation: 'toolCallsCompleted'
-                    }, 'Tool calls processing completed successfully');
-                    return response_1.ResponseBuilder.success({
-                        message: toolResult.finalMessage,
-                        toolCalls: reply.tool_calls
-                    }, 'Message processed with tools');
-                }
+                contentLength: assistantMessage.content.length,
+                contentPreview: assistantMessage.content.substring(0, 200) + (assistantMessage.content.length > 200 ? '...' : ''),
+                processingTimeMs: processingTime,
+                toolCallsCount: responseToolCalls.length,
+                operation: 'openaiAgentResponse'
+            }, 'Assistant response prepared');
+            const responsePayload = {
+                message: assistantMessage
+            };
+            if (responseToolCalls.length > 0) {
+                responsePayload.toolCalls = responseToolCalls;
             }
-            // Direkt cevap
-            if (reply.content) {
-                const assistantMessage = {
-                    role: 'assistant',
-                    content: reply.content.trim(),
-                    timestamp: firebase_1.FieldValue.serverTimestamp()
-                };
-                logger_1.logger.info({
-                    requestId,
-                    contentLength: assistantMessage.content.length,
-                    contentPreview: assistantMessage.content.substring(0, 200) + (assistantMessage.content.length > 200 ? '...' : ''),
-                    processingTimeMs: Date.now() - startTime,
-                    operation: 'directResponse'
-                }, 'Direct assistant response received and processed');
-                return response_1.ResponseBuilder.success({
-                    message: assistantMessage
-                }, 'Message processed successfully');
-            }
-            logger_1.logger.error({
-                requestId,
-                reply,
-                processingTimeMs: Date.now() - startTime,
-                operation: 'openaiResponse'
-            }, 'No content in OpenAI response');
-            throw new Error('No content in OpenAI response');
+            return response_1.ResponseBuilder.success(responsePayload, responseToolCalls.length > 0 ? 'Message processed with tools' : 'Message processed successfully');
         }
         catch (error) {
             const processingTime = Date.now() - startTime;
@@ -251,46 +248,110 @@ class ChatService {
     static async formatMessages(messages, imageFileUrl) {
         const formattedMessages = [];
         for (const msg of messages) {
-            // Dosya bağlantısı kontrolü
-            const match = msg.content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/);
-            const fileUrl = match?.[1]?.trim() || imageFileUrl;
-            // Görsel kontrolü
-            const isImage = fileUrl && fileUrl.match(/\.(jpeg|jpg|png|gif|webp)/i);
+            // Inline formatta ("[Dosya Bağlantısı]: <url>") gönderilen görsel linkini yakala
+            const inlineUrlCandidate = this.extractInlineImageUrl(msg.content);
+            // Yakaladığımız veya doğrudan gelen URL'leri tek formatta normalize et
+            const inlineUrl = this.normalizeImageUrl(inlineUrlCandidate);
+            const messageLevelUrl = this.normalizeImageUrl(msg.fileUrl);
+            const fallbackUrl = this.normalizeImageUrl(imageFileUrl);
+            const fileUrl = inlineUrl || messageLevelUrl || fallbackUrl;
+            // Seçilen URL'nin gerçekten görsel olup olmadığını teyit et
+            const isImage = this.isImageUrl(fileUrl);
             if (fileUrl && isImage) {
-                const parts = msg.content.split('[Dosya Bağlantısı]:');
-                const textPart = (parts[0] || '').trim();
-                try {
-                    // Image URL'ini base64'e çevir
-                    const base64Image = await this.convertImageUrlToBase64(fileUrl);
-                    formattedMessages.push({
-                        role: msg.role,
-                        content: [
-                            { type: 'text', text: textPart },
-                            {
-                                type: 'image_url',
-                                image_url: { url: base64Image }
-                            }
-                        ]
-                    });
+                // Kullanıcı mesajındaki görsel referansını temizleyip sadece açıklama metnini bırak
+                const cleanedTextPart = this.stripInlineFileReference(msg.content);
+                // OpenAI Responses API'ye hem metin hem de görseli ayrı parçalarda göndereceğiz
+                const messageContentParts = [];
+                if (cleanedTextPart) {
+                    // Açıklama metnini `input_text` tipinde ekle
+                    messageContentParts.push({ type: 'input_text', text: cleanedTextPart });
                 }
-                catch (error) {
-                    logger_1.logger.error({
-                        fileUrl,
-                        error: error?.message || 'Unknown error',
-                        operation: 'imageConversion'
-                    }, 'Failed to convert image to base64, using text only');
-                    // Hata durumunda sadece text olarak gönder
-                    formattedMessages.push({
-                        role: msg.role,
-                        content: msg.content
-                    });
-                }
+                // Normalize edilmiş URL'yi `input_image` tipinde gönder
+                messageContentParts.push({
+                    type: 'input_image',
+                    image_url: fileUrl
+                });
+                formattedMessages.push({
+                    role: msg.role,
+                    content: messageContentParts
+                });
             }
             else {
+                // Görsel bulunmadığında mesajı olduğu gibi OpenAI'ye yönlendir
                 formattedMessages.push({ role: msg.role, content: msg.content });
             }
         }
         return formattedMessages;
+    }
+    static normalizeImageUrl(raw) {
+        if (!raw) {
+            return undefined;
+        }
+        if (typeof raw === 'string') {
+            // String olarak gelirse baştaki/sondaki boşlukları temizle
+            const trimmed = raw.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+        }
+        if (Array.isArray(raw)) {
+            // Dizi halinde gelirse ilk geçerli URL'yi bul
+            for (const entry of raw) {
+                const normalized = this.normalizeImageUrl(entry);
+                if (normalized) {
+                    return normalized;
+                }
+            }
+            return undefined;
+        }
+        if (typeof raw === 'object') {
+            // { url: "..." } gibi nesneleri işle
+            const possibleUrl = raw.url;
+            if (typeof possibleUrl === 'string') {
+                const trimmed = possibleUrl.trim();
+                return trimmed.length > 0 ? trimmed : undefined;
+            }
+            // { image_url: "..." } ya da { image_url: { url: "..." } } yapılarını ele al
+            const imageUrlField = raw.image_url;
+            if (typeof imageUrlField === 'string') {
+                const trimmed = imageUrlField.trim();
+                return trimmed.length > 0 ? trimmed : undefined;
+            }
+            if (typeof imageUrlField === 'object') {
+                return this.normalizeImageUrl(imageUrlField);
+            }
+            // CamelCase yazılmış alternatif anahtarları da destekle
+            const camelCaseImageUrl = raw.imageUrl;
+            if (typeof camelCaseImageUrl === 'string') {
+                const trimmed = camelCaseImageUrl.trim();
+                return trimmed.length > 0 ? trimmed : undefined;
+            }
+            if (typeof camelCaseImageUrl === 'object') {
+                return this.normalizeImageUrl(camelCaseImageUrl);
+            }
+        }
+        return undefined;
+    }
+    static extractInlineImageUrl(content) {
+        if (!content) {
+            return undefined;
+        }
+        // Markdown benzeri "[Dosya Bağlantısı]: <url>" kalıbını eşleştir
+        const match = content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/i);
+        return match?.[1];
+    }
+    static stripInlineFileReference(content) {
+        if (!content) {
+            return '';
+        }
+        // Mesaj metninden görsel referansını çıkartarak sadece açıklamayı bırak
+        const withoutReference = content.replace(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/gi, '').trim();
+        return withoutReference;
+    }
+    static isImageUrl(url) {
+        if (!url) {
+            return false;
+        }
+        // Uzantı bazlı basit doğrulama ile görsel olup olmadığını kontrol et
+        return /(\.)(jpeg|jpg|png|gif|webp|bmp|heic|heif|tif|tiff)(\?|$)/i.test(url);
     }
     /**
      * Image URL'ini base64 formatına çevir
@@ -314,289 +375,6 @@ class ChatService {
             }, 'Failed to convert image URL to base64');
             throw new Error(`Image conversion failed: ${error?.message || 'Unknown error'}`);
         }
-    }
-    /**
-     * OpenAI API'ye istek gönder
-     */
-    static async callOpenAI(requestId, model, messages, tools) {
-        const startTime = Date.now();
-        const requestData = {
-            model,
-            messages,
-            tools: tools.map(fn => ({
-                type: 'function',
-                function: {
-                    name: fn.name,
-                    description: fn.description,
-                    parameters: fn.parameters
-                }
-            })),
-            tool_choice: 'auto'
-        };
-        // Request size kontrolü
-        const requestSize = JSON.stringify(requestData).length;
-        const maxRequestSize = 200000; // 200KB limit
-        if (requestSize > maxRequestSize) {
-            logger_1.logger.warn({
-                requestId,
-                requestSize,
-                maxRequestSize,
-                messageCount: messages.length,
-                operation: 'openaiRequestSizeCheck'
-            }, 'Request size exceeds limit, truncating messages');
-            // Mesajları kısalt
-            const truncatedMessages = messages.map(msg => {
-                if (typeof msg.content === 'string' && msg.content.length > 3000) {
-                    return {
-                        ...msg,
-                        content: msg.content.substring(0, 3000) + '... [truncated]'
-                    };
-                }
-                else if (Array.isArray(msg.content)) {
-                    // Multimodal content için text kısmını kısalt
-                    const truncatedContent = msg.content.map((part) => {
-                        if (part.type === 'text' && part.text && part.text.length > 3000) {
-                            return {
-                                ...part,
-                                text: part.text.substring(0, 3000) + '... [truncated]'
-                            };
-                        }
-                        return part;
-                    });
-                    return {
-                        ...msg,
-                        content: truncatedContent
-                    };
-                }
-                return msg;
-            });
-            requestData.messages = truncatedMessages;
-        }
-        logger_1.logger.info({
-            requestId,
-            model,
-            messageCount: messages.length,
-            toolCount: tools.length,
-            requestData: {
-                model: requestData.model,
-                messageCount: requestData.messages.length,
-                toolCount: requestData.tools.length,
-                toolChoice: requestData.tool_choice,
-                messages: requestData.messages.map((msg, index) => ({
-                    index,
-                    role: msg.role,
-                    contentType: Array.isArray(msg.content) ? 'multimodal' : 'text',
-                    contentLength: Array.isArray(msg.content) ?
-                        msg.content.reduce((total, part) => total + (part.text?.length || 0), 0) :
-                        (msg.content?.length || 0),
-                    contentPreview: Array.isArray(msg.content) ?
-                        msg.content.map((part) => part.text || `[${part.type}]`).join(' ').substring(0, 100) + '...' :
-                        (msg.content ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '') : 'null'),
-                    hasImage: Array.isArray(msg.content) && msg.content.some((part) => part.type === 'image_url')
-                })),
-                tools: requestData.tools.map(tool => ({
-                    type: tool.type,
-                    functionName: tool.function.name,
-                    functionDescription: tool.function.description
-                }))
-            },
-            operation: 'openaiRequest'
-        }, 'Sending detailed request to OpenAI API');
-        try {
-            const response = await axios_1.default.post('https://api.openai.com/v1/chat/completions', requestData, {
-                headers: {
-                    'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 60000 // 60 saniye timeout
-            });
-            const processingTime = Date.now() - startTime;
-            logger_1.logger.info({
-                requestId,
-                model,
-                responseStatus: response.status,
-                responseStatusText: response.statusText,
-                responseHeaders: {
-                    contentType: response.headers['content-type'],
-                    openaiVersion: response.headers['openai-version'],
-                    requestId: response.headers['x-request-id'],
-                    ratelimitLimit: response.headers['x-ratelimit-limit-requests'],
-                    ratelimitRemaining: response.headers['x-ratelimit-remaining-requests'],
-                    ratelimitReset: response.headers['x-ratelimit-reset-requests']
-                },
-                responseData: {
-                    id: response.data.id,
-                    object: response.data.object,
-                    created: response.data.created,
-                    model: response.data.model,
-                    choicesCount: response.data.choices?.length || 0,
-                    usage: response.data.usage ? {
-                        promptTokens: response.data.usage.prompt_tokens,
-                        completionTokens: response.data.usage.completion_tokens,
-                        totalTokens: response.data.usage.total_tokens
-                    } : null,
-                    choices: response.data.choices?.map((choice, index) => ({
-                        index,
-                        finishReason: choice.finish_reason,
-                        messageRole: choice.message?.role,
-                        hasContent: !!choice.message?.content,
-                        contentLength: choice.message?.content?.length || 0,
-                        contentPreview: choice.message?.content ?
-                            choice.message.content.substring(0, 200) + (choice.message.content.length > 200 ? '...' : '') : 'none',
-                        hasToolCalls: !!choice.message?.tool_calls,
-                        toolCallsCount: choice.message?.tool_calls?.length || 0
-                    })) || []
-                },
-                processingTimeMs: processingTime,
-                operation: 'openaiResponse'
-            }, 'OpenAI API response received with full details');
-            return response;
-        }
-        catch (error) {
-            const processingTime = Date.now() - startTime;
-            logger_1.logger.error({
-                requestId,
-                model,
-                requestSize: JSON.stringify(requestData).length,
-                messageCount: messages.length,
-                error: {
-                    message: error.message,
-                    status: error.response?.status,
-                    statusText: error.response?.statusText,
-                    data: error.response?.data
-                },
-                processingTimeMs: processingTime,
-                operation: 'openaiRequestError'
-            }, 'OpenAI API request failed');
-            throw error;
-        }
-    }
-    /**
-     * Tool calls işle
-     */
-    static async processToolCalls(requestId, toolCalls, request) {
-        const startTime = Date.now();
-        const functionMap = this.getFunctionMap();
-        const toolResponses = [];
-        logger_1.logger.info({
-            requestId,
-            toolCallsCount: toolCalls.length,
-            toolCalls: toolCalls.map(tc => ({
-                id: tc.id,
-                type: tc.type,
-                functionName: tc.function?.name,
-                functionArguments: tc.function?.arguments
-            })),
-            operation: 'toolCallsProcessing'
-        }, 'Starting tool calls processing');
-        for (const call of toolCalls) {
-            const toolStartTime = Date.now();
-            const name = call.function.name;
-            const args = JSON.parse(call.function.arguments);
-            logger_1.logger.info({
-                requestId,
-                toolId: call.id,
-                toolName: name,
-                args,
-                operation: 'toolExecution'
-            }, 'Executing individual tool call');
-            let functionResult = null;
-            if (functionMap[name]) {
-                try {
-                    functionResult = await functionMap[name](args);
-                    const toolProcessingTime = Date.now() - toolStartTime;
-                    logger_1.logger.info({
-                        requestId,
-                        toolId: call.id,
-                        toolName: name,
-                        success: true,
-                        resultType: typeof functionResult,
-                        resultKeys: functionResult && typeof functionResult === 'object' ? Object.keys(functionResult) : [],
-                        processingTimeMs: toolProcessingTime,
-                        operation: 'toolExecution'
-                    }, 'Tool executed successfully');
-                }
-                catch (error) {
-                    const toolProcessingTime = Date.now() - toolStartTime;
-                    logger_1.logger.error({
-                        requestId,
-                        toolId: call.id,
-                        err: error,
-                        toolName: name,
-                        processingTimeMs: toolProcessingTime,
-                        operation: 'toolExecution'
-                    }, 'Tool execution failed');
-                    functionResult = { error: `Tool execution failed: ${error.message}` };
-                }
-            }
-            else {
-                logger_1.logger.warn({
-                    requestId,
-                    toolId: call.id,
-                    toolName: name,
-                    operation: 'toolExecution'
-                }, 'Tool not found in function map');
-                functionResult = { error: `Tool not found: ${name}` };
-            }
-            const toolResponse = {
-                tool_call_id: call.id,
-                role: 'tool',
-                content: JSON.stringify(functionResult)
-            };
-            toolResponses.push(toolResponse);
-            logger_1.logger.debug({
-                requestId,
-                toolId: call.id,
-                toolName: name,
-                responseLength: toolResponse.content.length,
-                responsePreview: toolResponse.content.substring(0, 200) + (toolResponse.content.length > 200 ? '...' : ''),
-                operation: 'toolResponse'
-            }, 'Tool response prepared');
-        }
-        logger_1.logger.info({
-            requestId,
-            toolResponsesCount: toolResponses.length,
-            totalProcessingTimeMs: Date.now() - startTime,
-            operation: 'toolCallsCompleted'
-        }, 'All tool calls completed, preparing follow-up request');
-        // Tool cevaplarını modele geri gönder
-        // Önce orijinal mesajları, sonra assistant'ın tool call'ını, sonra tool cevaplarını ekle
-        const formattedMessages = await this.formatMessages(request.messages, request.imageFileUrl);
-        const followUpMessages = [
-            ...formattedMessages,
-            {
-                role: 'assistant',
-                content: null,
-                tool_calls: toolCalls
-            },
-            ...toolResponses
-        ];
-        const followUpResponse = await this.callOpenAI(requestId, request.hasImage ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID, followUpMessages, this.getAgentFunctions());
-        const followUpMessage = followUpResponse.data.choices?.[0]?.message;
-        if (followUpMessage?.content) {
-            logger_1.logger.info({
-                requestId,
-                finalMessageRole: followUpMessage.role,
-                finalMessageLength: followUpMessage.content.length,
-                finalMessagePreview: followUpMessage.content.substring(0, 200) + '...',
-                totalProcessingTimeMs: Date.now() - startTime,
-                operation: 'toolCallsFinalResponse'
-            }, 'Tool calls processing completed with final response');
-            return {
-                finalMessage: {
-                    role: 'assistant',
-                    content: followUpMessage.content.trim(),
-                    timestamp: firebase_1.FieldValue.serverTimestamp()
-                }
-            };
-        }
-        logger_1.logger.warn({
-            requestId,
-            followUpResponse: followUpResponse.data,
-            totalProcessingTimeMs: Date.now() - startTime,
-            operation: 'toolCallsFinalResponse'
-        }, 'Tool calls processing completed but no final message content');
-        return {};
     }
     /**
      * Agent functions listesi
@@ -665,15 +443,17 @@ class ChatService {
     /**
      * Function map (gerçek implementasyonlar)
      */
-    static getFunctionMap() {
+    static getFunctionMap(request) {
+        const userId = request?.userId || 'system';
+        const chatId = request?.chatId || 'system';
         return {
             summarize_pdf: async (args) => {
                 // Gerçek PDF özetleme implementasyonu
                 const { PDFService } = await Promise.resolve().then(() => __importStar(require('./pdfService')));
                 const result = await PDFService.extractAndSummarizePDF({
                     fileUrl: args.fileUrl,
-                    userId: 'system', // Chat context'ten alınabilir
-                    chatId: 'system' // Chat context'ten alınabilir
+                    userId,
+                    chatId
                 });
                 if (result.success) {
                     return {

@@ -303,55 +303,17 @@ export class ChatService {
         if (cleanedTextPart) {
           // Açıklama metnini `input_text` tipinde ekle
           messageContentParts.push({ type: 'input_text', text: cleanedTextPart });
-
-        const textPart = this.stripInlineFileReference(msg.content);
-
-        // OpenAI Responses API'ye hem metin hem de görseli ayrı parçalarda göndereceğiz
-        const contentParts: AgentMessageContent[] = [];
-
-        if (textPart) {
-          // Açıklama metnini `input_text` tipinde ekle
-          contentParts.push({ type: 'input_text', text: textPart });
         }
 
-        if (fileUrl) {
-          // Normalize edilmiş URL'yi `input_image` tipinde gönder
-          messageContentParts.push({
-            type: 'input_image',
-            image_url: fileUrl
-          });
-        }
-
-        formattedMessages.push({
-          role: msg.role,
-          content: messageContentParts
-          contentParts.push({
-            type: 'input_image',
-            image_url: fileUrl
-          });
-        }
-
-
-        const parts = msg.content.split('[Dosya Bağlantısı]:');
-        const textPart = (parts[0] || '').trim();
-
-        // Görsel OpenAI'ye doğrudan URL olarak iletiliyor
-        const contentParts: any[] = [];
-
-        if (textPart) {
-          contentParts.push({ type: 'text', text: textPart });
-        }
-
-        contentParts.push({
-          type: 'image_url',
+        // Normalize edilmiş URL'yi `input_image` tipinde gönder
+        messageContentParts.push({
+          type: 'input_image',
           image_url: fileUrl
-
-          image_url: { url: fileUrl }
         });
 
         formattedMessages.push({
           role: msg.role,
-          content: contentParts
+          content: messageContentParts
         });
       } else {
         // Görsel bulunmadığında mesajı olduğu gibi OpenAI'ye yönlendir

@@ -417,20 +417,19 @@ export class PDFReadService {
 
   /**
    * PPT'den PDF'e dönüştürür
-   */
+  */
   static async pptToPDF(file: Buffer, filename: string): Promise<StandardResponse<any>> {
     try {
       const formData = new FormData();
       this.appendFile(formData, file, filename);
 
-      const pptToPdfResponse = await this.postWithFallback(
       const response = await this.postWithFallback(
         '/ppt-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
 
-      return ResponseBuilder.success(pptToPdfResponse.data, 'PPT converted to PDF successfully');
+      return ResponseBuilder.success(response.data, 'PPT converted to PDF successfully');
     } catch (error: any) {
       logger.error({ err: error, filename, operation: 'pptToPDF' }, 'PPT to PDF error');
       return ResponseBuilder.error(
@@ -442,10 +441,9 @@ export class PDFReadService {
 
   /**
    * Word belgesi oluşturur
-   */
+  */
   static async generateDoc(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const generateDocResponse = await this.postWithFallback(
       const response = await this.postWithFallback(
         '/generate-doc',
         {
@@ -454,7 +452,7 @@ export class PDFReadService {
         this.buildJsonConfig(60000)
       );
 
-      return ResponseBuilder.success(generateDocResponse.data, 'Word document generated successfully');
+      return ResponseBuilder.success(response.data, 'Word document generated successfully');
     } catch (error: any) {
       logger.error({ err: error, promptLength: prompt.length, operation: 'generateDoc' }, 'Generate doc error');
       return ResponseBuilder.error(
@@ -466,11 +464,9 @@ export class PDFReadService {
 
   /**
    * Excel belgesi oluşturur
-   */
+  */
   static async generateExcel(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const generateExcelResponse = await this.postWithFallback(
-
       const response = await this.postWithFallback(
         '/generate-excel',
         {
@@ -479,7 +475,7 @@ export class PDFReadService {
         this.buildJsonConfig(60000)
       );
 
-      return ResponseBuilder.success(generateExcelResponse.data, 'Excel document generated successfully');
+      return ResponseBuilder.success(response.data, 'Excel document generated successfully');
     } catch (error: any) {
       logger.error({ err: error, promptLength: prompt.length, operation: 'generateExcel' }, 'Generate Excel error');
       return ResponseBuilder.error(
@@ -491,10 +487,9 @@ export class PDFReadService {
 
   /**
    * PowerPoint belgesi oluşturur
-   */
+  */
   static async generatePPT(prompt: string): Promise<StandardResponse<any>> {
     try {
-      const generatePptResponse = await this.postWithFallback(
       const response = await this.postWithFallback(
         '/generate-ppt',
         {
@@ -503,7 +498,7 @@ export class PDFReadService {
         this.buildJsonConfig(60000)
       );
 
-      return ResponseBuilder.success(generatePptResponse.data, 'PowerPoint document generated successfully');
+      return ResponseBuilder.success(response.data, 'PowerPoint document generated successfully');
     } catch (error: any) {
       logger.error({ err: error, promptLength: prompt.length, operation: 'generatePPT' }, 'Generate PPT error');
       return ResponseBuilder.error(
@@ -515,25 +510,16 @@ export class PDFReadService {
 
   /**
    * Gelişmiş Word belgesi oluşturur
-   */
+  */
   static async generateDocAdvanced(payload: DocAdvancedPayload): Promise<StandardResponse<any>> {
     try {
-      const advancedDocResponse = await this.postWithFallback(
       const response = await this.postWithFallback(
         '/generate-doc-advanced',
         payload,
         this.buildJsonConfig(60000)
       );
-      const response = await this.postWithFallback('/generate-doc-advanced', payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
- 
 
-      return ResponseBuilder.success(advancedDocResponse.data, 'Advanced Word document generated successfully');
+      return ResponseBuilder.success(response.data, 'Advanced Word document generated successfully');
     } catch (error: any) {
       const promptLength = payload?.prompt ? payload.prompt.length : 0;
       logger.error({ err: error, promptLength, operation: 'generateDocAdvanced' }, 'Generate advanced doc error');
@@ -546,26 +532,16 @@ export class PDFReadService {
 
   /**
    * Gelişmiş PowerPoint belgesi oluşturur
-   */
+  */
   static async generatePPTAdvanced(payload: PPTAdvancedPayload): Promise<StandardResponse<any>> {
     try {
-      const advancedPptResponse = await this.postWithFallback(
-
       const response = await this.postWithFallback(
         '/generate-ppt-advanced',
         payload,
         this.buildJsonConfig(60000)
       );
 
-      const response = await this.postWithFallback('/generate-ppt-advanced', payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.PDFREAD_API_KEY && { 'Authorization': `Bearer ${this.PDFREAD_API_KEY}` })
-        },
-        timeout: 60000
-      });
-
-      return ResponseBuilder.success(advancedPptResponse.data, 'Advanced PowerPoint document generated successfully');
+      return ResponseBuilder.success(response.data, 'Advanced PowerPoint document generated successfully');
     } catch (error: any) {
       const promptLength = payload?.prompt ? payload.prompt.length : 0;
       logger.error({ err: error, promptLength, operation: 'generatePPTAdvanced' }, 'Generate advanced PPT error');

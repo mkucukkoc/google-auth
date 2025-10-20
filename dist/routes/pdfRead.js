@@ -132,59 +132,16 @@ function createPDFReadRouter() {
         }
     });
     // POST /pdfread/analyze-image
-    r.post('/analyze-image', 
-    // authRateLimits.general,
-    // authenticateToken,
-    async (req, res) => {
+    r.post('/analyze-image', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
+        const authReq = req;
         try {
-            const { imageBase64, fileUrl, prompt, chatId } = req.body;
-            logger_1.logger.info({
-                chatId,
-                hasImageBase64: !!imageBase64,
-                hasFileUrl: !!fileUrl,
-                prompt,
-                operation: 'analyzeImage'
-            }, 'Image analysis request received');
-            let imageData = imageBase64;
-            // If fileUrl is provided instead of imageBase64, download and convert
-            if (fileUrl && !imageBase64) {
-                try {
-                    logger_1.logger.debug('Downloading image from URL:', { fileUrl });
-                    const response = await fetch(fileUrl);
-                    if (!response.ok) {
-                        throw new Error(`Failed to download image: ${response.statusText}`);
-                    }
-                    const imageBuffer = await response.arrayBuffer();
-                    imageData = Buffer.from(imageBuffer).toString('base64');
-                    logger_1.logger.debug('Image downloaded and converted to base64');
-                }
-                catch (downloadError) {
-                    logger_1.logger.error('Failed to download image:', { downloadError, fileUrl });
-                    return res.status(400).json({
-                        success: false,
-                        error: 'download_failed',
-                        message: 'Failed to download image from URL'
-                    });
-                }
-            }
-            if (!imageData) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'no_image_data',
-                    message: 'No image data provided (imageBase64 or fileUrl required)'
-                });
-            }
-            const result = await pdfReadService_1.PDFReadService.analyzeImage(imageData);
-            // Log the action (skip for now due to auth issues)
-            // await auditService.logUserAction(
-            //   authReq.user!.id,
-            //   'pdf_analyze_image',
-            //   {
-            //     imageSize: imageData.length,
-            //     success: result.success,
-            //     source: fileUrl ? 'url' : 'base64'
-            //   }
-            // );
+            const { imageBase64, user_id, chat_id } = req.body;
+            const result = await pdfReadService_1.PDFReadService.analyzeImage(imageBase64);
+            // Log the action
+            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_image', {
+                imageSize: imageBase64.length,
+                success: result.success
+            });
             if (result.success) {
                 res.json(result);
             }
@@ -193,9 +150,8 @@ function createPDFReadRouter() {
             }
         }
         catch (error) {
-            logger_1.logger.error({ err: error, operation: 'imageAnalysis' }, 'Image analysis error');
+            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'imageAnalysis' }, 'Image analysis error');
             res.status(500).json({
-                success: false,
                 error: 'internal_error',
                 message: 'Failed to analyze image'
             });

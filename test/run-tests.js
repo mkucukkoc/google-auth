@@ -234,3 +234,4 @@ if (args.includes('--suite')) {
   // Run all tests
   testRunner.runAllTests();
 }
+
