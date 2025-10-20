@@ -86,18 +86,32 @@ export class ChatService {
           return Boolean(this.normalizeImageUrl(msg.fileUrl));
         }) || Boolean(this.normalizeImageUrl(request.imageFileUrl));
       
-      if (isAIDetectionRequest && (request.hasImage || hasImageInMessages)) {
-        logger.info({ 
-          requestId,
-          userId: request.userId,
-          chatId: request.chatId,
-          hasImage: request.hasImage,
-          hasImageInMessages,
-          operation: 'aiDetectionRequest' 
-        }, 'AI detection request detected, redirecting to AI or Not API');
-        
-        // AI detection için özel işlem
-        return await this.handleAIDetectionRequest(request, requestId);
+      const shouldHandleAIDetection = isAIDetectionRequest && (request.hasImage || hasImageInMessages);
+      const hasAIDetectionSupport = Boolean(process.env.AI_OR_NOT_API_KEY && process.env.AI_OR_NOT_API_KEY.trim().length > 0);
+
+      if (shouldHandleAIDetection) {
+        if (!hasAIDetectionSupport) {
+          logger.warn({
+            requestId,
+            userId: request.userId,
+            chatId: request.chatId,
+            hasImage: request.hasImage,
+            hasImageInMessages,
+            operation: 'aiDetectionRequest'
+          }, 'AI detection requested but API key is not configured. Falling back to standard chat processing.');
+        } else {
+          logger.info({
+            requestId,
+            userId: request.userId,
+            chatId: request.chatId,
+            hasImage: request.hasImage,
+            hasImageInMessages,
+            operation: 'aiDetectionRequest'
+          }, 'AI detection request detected, redirecting to AI or Not API');
+
+          // AI detection için özel işlem
+          return await this.handleAIDetectionRequest(request, requestId);
+        }
       }
 
       // Model seçimi - Image varsa gpt-4o kullan (hasImageInMessages zaten yukarıda tanımlandı)

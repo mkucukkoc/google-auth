@@ -273,6 +273,7 @@ export class OpenAIAgentService {
 
   private static transformTools(tools: AgentToolDefinition[]) {
     return (tools || []).map(tool => ({
+      name: tool.name,
       type: 'function',
       function: {
         name: tool.name,
