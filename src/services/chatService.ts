@@ -2,6 +2,7 @@ import axios from 'axios';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { admin, db, FieldValue } from '../firebase';
+import { PDFReadService } from './pdfReadService';
 import {
   OpenAIAgentService,
   AgentMessage,
@@ -511,6 +512,22 @@ export class ChatService {
           },
           required: ['prompt', 'format']
         }
+      },
+      {
+        name: 'summarize_document',
+        description: 'PDF, Word, Excel gibi belgeleri URL üzerinden özetler',
+        parameters: {
+          type: 'object',
+          properties: {
+            fileUrl: { type: 'string', description: 'Özetlenecek dosyanın URL\'si' },
+            format: {
+              type: 'string',
+              description: 'Dosya formatı',
+              enum: ['pdf', 'doc', 'docx', 'txt', 'text', 'rtf', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'json', 'html', 'htm']
+            }
+          },
+          required: ['fileUrl']
+        }
       }
     ];
   }
@@ -562,6 +579,105 @@ export class ChatService {
       generate_document: async (args: any) => {
         // Belge oluşturma implementasyonu
         return { message: 'Belge oluşturuldu', downloadUrl: 'url...' };
+      },
+      summarize_document: async (args: any) => {
+        const fileUrl: string | undefined = args?.fileUrl;
+        const formatInput: string | undefined = args?.format;
+
+        if (!fileUrl || typeof fileUrl !== 'string') {
+          return {
+            message: 'fileUrl parametresi gereklidir',
+            error: true,
+            errorCode: 'missing_file_url'
+          };
+        }
+
+        const normalizedFormat = (typeof formatInput === 'string' && formatInput.trim().length > 0)
+          ? formatInput.trim().toLowerCase()
+          : 'docx';
+
+        logger.info({
+          userId,
+          chatId,
+          fileUrl,
+          format: normalizedFormat,
+          operation: 'summarizeDocumentTool'
+        }, 'Summarize document tool invoked');
+
+        let result: StandardResponse<any>;
+
+        switch (normalizedFormat) {
+          case 'pdf':
+            result = await PDFReadService.summarizePDFUrl(fileUrl);
+            break;
+          case 'doc':
+          case 'docx':
+          case 'rtf':
+            result = await PDFReadService.summarizeWordUrl(fileUrl);
+            break;
+          case 'ppt':
+          case 'pptx':
+            result = await PDFReadService.summarizePPTUrl(fileUrl);
+            break;
+          case 'xls':
+          case 'xlsx':
+            result = await PDFReadService.summarizeExcelUrl(fileUrl);
+            break;
+          case 'csv':
+            result = await PDFReadService.summarizeCSVUrl(fileUrl);
+            break;
+          case 'json':
+            result = await PDFReadService.summarizeJSONUrl(fileUrl);
+            break;
+          case 'html':
+          case 'htm':
+            result = await PDFReadService.summarizeHTMLUrl(fileUrl);
+            break;
+          case 'txt':
+          case 'text':
+          default:
+            result = await PDFReadService.summarizeTXTUrl(fileUrl);
+            break;
+        }
+
+        if (!result.success) {
+          const errorMessage = result.error?.message || 'Dosya özetleme işlemi başarısız oldu';
+          logger.error({
+            userId,
+            chatId,
+            fileUrl,
+            format: normalizedFormat,
+            error: result.error,
+            operation: 'summarizeDocumentTool'
+          }, 'Summarize document tool failed');
+
+          return {
+            message: errorMessage,
+            error: true,
+            errorCode: result.error?.code || 'summarize_document_failed'
+          };
+        }
+
+        const summary = typeof result.data?.summary === 'string'
+          ? result.data.summary
+          : undefined;
+
+        const fullText = typeof result.data?.full_text === 'string'
+          ? result.data.full_text
+          : undefined;
+
+        const responsePayload: Record<string, any> = {
+          message: summary || 'Dosya başarıyla özetlendi',
+          summary: summary || null,
+          fileId: result.data?.file_id || null,
+          format: normalizedFormat
+        };
+
+        if (fullText) {
+          responsePayload.fullTextLength = fullText.length;
+        }
+
+        return responsePayload;
       }
     };
   }
