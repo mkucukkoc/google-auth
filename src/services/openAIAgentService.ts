@@ -319,9 +319,16 @@ export class OpenAIAgentService {
         if (item?.type === 'message' || item?.type === 'output_message') {
           const content = item.content || [];
           for (const part of content) {
-            if (part?.type === 'output_text' && part?.text?.value) {
-              return part.text.value;
+            if (part?.type === 'output_text') {
+              if (typeof part?.text === 'string') {
+                return part.text;
+              }
+
+              if (part?.text?.value) {
+                return part.text.value;
+              }
             }
+
             if (part?.type === 'text' && typeof part.text === 'string') {
               return part.text;
             }
