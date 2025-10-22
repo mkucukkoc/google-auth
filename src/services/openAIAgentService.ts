@@ -96,8 +96,12 @@ export class OpenAIAgentService {
 
     const executedToolCalls: AgentExecutedToolCall[] = [];
 
-    while (currentResponse?.required_action?.type === 'submit_tool_outputs') {
-      const toolCalls = currentResponse.required_action?.submit_tool_outputs?.tool_calls || [];
+    while (true) {
+      const toolCalls = this.extractToolCalls(currentResponse);
+
+      if (!toolCalls.length) {
+        break;
+      }
 
       if (!options.executeTool) {
         logger.error({
@@ -119,19 +123,24 @@ export class OpenAIAgentService {
       const toolOutputs = [];
 
       for (const toolCall of toolCalls) {
-        const toolName = toolCall.function?.name;
+        const toolName = toolCall.name;
         const callId = toolCall.id;
+        const rawArguments = toolCall.arguments;
         let parsedArgs: any = {};
 
         try {
-          parsedArgs = toolCall.function?.arguments ? JSON.parse(toolCall.function.arguments) : {};
+          if (typeof rawArguments === 'string' && rawArguments.trim().length > 0) {
+            parsedArgs = JSON.parse(rawArguments);
+          } else if (rawArguments && typeof rawArguments === 'object') {
+            parsedArgs = rawArguments;
+          }
         } catch (error: any) {
           logger.error({
             requestId: options.requestId,
             responseId: currentResponse?.id,
             toolId: callId,
             toolName,
-            arguments: toolCall.function?.arguments,
+            arguments: rawArguments,
             error: error?.message || 'Failed to parse arguments',
             operation: 'openaiAgentToolParsing'
           }, 'Failed to parse tool call arguments');
@@ -177,24 +186,12 @@ export class OpenAIAgentService {
         });
       }
 
-      try {
-        const followUpResponse = await axios.post(
-          `${this.OPENAI_BASE_URL}/responses/${currentResponse.id}/submit_tool_outputs`,
-          { tool_outputs: toolOutputs },
-          { headers: this.headers, timeout: 60000 }
-        );
-
-        currentResponse = followUpResponse.data;
-      } catch (error: any) {
-        logger.error({
-          requestId: options.requestId,
-          responseId: currentResponse?.id,
-          toolCallCount: toolCalls.length,
-          error: error?.response?.data || error?.message,
-          operation: 'openaiAgentToolSubmit'
-        }, 'Failed to submit tool outputs to OpenAI');
-        throw error;
-      }
+      currentResponse = await this.submitToolOutputs({
+        responseId: currentResponse?.id,
+        requestId: options.requestId,
+        toolOutputs,
+        toolCallCount: toolCalls.length
+      });
     }
 
     const outputText = this.extractOutputText(currentResponse);
@@ -338,5 +335,108 @@ export class OpenAIAgentService {
     }
 
     return undefined;
+  }
+
+  private static extractToolCalls(response: any): Array<{ id: string; name: string; arguments: any }> {
+    if (!response) {
+      return [];
+    }
+
+    const toolCallMap = new Map<string, { id: string; name: string; arguments: any }>();
+
+    const requiredActionCalls = response?.required_action?.type === 'submit_tool_outputs'
+      ? response.required_action.submit_tool_outputs?.tool_calls || []
+      : [];
+
+    for (const call of requiredActionCalls) {
+      const id = call?.id || call?.tool_call_id || call?.function?.call_id;
+      const name = call?.function?.name;
+      if (!id || !name) {
+        continue;
+      }
+
+      toolCallMap.set(id, {
+        id,
+        name,
+        arguments: call?.function?.arguments ?? '{}'
+      });
+    }
+
+    if (Array.isArray(response?.output)) {
+      for (const item of response.output) {
+        if (item?.type === 'function_call') {
+          const id = item?.id || item?.call_id;
+          const name = item?.name || item?.function_call?.name;
+          const args = item?.arguments ?? item?.function_call?.arguments ?? item?.function_call?.input ?? '{}';
+
+          if (!id || !name) {
+            continue;
+          }
+
+          toolCallMap.set(id, {
+            id,
+            name,
+            arguments: args
+          });
+        }
+
+        if (item?.type === 'message' || item?.type === 'output_message') {
+          const content = item?.content || [];
+          for (const part of content) {
+            if (part?.type === 'tool_call') {
+              const id = part?.id || part?.call_id;
+              const name = part?.name || part?.function_call?.name;
+              const args = part?.arguments ?? part?.function_call?.arguments ?? part?.function_call?.input ?? '{}';
+
+              if (!id || !name) {
+                continue;
+              }
+
+              toolCallMap.set(id, {
+                id,
+                name,
+                arguments: args
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return Array.from(toolCallMap.values());
+  }
+
+  private static async submitToolOutputs(options: {
+    responseId: string;
+    requestId: string;
+    toolOutputs: Array<{ tool_call_id: string; output: string }>;
+    toolCallCount: number;
+  }): Promise<any> {
+    if (!options?.responseId) {
+      logger.error({
+        requestId: options?.requestId,
+        operation: 'openaiAgentToolSubmit'
+      }, 'Cannot submit tool outputs without a responseId');
+      throw new Error('Response ID missing while submitting tool outputs');
+    }
+
+    try {
+      const followUpResponse = await axios.post(
+        `${this.OPENAI_BASE_URL}/responses/${options.responseId}/submit_tool_outputs`,
+        { tool_outputs: options.toolOutputs },
+        { headers: this.headers, timeout: 60000 }
+      );
+
+      return followUpResponse.data;
+    } catch (error: any) {
+      logger.error({
+        requestId: options.requestId,
+        responseId: options.responseId,
+        toolCallCount: options.toolCallCount,
+        error: error?.response?.data || error?.message,
+        operation: 'openaiAgentToolSubmit'
+      }, 'Failed to submit tool outputs to OpenAI');
+      throw error;
+    }
   }
 }
