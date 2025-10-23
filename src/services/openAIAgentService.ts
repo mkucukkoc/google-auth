@@ -47,7 +47,8 @@ export class OpenAIAgentService {
   private static get headers() {
     return {
       'Authorization': `Bearer ${this.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'OpenAI-Beta': 'assistants=v2'
     };
   }
 
