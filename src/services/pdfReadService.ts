@@ -81,12 +81,39 @@ export interface DocAdvancedPayload {
 export class PDFReadService {
   private static readonly PDFREAD_BASE_URL = config.api.pdfRead.baseUrl;
   private static readonly PDFREAD_FALLBACK_BASE_URL = config.api.pdfRead.fallbackBaseUrl;
+  private static readonly PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
 
+  private static normalizeBaseUrl(url: string): string {
+    const trimmed = url.replace(/\/+$/, '');
+    if (!trimmed) {
+      return trimmed;
+    }
+
+    if (trimmed.endsWith(this.PDFREAD_API_BASE_PATH)) {
+      return trimmed;
+    }
+
+    return `${trimmed}${this.PDFREAD_API_BASE_PATH}`;
+  }
+
   private static getBaseUrls(): string[] {
-    const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL].filter(
-      (url): url is string => Boolean(url && url.trim())
-    );
+    const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL]
+      .filter((url): url is string => Boolean(url && url.trim()))
+      .flatMap((url) => {
+        const trimmed = url.replace(/\/+$/, '');
+        if (!trimmed) {
+          return [];
+        }
+
+        const normalized = this.normalizeBaseUrl(trimmed);
+
+        if (normalized === trimmed) {
+          return [normalized];
+        }
+
+        return [normalized, trimmed];
+      });
 
     return [...new Set(urls)];
   }
