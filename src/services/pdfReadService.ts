@@ -140,6 +140,24 @@ export class PDFReadService {
         lastError = error;
         const status = error?.response?.status;
         const isLastAttempt = index === baseUrls.length - 1;
+        const retryStatuses = [404, 408, 500, 502, 503, 504];
+
+        if (status === 429) {
+          logger.warn(
+            {
+              baseUrl,
+              status,
+              path,
+              method,
+              errorMessage: error?.message,
+              operation: 'pdfread_request_rate_limited'
+            },
+            'PDFRead request hit rate limit, skipping further retries'
+          );
+
+          throw error;
+        }
+
         const retryStatuses = [404, 408, 429, 500, 502, 503, 504];
         const shouldRetry = !isLastAttempt && (!status || retryStatuses.includes(status));
 
