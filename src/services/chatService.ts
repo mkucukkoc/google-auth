@@ -395,6 +395,50 @@ export class ChatService {
     return undefined;
   }
 
+  private static normalizeFileUrl(raw?: unknown): string | undefined {
+    if (!raw) {
+      return undefined;
+    }
+
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    if (Array.isArray(raw)) {
+      for (const entry of raw) {
+        const normalized = this.normalizeFileUrl(entry);
+        if (normalized) {
+          return normalized;
+        }
+      }
+      return undefined;
+    }
+
+    if (typeof raw === 'object') {
+      const urlField = (raw as { url?: unknown }).url;
+      if (typeof urlField === 'string' && urlField.trim().length > 0) {
+        return urlField.trim();
+      }
+
+      const directField = (raw as { fileUrl?: unknown }).fileUrl;
+      if (typeof directField === 'string' && directField.trim().length > 0) {
+        return directField.trim();
+      }
+
+      const nested = (raw as { file_url?: unknown }).file_url;
+      if (typeof nested === 'string' && nested.trim().length > 0) {
+        return nested.trim();
+      }
+
+      if (typeof nested === 'object') {
+        return this.normalizeFileUrl(nested);
+      }
+    }
+
+    return undefined;
+  }
+
   private static extractInlineImageUrl(content: string): string | undefined {
     if (!content) {
       return undefined;
@@ -403,6 +447,24 @@ export class ChatService {
     // Markdown benzeri "[Dosya Bağlantısı]: <url>" kalıbını eşleştir
     const match = content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/i);
     return match?.[1];
+  }
+
+  private static extractInlineFileUrl(content: string): string | undefined {
+    if (!content) {
+      return undefined;
+    }
+
+    const labeledMatch = content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/i);
+    if (labeledMatch?.[1]) {
+      return labeledMatch[1].trim();
+    }
+
+    const genericMatch = content.match(/https?:\/\/\S+/);
+    if (genericMatch?.[0]) {
+      return genericMatch[0].trim();
+    }
+
+    return undefined;
   }
 
   private static stripInlineFileReference(content: string): string {
@@ -414,6 +476,43 @@ export class ChatService {
     const withoutReference = content.replace(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/gi, '').trim();
 
     return withoutReference;
+  }
+
+  private static extractDocumentFileUrl(request?: ChatRequest): string | undefined {
+    if (!request) {
+      return undefined;
+    }
+
+    const messages = request.messages || [];
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (!message) {
+        continue;
+      }
+
+      const inlineCandidate = this.extractInlineFileUrl(message.content);
+      const normalizedInline = this.normalizeFileUrl(inlineCandidate);
+      if (normalizedInline) {
+        return this.stripTrailingUrlPunctuation(normalizedInline);
+      }
+
+      const explicitUrl = this.normalizeFileUrl(message.fileUrl);
+      if (explicitUrl) {
+        return this.stripTrailingUrlPunctuation(explicitUrl);
+      }
+    }
+
+    const requestLevelUrl = this.normalizeFileUrl(request.imageFileUrl);
+    return requestLevelUrl ? this.stripTrailingUrlPunctuation(requestLevelUrl) : undefined;
+  }
+
+  private static stripTrailingUrlPunctuation(url: string): string {
+    if (!url) {
+      return url;
+    }
+
+    return url.replace(/[)\]\.,;]+$/, '');
   }
 
   private static isImageUrl(url?: string): boolean {
@@ -449,6 +548,39 @@ export class ChatService {
       
       throw new Error(`Image conversion failed: ${error?.message || 'Unknown error'}`);
     }
+  }
+
+  private static inferDocumentFormatFromUrl(url: string): string | undefined {
+    if (!url) {
+      return undefined;
+    }
+
+    const sanitized = url.split('?')[0] || url;
+    const extensionMatch = sanitized.toLowerCase().match(/\.([a-z0-9]+)$/);
+    if (!extensionMatch?.[1]) {
+      return undefined;
+    }
+
+    const extension = extensionMatch[1];
+
+    const supportedFormats = new Set([
+      'pdf',
+      'doc',
+      'docx',
+      'txt',
+      'text',
+      'rtf',
+      'ppt',
+      'pptx',
+      'xls',
+      'xlsx',
+      'csv',
+      'json',
+      'html',
+      'htm'
+    ]);
+
+    return supportedFormats.has(extension) ? extension : undefined;
   }
 
   /**
@@ -584,9 +716,24 @@ export class ChatService {
         const rawFileUrl: unknown = args?.fileUrl;
         const formatInput: string | undefined = args?.format;
 
-        const candidateFileUrl = typeof rawFileUrl === 'string' ? rawFileUrl.trim() : '';
-        const lowerCased = candidateFileUrl.toLowerCase();
-        const hasInvalidPlaceholder = lowerCased === 'none' || lowerCased === 'null';
+        let candidateFileUrl = typeof rawFileUrl === 'string' ? rawFileUrl.trim() : '';
+        let hasInvalidPlaceholder = candidateFileUrl.toLowerCase() === 'none' || candidateFileUrl.toLowerCase() === 'null';
+
+        if (!candidateFileUrl || hasInvalidPlaceholder) {
+          const fallbackUrl = ChatService.extractDocumentFileUrl(request);
+
+          if (fallbackUrl) {
+            candidateFileUrl = fallbackUrl;
+            hasInvalidPlaceholder = candidateFileUrl.toLowerCase() === 'none' || candidateFileUrl.toLowerCase() === 'null';
+            logger.warn({
+              userId,
+              chatId,
+              receivedFileUrl: rawFileUrl,
+              fallbackFileUrl: fallbackUrl,
+              operation: 'summarizeDocumentTool'
+            }, 'Missing fileUrl for summarize_document tool, falling back to extracted URL');
+          }
+        }
 
         if (!candidateFileUrl || hasInvalidPlaceholder) {
           logger.error({
@@ -605,9 +752,13 @@ export class ChatService {
 
         const fileUrl = candidateFileUrl;
 
-        const normalizedFormat = (typeof formatInput === 'string' && formatInput.trim().length > 0)
+        let normalizedFormat = (typeof formatInput === 'string' && formatInput.trim().length > 0)
           ? formatInput.trim().toLowerCase()
-          : 'docx';
+          : undefined;
+
+        if (!normalizedFormat) {
+          normalizedFormat = ChatService.inferDocumentFormatFromUrl(fileUrl) || 'docx';
+        }
 
         logger.info({
           userId,
