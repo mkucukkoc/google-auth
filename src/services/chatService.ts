@@ -581,16 +581,29 @@ export class ChatService {
         return { message: 'Belge oluşturuldu', downloadUrl: 'url...' };
       },
       summarize_document: async (args: any) => {
-        const fileUrl: string | undefined = args?.fileUrl;
+        const rawFileUrl: unknown = args?.fileUrl;
         const formatInput: string | undefined = args?.format;
 
-        if (!fileUrl || typeof fileUrl !== 'string') {
+        const candidateFileUrl = typeof rawFileUrl === 'string' ? rawFileUrl.trim() : '';
+        const lowerCased = candidateFileUrl.toLowerCase();
+        const hasInvalidPlaceholder = lowerCased === 'none' || lowerCased === 'null';
+
+        if (!candidateFileUrl || hasInvalidPlaceholder) {
+          logger.error({
+            userId,
+            chatId,
+            receivedFileUrl: rawFileUrl,
+            operation: 'summarizeDocumentTool'
+          }, 'Missing fileUrl for summarize_document tool');
+
           return {
-            message: 'fileUrl parametresi gereklidir',
+            message: 'Belge bağlantısı bulunamadı. Lütfen dosyayı yükleyip tekrar deneyin.',
             error: true,
             errorCode: 'missing_file_url'
           };
         }
+
+        const fileUrl = candidateFileUrl;
 
         const normalizedFormat = (typeof formatInput === 'string' && formatInput.trim().length > 0)
           ? formatInput.trim().toLowerCase()
