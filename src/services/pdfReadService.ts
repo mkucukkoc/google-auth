@@ -3,6 +3,7 @@ import FormData from 'form-data';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { PDFService } from './pdfService';
 
 export interface PPTThemePayload {
   mode?: 'light' | 'dark';
@@ -139,7 +140,8 @@ export class PDFReadService {
         lastError = error;
         const status = error?.response?.status;
         const isLastAttempt = index === baseUrls.length - 1;
-        const shouldRetry = !isLastAttempt && (!status || [404, 500, 502, 503].includes(status));
+        const retryStatuses = [404, 408, 429, 500, 502, 503, 504];
+        const shouldRetry = !isLastAttempt && (!status || retryStatuses.includes(status));
 
         if (!shouldRetry) {
           throw error;
@@ -800,14 +802,27 @@ export class PDFReadService {
   /**
    * URL'den PDF özetleme
    */
-  static async summarizePDFUrl(url: string, authToken?: string): Promise<StandardResponse<any>> {
+  static async summarizePDFUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+      userId?: string;
+      chatId?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const requestConfig = this.buildJsonConfig(60000);
 
+      const authToken = options?.authToken;
+
       if (authToken) {
+        const hasApiKeyAuth = Boolean(this.PDFREAD_API_KEY);
+
         requestConfig.headers = {
           ...requestConfig.headers,
-          Authorization: `Bearer ${authToken}`
+          ...(hasApiKeyAuth
+            ? { 'X-User-Token': authToken }
+            : { Authorization: `Bearer ${authToken}` })
         };
       }
 
@@ -821,11 +836,83 @@ export class PDFReadService {
 
       return ResponseBuilder.success(response.data, 'PDF URL summarized successfully');
     } catch (error: any) {
+      const fallbackResult = await this.handleSummarizePdfUrlFallback(error, url, options);
+      if (fallbackResult) {
+        return fallbackResult;
+      }
+
       logger.error({ err: error, url, operation: 'summarizePDFUrl' }, 'Summarize PDF URL error');
       return ResponseBuilder.error(
         'summarize_pdf_url_failed',
         error.response?.data?.detail || 'Failed to summarize PDF URL'
       );
+    }
+  }
+
+  private static shouldUseInternalPdfFallback(error: any): boolean {
+    const status = error?.response?.status;
+
+    if (!status) {
+      // Ağ hataları için fallback dene
+      return true;
+    }
+
+    return [408, 429, 500, 502, 503, 504].includes(status);
+  }
+
+  private static async handleSummarizePdfUrlFallback(
+    error: any,
+    url: string,
+    options?: { userId?: string; chatId?: string }
+  ): Promise<StandardResponse<any> | null> {
+    if (!this.shouldUseInternalPdfFallback(error)) {
+      return null;
+    }
+
+    try {
+      const fallbackResult = await PDFService.extractAndSummarizePDF({
+        fileUrl: url,
+        userId: options?.userId || 'unknown',
+        chatId: options?.chatId || 'unknown'
+      });
+
+      if (!fallbackResult.success) {
+        logger.error(
+          {
+            url,
+            userId: options?.userId,
+            chatId: options?.chatId,
+            fallbackError: fallbackResult.error,
+            operation: 'summarizePDFUrlFallback'
+          },
+          'Internal PDF summary fallback failed'
+        );
+      } else {
+        logger.warn(
+          {
+            url,
+            userId: options?.userId,
+            chatId: options?.chatId,
+            operation: 'summarizePDFUrlFallback'
+          },
+          'PDF summary completed via internal fallback'
+        );
+      }
+
+      return fallbackResult;
+    } catch (fallbackError: any) {
+      logger.error(
+        {
+          err: fallbackError,
+          url,
+          userId: options?.userId,
+          chatId: options?.chatId,
+          operation: 'summarizePDFUrlFallback'
+        },
+        'Internal PDF summary fallback threw an exception'
+      );
+
+      return null;
     }
   }
 

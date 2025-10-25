@@ -772,7 +772,10 @@ export class ChatService {
 
         switch (normalizedFormat) {
           case 'pdf':
-            result = await PDFReadService.summarizePDFUrl(fileUrl);
+            result = await PDFReadService.summarizePDFUrl(fileUrl, {
+              userId,
+              chatId
+            });
             break;
           case 'doc':
           case 'docx':

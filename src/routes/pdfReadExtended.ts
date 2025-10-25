@@ -532,9 +532,17 @@ export function createPDFReadExtendedRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
-        const { url } = req.body;
+        const { url, user_id: userIdFromBody, chat_id: chatIdFromBody } = req.body as {
+          url: string;
+          user_id?: string;
+          chat_id?: string;
+        };
 
-        const result = await PDFReadService.summarizePDFUrl(url, authReq.accessToken);
+        const result = await PDFReadService.summarizePDFUrl(url, {
+          authToken: authReq.accessToken,
+          userId: userIdFromBody || authReq.user!.id,
+          chatId: chatIdFromBody
+        });
 
         // Log the action
         await auditService.logUserAction(
