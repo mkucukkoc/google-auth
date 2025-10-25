@@ -524,8 +524,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/pdf-url
-  r.post('/summarize/pdf-url',
+  // POST /pdfread/summarize/pdf-url & /pdfread/summarize-pdf-url
+  r.post(['/summarize/pdf-url', '/summarize-pdf-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -561,8 +561,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/word-url
-  r.post('/summarize/word-url',
+  // POST /pdfread/summarize/word-url & /pdfread/summarize-word-url
+  r.post(['/summarize/word-url', '/summarize-word-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -598,8 +598,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/excel-url
-  r.post('/summarize/excel-url',
+  // POST /pdfread/summarize/excel-url & /pdfread/summarize-excel-url
+  r.post(['/summarize/excel-url', '/summarize-excel-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -635,8 +635,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/ppt-url
-  r.post('/summarize/ppt-url',
+  // POST /pdfread/summarize/ppt-url & /pdfread/summarize-ppt-url
+  r.post(['/summarize/ppt-url', '/summarize-ppt-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -672,8 +672,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/html-url
-  r.post('/summarize/html-url',
+  // POST /pdfread/summarize/html-url & /pdfread/summarize-html-url
+  r.post(['/summarize/html-url', '/summarize-html-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -709,8 +709,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/json-url
-  r.post('/summarize/json-url',
+  // POST /pdfread/summarize/json-url & /pdfread/summarize-json-url
+  r.post(['/summarize/json-url', '/summarize-json-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -746,8 +746,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/csv-url
-  r.post('/summarize/csv-url',
+  // POST /pdfread/summarize/csv-url & /pdfread/summarize-csv-url
+  r.post(['/summarize/csv-url', '/summarize-csv-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
@@ -783,8 +783,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/summarize/txt-url
-  r.post('/summarize/txt-url',
+  // POST /pdfread/summarize/txt-url & /pdfread/summarize-txt-url
+  r.post(['/summarize/txt-url', '/summarize-txt-url'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.summarizeUrl),
