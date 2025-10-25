@@ -534,7 +534,7 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizePDFUrl(url);
+        const result = await PDFReadService.summarizePDFUrl(url, authReq.accessToken);
 
         // Log the action
         await auditService.logUserAction(

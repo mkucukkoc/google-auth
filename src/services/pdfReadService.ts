@@ -800,12 +800,23 @@ export class PDFReadService {
   /**
    * URL'den PDF özetleme
    */
-  static async summarizePDFUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizePDFUrl(url: string, authToken?: string): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-pdf-url/', {
-        url
-      },
-        this.buildJsonConfig(60000)
+      const requestConfig = this.buildJsonConfig(60000);
+
+      if (authToken) {
+        requestConfig.headers = {
+          ...requestConfig.headers,
+          Authorization: `Bearer ${authToken}`
+        };
+      }
+
+      const response = await this.postWithFallback(
+        '/summarize-pdf-url/',
+        {
+          url
+        },
+        requestConfig
       );
 
       return ResponseBuilder.success(response.data, 'PDF URL summarized successfully');

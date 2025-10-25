@@ -12,6 +12,7 @@ export interface AuthRequest extends Request {
     name?: string;
     avatar?: string;
   };
+  accessToken?: string;
 }
 
 // JWT token authentication middleware
@@ -76,7 +77,7 @@ export async function authenticateToken(
     }, 'Token analysis completed, starting verification');
     
     const decoded = await TokenService.verifyAccessToken(token);
-    
+
     logger.info({
       requestId,
       hasDecoded: !!decoded,
@@ -256,6 +257,7 @@ export async function authenticateToken(
     }, 'Session validation successful');
 
     // Add user to request object
+    (req as AuthRequest).accessToken = token;
     (req as AuthRequest).user = {
       id: user.id,
       email: user.email,
@@ -317,6 +319,7 @@ export async function optionalAuth(
           const session = await SessionService.findById(decoded.sid);
           
           if (session && !session.revokedAt && session.expiresAt > new Date()) {
+            (req as AuthRequest).accessToken = token;
             (req as AuthRequest).user = {
               id: user.id,
               email: user.email,
