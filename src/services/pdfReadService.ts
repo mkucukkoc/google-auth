@@ -85,6 +85,24 @@ export class PDFReadService {
   private static readonly PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
   private static readonly MAX_RETRIES = 1;
+  private static readonly ALLOWED_BASE_HOSTS = new Set<string>(['google-auth-e4er.onrender.com']);
+
+  private static isAllowedBaseUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return this.ALLOWED_BASE_HOSTS.has(parsed.hostname);
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          url,
+          operation: 'pdfread_invalid_base_url'
+        },
+        'Ignoring invalid PDFRead base URL'
+      );
+      return false;
+    }
+  }
 
   private static normalizeBaseUrl(url: string): string {
     const trimmed = url.replace(/\/+$/, '');
@@ -104,7 +122,19 @@ export class PDFReadService {
       .filter((url): url is string => Boolean(url && url.trim()))
       .map((url) => url.replace(/\/+$/, ''))
       .filter((url): url is string => Boolean(url))
-      .map((url) => this.normalizeBaseUrl(url));
+      .map((url) => this.normalizeBaseUrl(url))
+      .filter((url) => this.isAllowedBaseUrl(url));
+
+    if (!urls.length) {
+      logger.warn(
+        {
+          configuredEndpoints: [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL],
+          allowedHosts: Array.from(this.ALLOWED_BASE_HOSTS),
+          operation: 'pdfread_no_allowed_endpoints'
+        },
+        'No allowed PDFRead endpoints configured'
+      );
+    }
 
     return [...new Set(urls)];
   }
@@ -858,7 +888,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const requestConfig = this.buildJsonConfig(60000, { authToken: options?.authToken });
+      const requestConfig = this.buildJsonConfig(120000, { authToken: options?.authToken });
 
       const payload: Record<string, unknown> = { url };
 
