@@ -200,7 +200,7 @@ export class PDFService {
       }, 'Generating PDF summary with OpenAI');
 
       // Metin çok uzunsa kısalt (OpenAI token limiti için)
-      const maxLength = 15000; // ~4000 token
+      const maxLength = Number(process.env.PDF_SUMMARY_MAX_CHARS || 8000);
       const truncatedText = text.length > maxLength 
         ? text.substring(0, maxLength) + '...' 
         : text;
@@ -217,8 +217,8 @@ export class PDFService {
             content: `Bu PDF dosyasının içeriğini özetle:\n\n${truncatedText}`
           }
         ],
-        max_tokens: 1000,
-        temperature: 0.7
+        max_tokens: Number(process.env.PDF_SUMMARY_MAX_TOKENS || 600),
+        temperature: Number(process.env.PDF_SUMMARY_TEMPERATURE || 0.5)
       }, {
         headers: {
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,

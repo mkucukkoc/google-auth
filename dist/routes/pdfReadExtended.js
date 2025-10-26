@@ -7,6 +7,7 @@ exports.createPDFReadExtendedRouter = createPDFReadExtendedRouter;
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const pdfReadService_1 = require("../services/pdfReadService");
+const pdfService_1 = require("../services/pdfService");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
@@ -389,22 +390,19 @@ function createPDFReadExtendedRouter() {
         const authReq = req;
         try {
             const { url, user_id: userIdFromBody, chat_id: chatIdFromBody } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizePDFUrl(url, {
-                authToken: authReq.accessToken,
+            // URL tabanlı özetlemede iç servisi doğrudan kullanarak
+            // gereksiz HTTP çağrısı ve potansiyel self-recursion'ı engelle
+            const result = await pdfService_1.PDFService.extractAndSummarizePDF({
+                fileUrl: url,
                 userId: userIdFromBody || authReq.user.id,
-                chatId: chatIdFromBody
+                chatId: chatIdFromBody || 'unknown'
             });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_pdf_url', {
                 url,
                 success: result.success
             });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
+            res.status(result.success ? 200 : 400).json(result);
         }
         catch (error) {
             logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizePDFUrl' }, 'Summarize PDF URL error');

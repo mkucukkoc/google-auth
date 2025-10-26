@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { PDFReadService, PPTAdvancedPayload, DocAdvancedPayload } from '../services/pdfReadService';
+import { PDFService } from '../services/pdfService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
 import { validate, pdfReadSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
@@ -538,10 +539,12 @@ export function createPDFReadExtendedRouter(): Router {
           chat_id?: string;
         };
 
-        const result = await PDFReadService.summarizePDFUrl(url, {
-          authToken: authReq.accessToken,
+        // URL tabanlı özetlemede iç servisi doğrudan kullanarak
+        // gereksiz HTTP çağrısı ve potansiyel self-recursion'ı engelle
+        const result = await PDFService.extractAndSummarizePDF({
+          fileUrl: url,
           userId: userIdFromBody || authReq.user!.id,
-          chatId: chatIdFromBody
+          chatId: chatIdFromBody || 'unknown'
         });
 
         // Log the action
@@ -554,11 +557,7 @@ export function createPDFReadExtendedRouter(): Router {
           }
         );
 
-        if (result.success) {
-          res.json(result);
-        } else {
-          res.status(400).json(result);
-        }
+        res.status(result.success ? 200 : 400).json(result);
       } catch (error) {
         logger.error({ err: error, userId: authReq.user!.id, operation: 'summarizePDFUrl' }, 'Summarize PDF URL error');
         res.status(500).json({
