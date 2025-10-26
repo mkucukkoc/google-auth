@@ -84,6 +84,7 @@ export class PDFReadService {
   private static readonly PDFREAD_FALLBACK_BASE_URL = config.api.pdfRead.fallbackBaseUrl;
   private static readonly PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
+  private static readonly MAX_RETRIES = 1;
 
   private static normalizeBaseUrl(url: string): string {
     const trimmed = url.replace(/\/+$/, '');
@@ -115,10 +116,22 @@ export class PDFReadService {
     axiosConfig: any
   ): Promise<any> {
     const baseUrls = this.getBaseUrls();
+    const attemptLimit = Math.min(baseUrls.length, this.MAX_RETRIES + 1);
+    const attemptUrls = baseUrls.slice(0, attemptLimit);
+    if (baseUrls.length > attemptUrls.length) {
+      logger.warn(
+        {
+          configuredEndpoints: baseUrls,
+          attemptLimit,
+          operation: 'pdfread_request_retry_limit'
+        },
+        'PDFRead retry limit reached, extra endpoints skipped'
+      );
+    }
     let lastError: any = null;
 
-    for (let index = 0; index < baseUrls.length; index += 1) {
-      const baseUrl = baseUrls[index];
+    for (let index = 0; index < attemptUrls.length; index += 1) {
+      const baseUrl = attemptUrls[index];
       try {
         if (method === 'post') {
           return await axios.post(`${baseUrl}${path}`, data, axiosConfig);
@@ -128,7 +141,7 @@ export class PDFReadService {
       } catch (error: any) {
         lastError = error;
         const status = error?.response?.status;
-        const isLastAttempt = index === baseUrls.length - 1;
+        const isLastAttempt = index === attemptUrls.length - 1;
         if (status === 429) {
           logger.warn(
             {
