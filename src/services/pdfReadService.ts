@@ -101,20 +101,9 @@ export class PDFReadService {
   private static getBaseUrls(): string[] {
     const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL]
       .filter((url): url is string => Boolean(url && url.trim()))
-      .flatMap((url) => {
-        const trimmed = url.replace(/\/+$/, '');
-        if (!trimmed) {
-          return [];
-        }
-
-        const normalized = this.normalizeBaseUrl(trimmed);
-
-        if (normalized === trimmed) {
-          return [normalized];
-        }
-
-        return [normalized, trimmed];
-      });
+      .map((url) => url.replace(/\/+$/, ''))
+      .filter((url): url is string => Boolean(url))
+      .map((url) => this.normalizeBaseUrl(url));
 
     return [...new Set(urls)];
   }
@@ -801,7 +790,7 @@ export class PDFReadService {
       formData.append('chat_id', chatId);
 
       const response = await this.postWithFallback(
-        '/ask-with-embeddings/',
+        '/ask-with-embeddings',
         formData,
         this.buildMultipartConfig(formData, 30000)
       );
@@ -858,11 +847,19 @@ export class PDFReadService {
     try {
       const requestConfig = this.buildJsonConfig(60000, { authToken: options?.authToken });
 
+      const payload: Record<string, unknown> = { url };
+
+      if (options?.userId) {
+        payload.user_id = options.userId;
+      }
+
+      if (options?.chatId) {
+        payload.chat_id = options.chatId;
+      }
+
       const response = await this.postWithFallback(
-        '/summarize-pdf-url/',
-        {
-          url
-        },
+        '/summarize-pdf-url',
+        payload,
         requestConfig
       );
 
@@ -958,7 +955,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-word-url/', {
+      const response = await this.postWithFallback('/summarize-word-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
@@ -984,7 +981,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-excel-url/', {
+      const response = await this.postWithFallback('/summarize-excel-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
@@ -1010,7 +1007,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-ppt-url/', {
+      const response = await this.postWithFallback('/summarize-ppt-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
@@ -1036,7 +1033,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-html-url/', {
+      const response = await this.postWithFallback('/summarize-html-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
@@ -1062,7 +1059,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-json-url/', {
+      const response = await this.postWithFallback('/summarize-json-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
@@ -1088,7 +1085,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-csv-url/', {
+      const response = await this.postWithFallback('/summarize-csv-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
@@ -1114,7 +1111,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const response = await this.postWithFallback('/summarize-txt-url/', {
+      const response = await this.postWithFallback('/summarize-txt-url', {
         url
       },
         this.buildJsonConfig(60000, { authToken: options?.authToken })
