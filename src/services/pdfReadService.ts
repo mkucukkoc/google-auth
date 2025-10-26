@@ -140,8 +140,6 @@ export class PDFReadService {
         lastError = error;
         const status = error?.response?.status;
         const isLastAttempt = index === baseUrls.length - 1;
-        const retryStatuses = [404, 408, 500, 502, 503, 504];
-
         if (status === 429) {
           logger.warn(
             {
