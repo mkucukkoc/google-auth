@@ -208,22 +208,51 @@ export class PDFReadService {
     formData.append('file', file, options);
   }
 
-  private static buildMultipartConfig(formData: FormData, timeout: number) {
+  private static applyUserAuthHeaders(
+    baseHeaders: Record<string, string>,
+    authToken?: string
+  ): Record<string, string> {
+    if (!authToken) {
+      return baseHeaders;
+    }
+
+    if (this.PDFREAD_API_KEY) {
+      return {
+        ...baseHeaders,
+        'X-User-Token': authToken
+      };
+    }
+
     return {
-      headers: {
-        ...formData.getHeaders(),
-        ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
-      },
+      ...baseHeaders,
+      Authorization: `Bearer ${authToken}`
+    };
+  }
+
+  private static buildMultipartConfig(
+    formData: FormData,
+    timeout: number,
+    options?: { authToken?: string }
+  ) {
+    const headers = {
+      ...formData.getHeaders(),
+      ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
+    } as Record<string, string>;
+
+    return {
+      headers: this.applyUserAuthHeaders(headers, options?.authToken),
       timeout
     };
   }
 
-  private static buildJsonConfig(timeout: number) {
+  private static buildJsonConfig(timeout: number, options?: { authToken?: string }) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
+    };
+
     return {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
-      },
+      headers: this.applyUserAuthHeaders(headers, options?.authToken),
       timeout
     };
   }
@@ -827,20 +856,7 @@ export class PDFReadService {
     }
   ): Promise<StandardResponse<any>> {
     try {
-      const requestConfig = this.buildJsonConfig(60000);
-
-      const authToken = options?.authToken;
-
-      if (authToken) {
-        const hasApiKeyAuth = Boolean(this.PDFREAD_API_KEY);
-
-        requestConfig.headers = {
-          ...requestConfig.headers,
-          ...(hasApiKeyAuth
-            ? { 'X-User-Token': authToken }
-            : { Authorization: `Bearer ${authToken}` })
-        };
-      }
+      const requestConfig = this.buildJsonConfig(60000, { authToken: options?.authToken });
 
       const response = await this.postWithFallback(
         '/summarize-pdf-url/',
@@ -935,12 +951,17 @@ export class PDFReadService {
   /**
    * URL'den Word özetleme
    */
-  static async summarizeWordUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizeWordUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-word-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'Word URL summarized successfully');
@@ -956,12 +977,17 @@ export class PDFReadService {
   /**
    * URL'den Excel özetleme
    */
-  static async summarizeExcelUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizeExcelUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-excel-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'Excel URL summarized successfully');
@@ -977,12 +1003,17 @@ export class PDFReadService {
   /**
    * URL'den PPT özetleme
    */
-  static async summarizePPTUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizePPTUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-ppt-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'PPT URL summarized successfully');
@@ -998,12 +1029,17 @@ export class PDFReadService {
   /**
    * URL'den HTML özetleme
    */
-  static async summarizeHTMLUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizeHTMLUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-html-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'HTML URL summarized successfully');
@@ -1019,12 +1055,17 @@ export class PDFReadService {
   /**
    * URL'den JSON özetleme
    */
-  static async summarizeJSONUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizeJSONUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-json-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'JSON URL summarized successfully');
@@ -1040,12 +1081,17 @@ export class PDFReadService {
   /**
    * URL'den CSV özetleme
    */
-  static async summarizeCSVUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizeCSVUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-csv-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'CSV URL summarized successfully');
@@ -1061,12 +1107,17 @@ export class PDFReadService {
   /**
    * URL'den TXT özetleme
    */
-  static async summarizeTXTUrl(url: string): Promise<StandardResponse<any>> {
+  static async summarizeTXTUrl(
+    url: string,
+    options?: {
+      authToken?: string;
+    }
+  ): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback('/summarize-txt-url/', {
         url
       },
-        this.buildJsonConfig(60000)
+        this.buildJsonConfig(60000, { authToken: options?.authToken })
       );
 
       return ResponseBuilder.success(response.data, 'TXT URL summarized successfully');

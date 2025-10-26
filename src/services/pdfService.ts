@@ -148,7 +148,19 @@ export class PDFService {
         operation: 'textExtraction'
       }, 'Extracting text from PDF');
 
-      const pdfData = await (pdf as any)(buffer, {
+      const pdfModule = pdf as unknown as { default?: unknown };
+      const parseFn =
+        typeof pdf === 'function'
+          ? (pdf as unknown as (data: Buffer, options?: unknown) => Promise<any>)
+          : typeof pdfModule?.default === 'function'
+            ? (pdfModule.default as (data: Buffer, options?: unknown) => Promise<any>)
+            : null;
+
+      if (!parseFn) {
+        throw new Error('pdf-parse modülü beklenen bir fonksiyon döndürmedi');
+      }
+
+      const pdfData = await parseFn(buffer, {
         // PDF parsing seçenekleri
         max: 0, // Tüm sayfaları işle
         version: 'v1.10.100', // PDF.js versiyonu

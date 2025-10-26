@@ -579,7 +579,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizeWordUrl(url);
+        const result = await PDFReadService.summarizeWordUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
@@ -616,7 +618,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizeExcelUrl(url);
+        const result = await PDFReadService.summarizeExcelUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
@@ -653,7 +657,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizePPTUrl(url);
+        const result = await PDFReadService.summarizePPTUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
@@ -690,7 +696,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizeHTMLUrl(url);
+        const result = await PDFReadService.summarizeHTMLUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
@@ -727,7 +735,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizeJSONUrl(url);
+        const result = await PDFReadService.summarizeJSONUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
@@ -764,7 +774,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizeCSVUrl(url);
+        const result = await PDFReadService.summarizeCSVUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
@@ -801,7 +813,9 @@ export function createPDFReadExtendedRouter(): Router {
       try {
         const { url } = req.body;
 
-        const result = await PDFReadService.summarizeTXTUrl(url);
+        const result = await PDFReadService.summarizeTXTUrl(url, {
+          authToken: authReq.accessToken
+        });
 
         // Log the action
         await auditService.logUserAction(
