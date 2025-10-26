@@ -266,7 +266,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/summarize-pdf/',
+        '/summarize',
         formData,
         this.buildMultipartConfig(formData, 30000)
       );
@@ -297,7 +297,7 @@ export class PDFReadService {
       formData.append('question', question);
 
       const response = await this.postWithFallback(
-        '/ask-pdf-question/',
+        '/ask-question',
         formData,
         this.buildMultipartConfig(formData, 30000)
       );
@@ -331,7 +331,7 @@ export class PDFReadService {
       formData.append('mime_type', mimeType);
 
       const response = await this.postWithFallback(
-        '/check-ai',
+        '/detect-ai',
         formData,
         this.buildMultipartConfig(formData, 30000)
       );
@@ -378,7 +378,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/pdf-to-word',
+        '/convert/pdf-to-word',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -402,7 +402,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/pdf-to-excel',
+        '/convert/pdf-to-excel',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -426,7 +426,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/pdf-to-ppt',
+        '/convert/pdf-to-ppt',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -450,7 +450,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/word-to-pdf',
+        '/convert/word-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -474,7 +474,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/excel-to-pdf',
+        '/convert/excel-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -498,7 +498,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/ppt-to-pdf',
+        '/convert/ppt-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -519,7 +519,7 @@ export class PDFReadService {
   static async generateDoc(prompt: string): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/generate-doc',
+        '/generate/doc',
         {
           prompt
         },
@@ -542,7 +542,7 @@ export class PDFReadService {
   static async generateExcel(prompt: string): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/generate-excel',
+        '/generate/excel',
         {
           prompt
         },
@@ -565,7 +565,7 @@ export class PDFReadService {
   static async generatePPT(prompt: string): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/generate-ppt',
+        '/generate/ppt',
         {
           prompt
         },
@@ -588,7 +588,7 @@ export class PDFReadService {
   static async generateDocAdvanced(payload: DocAdvancedPayload): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/generate-doc-advanced',
+        '/generate/doc-advanced',
         payload,
         this.buildJsonConfig(60000)
       );
@@ -610,7 +610,7 @@ export class PDFReadService {
   static async generatePPTAdvanced(payload: PPTAdvancedPayload): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/generate-ppt-advanced',
+        '/generate/ppt-advanced',
         payload,
         this.buildJsonConfig(60000)
       );
@@ -632,7 +632,7 @@ export class PDFReadService {
   static async speechToText(audioBase64: string): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/stt',
+        '/speech-to-text',
         {
           base64: audioBase64
         },
@@ -655,7 +655,7 @@ export class PDFReadService {
   static async textToSpeech(messages: Array<{role: string, content: string}>): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/tts-chat',
+        '/text-to-speech',
         {
           messages
         },
@@ -678,7 +678,7 @@ export class PDFReadService {
   static async imageCaption(imageBase64: string): Promise<StandardResponse<any>> {
     try {
       const response = await this.postWithFallback(
-        '/image-caption',
+        '/analyze-image',
         {
           image_base64: imageBase64
         },
@@ -1141,7 +1141,7 @@ export class PDFReadService {
       formData.append('mime_type', mimeType);
 
       const response = await this.postWithFallback(
-        '/ask-file-question/',
+        '/ask-question',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );

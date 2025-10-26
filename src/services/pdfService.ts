@@ -1,7 +1,9 @@
 import axios from 'axios';
-import pdf from 'pdf-parse';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
+
+// pdf-parse CommonJS modülü olduğundan, default import yerine require kullanıyoruz
+const pdfModule: unknown = require('pdf-parse');
 
 export interface PDFSummaryRequest {
   fileUrl: string;
@@ -148,12 +150,12 @@ export class PDFService {
         operation: 'textExtraction'
       }, 'Extracting text from PDF');
 
-      const pdfModule = pdf as unknown as { default?: unknown };
+      const moduleWithDefault = pdfModule as { default?: unknown };
       const parseFn =
-        typeof pdf === 'function'
-          ? (pdf as unknown as (data: Buffer, options?: unknown) => Promise<any>)
-          : typeof pdfModule?.default === 'function'
-            ? (pdfModule.default as (data: Buffer, options?: unknown) => Promise<any>)
+        typeof pdfModule === 'function'
+          ? (pdfModule as (data: Buffer, options?: unknown) => Promise<any>)
+          : typeof moduleWithDefault?.default === 'function'
+            ? (moduleWithDefault.default as (data: Buffer, options?: unknown) => Promise<any>)
             : null;
 
       if (!parseFn) {

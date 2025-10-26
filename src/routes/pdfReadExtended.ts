@@ -300,8 +300,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/image-caption
-  r.post('/image-caption',
+  // POST /pdfread/analyze-image (legacy: /image-caption)
+  r.post(['/analyze-image', '/image-caption'],
     authRateLimits.general,
     authenticateToken,
     validate(pdfReadSchemas.analyzeImage),
@@ -315,7 +315,7 @@ export function createPDFReadExtendedRouter(): Router {
         // Log the action
         await auditService.logUserAction(
           authReq.user!.id,
-          'pdf_image_caption',
+          'pdf_analyze_image',
           {
             imageSize: imageBase64.length,
             success: result.success
@@ -328,10 +328,10 @@ export function createPDFReadExtendedRouter(): Router {
           res.status(400).json(result);
         }
       } catch (error) {
-        logger.error({ err: error, userId: authReq.user!.id, operation: 'imageCaption' }, 'Image caption error');
+        logger.error({ err: error, userId: authReq.user!.id, operation: 'analyzeImage' }, 'Image analysis error');
         res.status(500).json({
           error: 'internal_error',
-          message: 'Failed to generate image caption'
+          message: 'Failed to analyze image'
         });
       }
     }
@@ -842,8 +842,8 @@ export function createPDFReadExtendedRouter(): Router {
     }
   );
 
-  // POST /pdfread/ask-file-question
-  r.post('/ask-file-question',
+  // POST /pdfread/ask-question (legacy: /ask-file-question)
+  r.post(['/ask-question', '/ask-file-question'],
     authRateLimits.general,
     authenticateToken,
     upload.single('file'),
@@ -869,7 +869,7 @@ export function createPDFReadExtendedRouter(): Router {
         // Log the action
         await auditService.logUserAction(
           authReq.user!.id,
-          'pdf_ask_file_question',
+          'pdf_ask_question',
           {
             fileName: req.file.originalname,
             fileSize: req.file.size,
