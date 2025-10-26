@@ -56,7 +56,7 @@ class PDFReadService {
         const attemptLimit = Math.min(baseUrls.length, this.MAX_RETRIES + 1);
         const attemptUrls = baseUrls.slice(0, attemptLimit);
         if (baseUrls.length > attemptUrls.length) {
-            logger_1.logger.debug({
+            logger_1.logger.warn({
                 configuredEndpoints: baseUrls,
                 attemptLimit,
                 operation: 'pdfread_request_retry_limit'
@@ -76,7 +76,7 @@ class PDFReadService {
                 const status = error?.response?.status;
                 const isLastAttempt = index === attemptUrls.length - 1;
                 if (status === 429) {
-                    logger_1.logger.info({
+                    logger_1.logger.warn({
                         baseUrl,
                         status,
                         path,
@@ -91,7 +91,7 @@ class PDFReadService {
                 if (!shouldRetry) {
                     throw error;
                 }
-                logger_1.logger.info({
+                logger_1.logger.warn({
                     baseUrl,
                     status,
                     path,
@@ -555,10 +555,6 @@ class PDFReadService {
         }
     }
     static shouldUseInternalPdfFallback(error) {
-        // İç fallback devre dışıysa hiçbir durumda kullanma
-        if (!config_1.config.api.pdfRead.enableInternalFallback) {
-            return false;
-        }
         const status = error?.response?.status;
         if (!status) {
             // Ağ hataları için fallback dene
@@ -771,5 +767,5 @@ PDFReadService.PDFREAD_BASE_URL = config_1.config.api.pdfRead.baseUrl;
 PDFReadService.PDFREAD_FALLBACK_BASE_URL = config_1.config.api.pdfRead.fallbackBaseUrl;
 PDFReadService.PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
 PDFReadService.PDFREAD_API_KEY = config_1.config.api.pdfRead.apiKey;
-PDFReadService.MAX_RETRIES = 0;
+PDFReadService.MAX_RETRIES = 1;
 PDFReadService.ALLOWED_BASE_HOSTS = new Set(['google-auth-e4er.onrender.com']);

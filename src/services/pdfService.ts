@@ -150,20 +150,45 @@ export class PDFService {
         operation: 'textExtraction'
       }, 'Extracting text from PDF');
 
-      const moduleWithDefault = pdfModule as { default?: unknown };
-      const parseFn =
-        typeof pdfModule === 'function'
-          ? (pdfModule as (data: Buffer, options?: unknown) => Promise<any>)
-          : typeof moduleWithDefault?.default === 'function'
-            ? (moduleWithDefault.default as (data: Buffer, options?: unknown) => Promise<any>)
-            : null;
+      // pdf-parse CJS/ESM farklı paketleme şekillerine karşı dayanıklı çözüm
+      let parseFn:
+        | ((data: Buffer, options?: unknown) => Promise<any>)
+        | null = null;
+
+      const tryResolve = (mod: any) => {
+        if (!mod) return null;
+        if (typeof mod === 'function') return mod;
+        if (typeof mod.default === 'function') return mod.default;
+        if (mod.default && typeof mod.default.default === 'function') return mod.default.default;
+        if (typeof mod.pdfParse === 'function') return mod.pdfParse;
+        return null;
+      };
+
+      // 1) require('pdf-parse') farklı varyantlar
+      parseFn = tryResolve(pdfModule as any);
+
+      // 2) Alternatif yol: pdf-parse/lib/pdf-parse
+      if (!parseFn) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const alt = require('pdf-parse/lib/pdf-parse');
+          parseFn = tryResolve(alt);
+        } catch {}
+      }
+
+      // 3) Dynamic import fallback (ESM ortamları)
+      if (!parseFn) {
+        try {
+          const dyn = await import('pdf-parse');
+          parseFn = tryResolve(dyn as any);
+        } catch {}
+      }
 
       if (!parseFn) {
         throw new Error('pdf-parse modülü beklenen bir fonksiyon döndürmedi');
       }
 
-      // Bazı pdf-parse sürümlerinde "version" opsiyonu desteklenmediği için
-      // sadece gerekli minimum parametrelerle çağır.
+      // Sadece gerekli minimum parametrelerle çağır
       const pdfData = await parseFn(buffer);
 
       logger.info({

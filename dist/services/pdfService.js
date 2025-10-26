@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -116,17 +149,44 @@ class PDFService {
                 bufferSize: buffer.length,
                 operation: 'textExtraction'
             }, 'Extracting text from PDF');
-            const moduleWithDefault = pdfModule;
-            const parseFn = typeof pdfModule === 'function'
-                ? pdfModule
-                : typeof moduleWithDefault?.default === 'function'
-                    ? moduleWithDefault.default
-                    : null;
+            // pdf-parse CJS/ESM farklı paketleme şekillerine karşı dayanıklı çözüm
+            let parseFn = null;
+            const tryResolve = (mod) => {
+                if (!mod)
+                    return null;
+                if (typeof mod === 'function')
+                    return mod;
+                if (typeof mod.default === 'function')
+                    return mod.default;
+                if (mod.default && typeof mod.default.default === 'function')
+                    return mod.default.default;
+                if (typeof mod.pdfParse === 'function')
+                    return mod.pdfParse;
+                return null;
+            };
+            // 1) require('pdf-parse') farklı varyantlar
+            parseFn = tryResolve(pdfModule);
+            // 2) Alternatif yol: pdf-parse/lib/pdf-parse
+            if (!parseFn) {
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const alt = require('pdf-parse/lib/pdf-parse');
+                    parseFn = tryResolve(alt);
+                }
+                catch { }
+            }
+            // 3) Dynamic import fallback (ESM ortamları)
+            if (!parseFn) {
+                try {
+                    const dyn = await Promise.resolve().then(() => __importStar(require('pdf-parse')));
+                    parseFn = tryResolve(dyn);
+                }
+                catch { }
+            }
             if (!parseFn) {
                 throw new Error('pdf-parse modülü beklenen bir fonksiyon döndürmedi');
             }
-            // Bazı pdf-parse sürümlerinde "version" opsiyonu desteklenmediği için
-            // sadece gerekli minimum parametrelerle çağır.
+            // Sadece gerekli minimum parametrelerle çağır
             const pdfData = await parseFn(buffer);
             logger_1.logger.info({
                 requestId,

@@ -84,7 +84,7 @@ export class PDFReadService {
   private static readonly PDFREAD_FALLBACK_BASE_URL = config.api.pdfRead.fallbackBaseUrl;
   private static readonly PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
-  private static readonly MAX_RETRIES = 0;
+  private static readonly MAX_RETRIES = 1;
   private static readonly ALLOWED_BASE_HOSTS = new Set<string>(['google-auth-e4er.onrender.com']);
 
   private static isAllowedBaseUrl(url: string): boolean {
@@ -149,7 +149,7 @@ export class PDFReadService {
     const attemptLimit = Math.min(baseUrls.length, this.MAX_RETRIES + 1);
     const attemptUrls = baseUrls.slice(0, attemptLimit);
     if (baseUrls.length > attemptUrls.length) {
-      logger.debug(
+      logger.warn(
         {
           configuredEndpoints: baseUrls,
           attemptLimit,
@@ -173,7 +173,7 @@ export class PDFReadService {
         const status = error?.response?.status;
         const isLastAttempt = index === attemptUrls.length - 1;
         if (status === 429) {
-          logger.info(
+          logger.warn(
             {
               baseUrl,
               status,
@@ -195,7 +195,7 @@ export class PDFReadService {
           throw error;
         }
 
-        logger.info(
+        logger.warn(
           {
             baseUrl,
             status,
@@ -922,10 +922,6 @@ export class PDFReadService {
   }
 
   private static shouldUseInternalPdfFallback(error: any): boolean {
-    // İç fallback devre dışıysa hiçbir durumda kullanma
-    if (!config.api.pdfRead.enableInternalFallback) {
-      return false;
-    }
     const status = error?.response?.status;
 
     if (!status) {
