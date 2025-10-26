@@ -5,9 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PDFService = void 0;
 const axios_1 = __importDefault(require("axios"));
-const pdf_parse_1 = __importDefault(require("pdf-parse"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
+// pdf-parse CommonJS modülü olduğundan, default import yerine require kullanıyoruz
+const pdfModule = require('pdf-parse');
 class PDFService {
     /**
      * PDF'den metin çıkar ve özet oluştur
@@ -115,11 +116,18 @@ class PDFService {
                 bufferSize: buffer.length,
                 operation: 'textExtraction'
             }, 'Extracting text from PDF');
-            const pdfData = await pdf_parse_1.default(buffer, {
-                // PDF parsing seçenekleri
-                max: 0, // Tüm sayfaları işle
-                version: 'v1.10.100', // PDF.js versiyonu
-            });
+            const moduleWithDefault = pdfModule;
+            const parseFn = typeof pdfModule === 'function'
+                ? pdfModule
+                : typeof moduleWithDefault?.default === 'function'
+                    ? moduleWithDefault.default
+                    : null;
+            if (!parseFn) {
+                throw new Error('pdf-parse modülü beklenen bir fonksiyon döndürmedi');
+            }
+            // Bazı pdf-parse sürümlerinde "version" opsiyonu desteklenmediği için
+            // sadece gerekli minimum parametrelerle çağır.
+            const pdfData = await parseFn(buffer);
             logger_1.logger.info({
                 requestId,
                 pageCount: pdfData.numpages,

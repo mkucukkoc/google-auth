@@ -1215,6 +1215,502 @@ exports.swaggerSpec = {
                 }
             }
         },
+        '/api/v1/pdfread/summarize-pdf-url': {
+            post: {
+                summary: 'Summarize PDF by URL',
+                description: 'Fetch a PDF document from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/document.pdf'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'PDF URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'The document provides an overview of...' },
+                                                full_text: { type: 'string', example: 'Full extracted text...' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'PDF URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-word-url': {
+            post: {
+                summary: 'Summarize Word document by URL',
+                description: 'Fetch a Word document (.doc or .docx) from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/document.docx'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'Word URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'The document covers...' },
+                                                full_text: { type: 'string', example: 'Full extracted text...' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'Word URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-excel-url': {
+            post: {
+                summary: 'Summarize Excel document by URL',
+                description: 'Fetch an Excel workbook (.xls or .xlsx) from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/spreadsheet.xlsx'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'Excel URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'Workbook summary...' },
+                                                full_text: { type: 'string', example: 'Flattened worksheet content...' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'Excel URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-ppt-url': {
+            post: {
+                summary: 'Summarize PowerPoint document by URL',
+                description: 'Fetch a PowerPoint presentation (.ppt or .pptx) from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/presentation.pptx'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'PowerPoint URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'Presentation summary...' },
+                                                full_text: { type: 'string', example: 'Extracted slide content...' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'PPT URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-html-url': {
+            post: {
+                summary: 'Summarize HTML document by URL',
+                description: 'Fetch an HTML page from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/index.html'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'HTML URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'Page summary...' },
+                                                full_text: { type: 'string', example: 'Extracted page content...' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'HTML URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-json-url': {
+            post: {
+                summary: 'Summarize JSON document by URL',
+                description: 'Fetch a JSON document from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/data.json'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'JSON URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'JSON summary...' },
+                                                full_text: { type: 'string', example: '{"key":"value"}' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'JSON URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-csv-url': {
+            post: {
+                summary: 'Summarize CSV document by URL',
+                description: 'Fetch a CSV file from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/data.csv'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'CSV URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'CSV summary...' },
+                                                full_text: { type: 'string', example: 'col1,col2\nvalue1,value2' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'CSV URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
+        '/api/v1/pdfread/summarize-txt-url': {
+            post: {
+                summary: 'Summarize text document by URL',
+                description: 'Fetch a plain text file from a URL and return its summary.',
+                tags: ['PDF Read'],
+                security: [{ BearerAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    url: {
+                                        type: 'string',
+                                        format: 'uri',
+                                        example: 'https://example.com/notes.txt'
+                                    },
+                                    user_id: {
+                                        type: 'string',
+                                        example: '3d27476a-c890-446a-aeff-76d953a679d6',
+                                        description: 'Optional user identifier forwarded to embedding services.'
+                                    },
+                                    chat_id: {
+                                        type: 'string',
+                                        example: '1761406026849',
+                                        description: 'Optional chat identifier forwarded to embedding services.'
+                                    }
+                                },
+                                required: ['url']
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    200: {
+                        description: 'Text URL summarized successfully',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        success: { type: 'boolean', example: true },
+                                        data: {
+                                            type: 'object',
+                                            properties: {
+                                                summary: { type: 'string', example: 'Text summary...' },
+                                                full_text: { type: 'string', example: 'Original text content...' },
+                                                file_id: { type: 'string', example: 'file_123abc' }
+                                            }
+                                        },
+                                        message: { type: 'string', example: 'TXT URL summarized successfully' }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    400: { description: 'Bad request' },
+                    401: { description: 'Unauthorized' }
+                }
+            }
+        },
         '/api/v1/pdfread/ask-question': {
             post: {
                 summary: 'Ask question about PDF',

@@ -40,6 +40,7 @@ export const config = {
       baseUrl: process.env.PDFREAD_BASE_URL || 'https://google-auth-e4er.onrender.com',
       fallbackBaseUrl: process.env.PDFREAD_FALLBACK_BASE_URL || '',
       apiKey: process.env.PDFREAD_API_KEY || '',
+      enableInternalFallback: (process.env.PDFREAD_ENABLE_INTERNAL_FALLBACK || 'false') === 'true',
     },
     openai: {
       baseUrl: 'https://api.openai.com/v1',

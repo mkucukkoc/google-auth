@@ -67,11 +67,9 @@ export function createPDFReadRouter(): Router {
           }
         );
 
-        if (result.success) {
-          res.json(result);
-        } else {
-          res.status(400).json(result);
-        }
+        // Dönen sonucu tek noktadan yaz, tekrar log üretimini azalt
+        const status = result.success ? 200 : 400;
+        res.status(status).json(result);
       } catch (error) {
         logger.error({ err: error, userId: authReq.user!.id, operation: 'pdfSummarize' }, 'PDF summarize error');
         res.status(500).json({

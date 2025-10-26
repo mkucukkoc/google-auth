@@ -9,16 +9,62 @@ const form_data_1 = __importDefault(require("form-data"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
+const pdfService_1 = require("./pdfService");
 class PDFReadService {
+    static isAllowedBaseUrl(url) {
+        try {
+            const parsed = new URL(url);
+            return this.ALLOWED_BASE_HOSTS.has(parsed.hostname);
+        }
+        catch (error) {
+            logger_1.logger.warn({
+                err: error,
+                url,
+                operation: 'pdfread_invalid_base_url'
+            }, 'Ignoring invalid PDFRead base URL');
+            return false;
+        }
+    }
+    static normalizeBaseUrl(url) {
+        const trimmed = url.replace(/\/+$/, '');
+        if (!trimmed) {
+            return trimmed;
+        }
+        if (trimmed.endsWith(this.PDFREAD_API_BASE_PATH)) {
+            return trimmed;
+        }
+        return `${trimmed}${this.PDFREAD_API_BASE_PATH}`;
+    }
     static getBaseUrls() {
-        const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL].filter((url) => Boolean(url && url.trim()));
+        const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL]
+            .filter((url) => Boolean(url && url.trim()))
+            .map((url) => url.replace(/\/+$/, ''))
+            .filter((url) => Boolean(url))
+            .map((url) => this.normalizeBaseUrl(url))
+            .filter((url) => this.isAllowedBaseUrl(url));
+        if (!urls.length) {
+            logger_1.logger.warn({
+                configuredEndpoints: [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL],
+                allowedHosts: Array.from(this.ALLOWED_BASE_HOSTS),
+                operation: 'pdfread_no_allowed_endpoints'
+            }, 'No allowed PDFRead endpoints configured');
+        }
         return [...new Set(urls)];
     }
     static async requestWithFallback(method, path, data, axiosConfig) {
         const baseUrls = this.getBaseUrls();
+        const attemptLimit = Math.min(baseUrls.length, this.MAX_RETRIES + 1);
+        const attemptUrls = baseUrls.slice(0, attemptLimit);
+        if (baseUrls.length > attemptUrls.length) {
+            logger_1.logger.debug({
+                configuredEndpoints: baseUrls,
+                attemptLimit,
+                operation: 'pdfread_request_retry_limit'
+            }, 'PDFRead retry limit reached, extra endpoints skipped');
+        }
         let lastError = null;
-        for (let index = 0; index < baseUrls.length; index += 1) {
-            const baseUrl = baseUrls[index];
+        for (let index = 0; index < attemptUrls.length; index += 1) {
+            const baseUrl = attemptUrls[index];
             try {
                 if (method === 'post') {
                     return await axios_1.default.post(`${baseUrl}${path}`, data, axiosConfig);
@@ -28,12 +74,24 @@ class PDFReadService {
             catch (error) {
                 lastError = error;
                 const status = error?.response?.status;
-                const isLastAttempt = index === baseUrls.length - 1;
-                const shouldRetry = !isLastAttempt && (!status || [404, 500, 502, 503].includes(status));
+                const isLastAttempt = index === attemptUrls.length - 1;
+                if (status === 429) {
+                    logger_1.logger.info({
+                        baseUrl,
+                        status,
+                        path,
+                        method,
+                        errorMessage: error?.message,
+                        operation: 'pdfread_request_rate_limited'
+                    }, 'PDFRead request hit rate limit, skipping further retries');
+                    throw error;
+                }
+                const retryStatuses = [404, 408, 429, 500, 502, 503, 504];
+                const shouldRetry = !isLastAttempt && (!status || retryStatuses.includes(status));
                 if (!shouldRetry) {
                     throw error;
                 }
-                logger_1.logger.warn({
+                logger_1.logger.info({
                     baseUrl,
                     status,
                     path,
@@ -58,21 +116,38 @@ class PDFReadService {
         }
         formData.append('file', file, options);
     }
-    static buildMultipartConfig(formData, timeout) {
+    static applyUserAuthHeaders(baseHeaders, authToken) {
+        if (!authToken) {
+            return baseHeaders;
+        }
+        if (this.PDFREAD_API_KEY) {
+            return {
+                ...baseHeaders,
+                'X-User-Token': authToken
+            };
+        }
         return {
-            headers: {
-                ...formData.getHeaders(),
-                ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
-            },
+            ...baseHeaders,
+            Authorization: `Bearer ${authToken}`
+        };
+    }
+    static buildMultipartConfig(formData, timeout, options) {
+        const headers = {
+            ...formData.getHeaders(),
+            ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
+        };
+        return {
+            headers: this.applyUserAuthHeaders(headers, options?.authToken),
             timeout
         };
     }
-    static buildJsonConfig(timeout) {
+    static buildJsonConfig(timeout, options) {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
+        };
         return {
-            headers: {
-                'Content-Type': 'application/json',
-                ...(this.PDFREAD_API_KEY ? { Authorization: `Bearer ${this.PDFREAD_API_KEY}` } : {})
-            },
+            headers: this.applyUserAuthHeaders(headers, options?.authToken),
             timeout
         };
     }
@@ -83,7 +158,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/summarize-pdf/', formData, this.buildMultipartConfig(formData, 30000));
+            const response = await this.postWithFallback('/summarize', formData, this.buildMultipartConfig(formData, 30000));
             logger_1.logger.info({ filename, fileSize: file.length }, 'PDF summarized successfully');
             return response_1.ResponseBuilder.success(response.data, 'PDF summarized successfully');
         }
@@ -105,7 +180,7 @@ class PDFReadService {
             const formData = new form_data_1.default();
             formData.append('pdf_text', pdfText);
             formData.append('question', question);
-            const response = await this.postWithFallback('/ask-pdf-question/', formData, this.buildMultipartConfig(formData, 30000));
+            const response = await this.postWithFallback('/ask-question', formData, this.buildMultipartConfig(formData, 30000));
             logger_1.logger.info({
                 questionLength: question.length,
                 pdfTextLength: pdfText.length
@@ -130,7 +205,7 @@ class PDFReadService {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename, mimeType);
             formData.append('mime_type', mimeType);
-            const response = await this.postWithFallback('/check-ai', formData, this.buildMultipartConfig(formData, 30000));
+            const response = await this.postWithFallback('/detect-ai', formData, this.buildMultipartConfig(formData, 30000));
             return response_1.ResponseBuilder.success(response.data, 'AI document detection completed');
         }
         catch (error) {
@@ -160,7 +235,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/pdf-to-word', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/convert/pdf-to-word', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PDF converted to Word successfully');
         }
         catch (error) {
@@ -175,7 +250,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/pdf-to-excel', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/convert/pdf-to-excel', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PDF converted to Excel successfully');
         }
         catch (error) {
@@ -190,7 +265,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/pdf-to-ppt', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/convert/pdf-to-ppt', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PDF converted to PPT successfully');
         }
         catch (error) {
@@ -205,7 +280,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/word-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/convert/word-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'Word converted to PDF successfully');
         }
         catch (error) {
@@ -220,7 +295,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/excel-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/convert/excel-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'Excel converted to PDF successfully');
         }
         catch (error) {
@@ -235,7 +310,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/ppt-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/convert/ppt-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PPT converted to PDF successfully');
         }
         catch (error) {
@@ -248,7 +323,7 @@ class PDFReadService {
     */
     static async generateDoc(prompt) {
         try {
-            const response = await this.postWithFallback('/generate-doc', {
+            const response = await this.postWithFallback('/generate/doc', {
                 prompt
             }, this.buildJsonConfig(60000));
             return response_1.ResponseBuilder.success(response.data, 'Word document generated successfully');
@@ -263,7 +338,7 @@ class PDFReadService {
     */
     static async generateExcel(prompt) {
         try {
-            const response = await this.postWithFallback('/generate-excel', {
+            const response = await this.postWithFallback('/generate/excel', {
                 prompt
             }, this.buildJsonConfig(60000));
             return response_1.ResponseBuilder.success(response.data, 'Excel document generated successfully');
@@ -278,7 +353,7 @@ class PDFReadService {
     */
     static async generatePPT(prompt) {
         try {
-            const response = await this.postWithFallback('/generate-ppt', {
+            const response = await this.postWithFallback('/generate/ppt', {
                 prompt
             }, this.buildJsonConfig(60000));
             return response_1.ResponseBuilder.success(response.data, 'PowerPoint document generated successfully');
@@ -293,7 +368,7 @@ class PDFReadService {
     */
     static async generateDocAdvanced(payload) {
         try {
-            const response = await this.postWithFallback('/generate-doc-advanced', payload, this.buildJsonConfig(60000));
+            const response = await this.postWithFallback('/generate/doc-advanced', payload, this.buildJsonConfig(60000));
             return response_1.ResponseBuilder.success(response.data, 'Advanced Word document generated successfully');
         }
         catch (error) {
@@ -307,7 +382,7 @@ class PDFReadService {
     */
     static async generatePPTAdvanced(payload) {
         try {
-            const response = await this.postWithFallback('/generate-ppt-advanced', payload, this.buildJsonConfig(60000));
+            const response = await this.postWithFallback('/generate/ppt-advanced', payload, this.buildJsonConfig(60000));
             return response_1.ResponseBuilder.success(response.data, 'Advanced PowerPoint document generated successfully');
         }
         catch (error) {
@@ -321,7 +396,7 @@ class PDFReadService {
      */
     static async speechToText(audioBase64) {
         try {
-            const response = await this.postWithFallback('/stt', {
+            const response = await this.postWithFallback('/speech-to-text', {
                 base64: audioBase64
             }, this.buildJsonConfig(30000));
             return response_1.ResponseBuilder.success(response.data, 'Speech converted to text successfully');
@@ -336,7 +411,7 @@ class PDFReadService {
      */
     static async textToSpeech(messages) {
         try {
-            const response = await this.postWithFallback('/tts-chat', {
+            const response = await this.postWithFallback('/text-to-speech', {
                 messages
             }, this.buildJsonConfig(30000));
             return response_1.ResponseBuilder.success(response.data, 'Text converted to speech successfully');
@@ -351,7 +426,7 @@ class PDFReadService {
      */
     static async imageCaption(imageBase64) {
         try {
-            const response = await this.postWithFallback('/image-caption', {
+            const response = await this.postWithFallback('/analyze-image', {
                 image_base64: imageBase64
             }, this.buildJsonConfig(30000));
             return response_1.ResponseBuilder.success(response.data, 'Image caption generated successfully');
@@ -430,7 +505,7 @@ class PDFReadService {
             const formData = new form_data_1.default();
             formData.append('question', question);
             formData.append('chat_id', chatId);
-            const response = await this.postWithFallback('/ask-with-embeddings/', formData, this.buildMultipartConfig(formData, 30000));
+            const response = await this.postWithFallback('/ask-with-embeddings', formData, this.buildMultipartConfig(formData, 30000));
             return response_1.ResponseBuilder.success(response.data, 'Question answered with embeddings successfully');
         }
         catch (error) {
@@ -457,26 +532,88 @@ class PDFReadService {
     /**
      * URL'den PDF özetleme
      */
-    static async summarizePDFUrl(url) {
+    static async summarizePDFUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-pdf-url/', {
-                url
-            }, this.buildJsonConfig(60000));
+            const requestConfig = this.buildJsonConfig(120000, { authToken: options?.authToken });
+            const payload = { url };
+            if (options?.userId) {
+                payload.user_id = options.userId;
+            }
+            if (options?.chatId) {
+                payload.chat_id = options.chatId;
+            }
+            const response = await this.postWithFallback('/summarize-pdf-url', payload, requestConfig);
             return response_1.ResponseBuilder.success(response.data, 'PDF URL summarized successfully');
         }
         catch (error) {
+            const fallbackResult = await this.handleSummarizePdfUrlFallback(error, url, options);
+            if (fallbackResult) {
+                return fallbackResult;
+            }
             logger_1.logger.error({ err: error, url, operation: 'summarizePDFUrl' }, 'Summarize PDF URL error');
             return response_1.ResponseBuilder.error('summarize_pdf_url_failed', error.response?.data?.detail || 'Failed to summarize PDF URL');
+        }
+    }
+    static shouldUseInternalPdfFallback(error) {
+        // İç fallback devre dışıysa hiçbir durumda kullanma
+        if (!config_1.config.api.pdfRead.enableInternalFallback) {
+            return false;
+        }
+        const status = error?.response?.status;
+        if (!status) {
+            // Ağ hataları için fallback dene
+            return true;
+        }
+        return [408, 429, 500, 502, 503, 504].includes(status);
+    }
+    static async handleSummarizePdfUrlFallback(error, url, options) {
+        if (!this.shouldUseInternalPdfFallback(error)) {
+            return null;
+        }
+        try {
+            const fallbackResult = await pdfService_1.PDFService.extractAndSummarizePDF({
+                fileUrl: url,
+                userId: options?.userId || 'unknown',
+                chatId: options?.chatId || 'unknown'
+            });
+            if (!fallbackResult.success) {
+                logger_1.logger.error({
+                    url,
+                    userId: options?.userId,
+                    chatId: options?.chatId,
+                    fallbackError: fallbackResult.error,
+                    operation: 'summarizePDFUrlFallback'
+                }, 'Internal PDF summary fallback failed');
+            }
+            else {
+                logger_1.logger.warn({
+                    url,
+                    userId: options?.userId,
+                    chatId: options?.chatId,
+                    operation: 'summarizePDFUrlFallback'
+                }, 'PDF summary completed via internal fallback');
+            }
+            return fallbackResult;
+        }
+        catch (fallbackError) {
+            logger_1.logger.error({
+                err: fallbackError,
+                url,
+                userId: options?.userId,
+                chatId: options?.chatId,
+                operation: 'summarizePDFUrlFallback'
+            }, 'Internal PDF summary fallback threw an exception');
+            return null;
         }
     }
     /**
      * URL'den Word özetleme
      */
-    static async summarizeWordUrl(url) {
+    static async summarizeWordUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-word-url/', {
+            const response = await this.postWithFallback('/summarize-word-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'Word URL summarized successfully');
         }
         catch (error) {
@@ -487,11 +624,11 @@ class PDFReadService {
     /**
      * URL'den Excel özetleme
      */
-    static async summarizeExcelUrl(url) {
+    static async summarizeExcelUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-excel-url/', {
+            const response = await this.postWithFallback('/summarize-excel-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'Excel URL summarized successfully');
         }
         catch (error) {
@@ -502,11 +639,11 @@ class PDFReadService {
     /**
      * URL'den PPT özetleme
      */
-    static async summarizePPTUrl(url) {
+    static async summarizePPTUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-ppt-url/', {
+            const response = await this.postWithFallback('/summarize-ppt-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'PPT URL summarized successfully');
         }
         catch (error) {
@@ -517,11 +654,11 @@ class PDFReadService {
     /**
      * URL'den HTML özetleme
      */
-    static async summarizeHTMLUrl(url) {
+    static async summarizeHTMLUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-html-url/', {
+            const response = await this.postWithFallback('/summarize-html-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'HTML URL summarized successfully');
         }
         catch (error) {
@@ -532,11 +669,11 @@ class PDFReadService {
     /**
      * URL'den JSON özetleme
      */
-    static async summarizeJSONUrl(url) {
+    static async summarizeJSONUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-json-url/', {
+            const response = await this.postWithFallback('/summarize-json-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'JSON URL summarized successfully');
         }
         catch (error) {
@@ -547,11 +684,11 @@ class PDFReadService {
     /**
      * URL'den CSV özetleme
      */
-    static async summarizeCSVUrl(url) {
+    static async summarizeCSVUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-csv-url/', {
+            const response = await this.postWithFallback('/summarize-csv-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'CSV URL summarized successfully');
         }
         catch (error) {
@@ -562,11 +699,11 @@ class PDFReadService {
     /**
      * URL'den TXT özetleme
      */
-    static async summarizeTXTUrl(url) {
+    static async summarizeTXTUrl(url, options) {
         try {
-            const response = await this.postWithFallback('/summarize-txt-url/', {
+            const response = await this.postWithFallback('/summarize-txt-url', {
                 url
-            }, this.buildJsonConfig(60000));
+            }, this.buildJsonConfig(60000, { authToken: options?.authToken }));
             return response_1.ResponseBuilder.success(response.data, 'TXT URL summarized successfully');
         }
         catch (error) {
@@ -583,7 +720,7 @@ class PDFReadService {
             this.appendFile(formData, file, filename, mimeType);
             formData.append('question', question);
             formData.append('mime_type', mimeType);
-            const response = await this.postWithFallback('/ask-file-question/', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/ask-question', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'File question answered successfully');
         }
         catch (error) {
@@ -632,4 +769,7 @@ class PDFReadService {
 exports.PDFReadService = PDFReadService;
 PDFReadService.PDFREAD_BASE_URL = config_1.config.api.pdfRead.baseUrl;
 PDFReadService.PDFREAD_FALLBACK_BASE_URL = config_1.config.api.pdfRead.fallbackBaseUrl;
+PDFReadService.PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
 PDFReadService.PDFREAD_API_KEY = config_1.config.api.pdfRead.apiKey;
+PDFReadService.MAX_RETRIES = 0;
+PDFReadService.ALLOWED_BASE_HOSTS = new Set(['google-auth-e4er.onrender.com']);

@@ -218,6 +218,7 @@ async function authenticateToken(req, res, next) {
             timeUntilExpiryMinutes: timeUntilExpiry / (1000 * 60)
         }, 'Session validation successful');
         // Add user to request object
+        req.accessToken = token;
         req.user = {
             id: user.id,
             email: user.email,
@@ -268,6 +269,7 @@ async function optionalAuth(req, res, next) {
                 if (user && !userService_1.UserService.isUserLocked(user)) {
                     const session = await sessionService_1.SessionService.findById(decoded.sid);
                     if (session && !session.revokedAt && session.expiresAt > new Date()) {
+                        req.accessToken = token;
                         req.user = {
                             id: user.id,
                             email: user.email,

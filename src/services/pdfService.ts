@@ -162,11 +162,9 @@ export class PDFService {
         throw new Error('pdf-parse modülü beklenen bir fonksiyon döndürmedi');
       }
 
-      const pdfData = await parseFn(buffer, {
-        // PDF parsing seçenekleri
-        max: 0, // Tüm sayfaları işle
-        version: 'v1.10.100', // PDF.js versiyonu
-      });
+      // Bazı pdf-parse sürümlerinde "version" opsiyonu desteklenmediği için
+      // sadece gerekli minimum parametrelerle çağır.
+      const pdfData = await parseFn(buffer);
 
       logger.info({
         requestId,

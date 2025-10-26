@@ -41,6 +41,7 @@ const axios_1 = __importDefault(require("axios"));
 const response_1 = require("../types/response");
 const logger_1 = require("../utils/logger");
 const firebase_1 = require("../firebase");
+const pdfReadService_1 = require("./pdfReadService");
 const openAIAgentService_1 = require("./openAIAgentService");
 class ChatService {
     /**
@@ -87,17 +88,31 @@ class ChatService {
                 }
                 return Boolean(this.normalizeImageUrl(msg.fileUrl));
             }) || Boolean(this.normalizeImageUrl(request.imageFileUrl));
-            if (isAIDetectionRequest && (request.hasImage || hasImageInMessages)) {
-                logger_1.logger.info({
-                    requestId,
-                    userId: request.userId,
-                    chatId: request.chatId,
-                    hasImage: request.hasImage,
-                    hasImageInMessages,
-                    operation: 'aiDetectionRequest'
-                }, 'AI detection request detected, redirecting to AI or Not API');
-                // AI detection için özel işlem
-                return await this.handleAIDetectionRequest(request, requestId);
+            const shouldHandleAIDetection = isAIDetectionRequest && (request.hasImage || hasImageInMessages);
+            const hasAIDetectionSupport = Boolean(process.env.AI_OR_NOT_API_KEY && process.env.AI_OR_NOT_API_KEY.trim().length > 0);
+            if (shouldHandleAIDetection) {
+                if (!hasAIDetectionSupport) {
+                    logger_1.logger.warn({
+                        requestId,
+                        userId: request.userId,
+                        chatId: request.chatId,
+                        hasImage: request.hasImage,
+                        hasImageInMessages,
+                        operation: 'aiDetectionRequest'
+                    }, 'AI detection requested but API key is not configured. Falling back to standard chat processing.');
+                }
+                else {
+                    logger_1.logger.info({
+                        requestId,
+                        userId: request.userId,
+                        chatId: request.chatId,
+                        hasImage: request.hasImage,
+                        hasImageInMessages,
+                        operation: 'aiDetectionRequest'
+                    }, 'AI detection request detected, redirecting to AI or Not API');
+                    // AI detection için özel işlem
+                    return await this.handleAIDetectionRequest(request, requestId);
+                }
             }
             // Model seçimi - Image varsa gpt-4o kullan (hasImageInMessages zaten yukarıda tanımlandı)
             const modelToUse = (request.hasImage || hasImageInMessages) ? 'gpt-4o' : this.FINE_TUNED_MODEL_ID;
@@ -330,6 +345,42 @@ class ChatService {
         }
         return undefined;
     }
+    static normalizeFileUrl(raw) {
+        if (!raw) {
+            return undefined;
+        }
+        if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+        }
+        if (Array.isArray(raw)) {
+            for (const entry of raw) {
+                const normalized = this.normalizeFileUrl(entry);
+                if (normalized) {
+                    return normalized;
+                }
+            }
+            return undefined;
+        }
+        if (typeof raw === 'object') {
+            const urlField = raw.url;
+            if (typeof urlField === 'string' && urlField.trim().length > 0) {
+                return urlField.trim();
+            }
+            const directField = raw.fileUrl;
+            if (typeof directField === 'string' && directField.trim().length > 0) {
+                return directField.trim();
+            }
+            const nested = raw.file_url;
+            if (typeof nested === 'string' && nested.trim().length > 0) {
+                return nested.trim();
+            }
+            if (typeof nested === 'object') {
+                return this.normalizeFileUrl(nested);
+            }
+        }
+        return undefined;
+    }
     static extractInlineImageUrl(content) {
         if (!content) {
             return undefined;
@@ -338,6 +389,20 @@ class ChatService {
         const match = content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/i);
         return match?.[1];
     }
+    static extractInlineFileUrl(content) {
+        if (!content) {
+            return undefined;
+        }
+        const labeledMatch = content.match(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/i);
+        if (labeledMatch?.[1]) {
+            return labeledMatch[1].trim();
+        }
+        const genericMatch = content.match(/https?:\/\/\S+/);
+        if (genericMatch?.[0]) {
+            return genericMatch[0].trim();
+        }
+        return undefined;
+    }
     static stripInlineFileReference(content) {
         if (!content) {
             return '';
@@ -345,6 +410,35 @@ class ChatService {
         // Mesaj metninden görsel referansını çıkartarak sadece açıklamayı bırak
         const withoutReference = content.replace(/\[Dosya Bağlantısı\]:\s*(https?:\/\/\S+)/gi, '').trim();
         return withoutReference;
+    }
+    static extractDocumentFileUrl(request) {
+        if (!request) {
+            return undefined;
+        }
+        const messages = request.messages || [];
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const message = messages[i];
+            if (!message) {
+                continue;
+            }
+            const inlineCandidate = this.extractInlineFileUrl(message.content);
+            const normalizedInline = this.normalizeFileUrl(inlineCandidate);
+            if (normalizedInline) {
+                return this.stripTrailingUrlPunctuation(normalizedInline);
+            }
+            const explicitUrl = this.normalizeFileUrl(message.fileUrl);
+            if (explicitUrl) {
+                return this.stripTrailingUrlPunctuation(explicitUrl);
+            }
+        }
+        const requestLevelUrl = this.normalizeFileUrl(request.imageFileUrl);
+        return requestLevelUrl ? this.stripTrailingUrlPunctuation(requestLevelUrl) : undefined;
+    }
+    static stripTrailingUrlPunctuation(url) {
+        if (!url) {
+            return url;
+        }
+        return url.replace(/[)\]\.,;]+$/, '');
     }
     static isImageUrl(url) {
         if (!url) {
@@ -375,6 +469,34 @@ class ChatService {
             }, 'Failed to convert image URL to base64');
             throw new Error(`Image conversion failed: ${error?.message || 'Unknown error'}`);
         }
+    }
+    static inferDocumentFormatFromUrl(url) {
+        if (!url) {
+            return undefined;
+        }
+        const sanitized = url.split('?')[0] || url;
+        const extensionMatch = sanitized.toLowerCase().match(/\.([a-z0-9]+)$/);
+        if (!extensionMatch?.[1]) {
+            return undefined;
+        }
+        const extension = extensionMatch[1];
+        const supportedFormats = new Set([
+            'pdf',
+            'doc',
+            'docx',
+            'txt',
+            'text',
+            'rtf',
+            'ppt',
+            'pptx',
+            'xls',
+            'xlsx',
+            'csv',
+            'json',
+            'html',
+            'htm'
+        ]);
+        return supportedFormats.has(extension) ? extension : undefined;
     }
     /**
      * Agent functions listesi
@@ -437,6 +559,22 @@ class ChatService {
                     },
                     required: ['prompt', 'format']
                 }
+            },
+            {
+                name: 'summarize_document',
+                description: 'PDF, Word, Excel gibi belgeleri URL üzerinden özetler',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        fileUrl: { type: 'string', description: 'Özetlenecek dosyanın URL\'si' },
+                        format: {
+                            type: 'string',
+                            description: 'Dosya formatı',
+                            enum: ['pdf', 'doc', 'docx', 'txt', 'text', 'rtf', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'json', 'html', 'htm']
+                        }
+                    },
+                    required: ['fileUrl']
+                }
             }
         ];
     }
@@ -486,6 +624,122 @@ class ChatService {
             generate_document: async (args) => {
                 // Belge oluşturma implementasyonu
                 return { message: 'Belge oluşturuldu', downloadUrl: 'url...' };
+            },
+            summarize_document: async (args) => {
+                const rawFileUrl = args?.fileUrl;
+                const formatInput = args?.format;
+                let candidateFileUrl = typeof rawFileUrl === 'string' ? rawFileUrl.trim() : '';
+                let hasInvalidPlaceholder = candidateFileUrl.toLowerCase() === 'none' || candidateFileUrl.toLowerCase() === 'null';
+                if (!candidateFileUrl || hasInvalidPlaceholder) {
+                    const fallbackUrl = ChatService.extractDocumentFileUrl(request);
+                    if (fallbackUrl) {
+                        candidateFileUrl = fallbackUrl;
+                        hasInvalidPlaceholder = candidateFileUrl.toLowerCase() === 'none' || candidateFileUrl.toLowerCase() === 'null';
+                        logger_1.logger.warn({
+                            userId,
+                            chatId,
+                            receivedFileUrl: rawFileUrl,
+                            fallbackFileUrl: fallbackUrl,
+                            operation: 'summarizeDocumentTool'
+                        }, 'Missing fileUrl for summarize_document tool, falling back to extracted URL');
+                    }
+                }
+                if (!candidateFileUrl || hasInvalidPlaceholder) {
+                    logger_1.logger.error({
+                        userId,
+                        chatId,
+                        receivedFileUrl: rawFileUrl,
+                        operation: 'summarizeDocumentTool'
+                    }, 'Missing fileUrl for summarize_document tool');
+                    return {
+                        message: 'Belge bağlantısı bulunamadı. Lütfen dosyayı yükleyip tekrar deneyin.',
+                        error: true,
+                        errorCode: 'missing_file_url'
+                    };
+                }
+                const fileUrl = candidateFileUrl;
+                let normalizedFormat = (typeof formatInput === 'string' && formatInput.trim().length > 0)
+                    ? formatInput.trim().toLowerCase()
+                    : undefined;
+                if (!normalizedFormat) {
+                    normalizedFormat = ChatService.inferDocumentFormatFromUrl(fileUrl) || 'docx';
+                }
+                logger_1.logger.info({
+                    userId,
+                    chatId,
+                    fileUrl,
+                    format: normalizedFormat,
+                    operation: 'summarizeDocumentTool'
+                }, 'Summarize document tool invoked');
+                let result;
+                switch (normalizedFormat) {
+                    case 'pdf':
+                        result = await pdfReadService_1.PDFReadService.summarizePDFUrl(fileUrl, {
+                            userId,
+                            chatId
+                        });
+                        break;
+                    case 'doc':
+                    case 'docx':
+                    case 'rtf':
+                        result = await pdfReadService_1.PDFReadService.summarizeWordUrl(fileUrl);
+                        break;
+                    case 'ppt':
+                    case 'pptx':
+                        result = await pdfReadService_1.PDFReadService.summarizePPTUrl(fileUrl);
+                        break;
+                    case 'xls':
+                    case 'xlsx':
+                        result = await pdfReadService_1.PDFReadService.summarizeExcelUrl(fileUrl);
+                        break;
+                    case 'csv':
+                        result = await pdfReadService_1.PDFReadService.summarizeCSVUrl(fileUrl);
+                        break;
+                    case 'json':
+                        result = await pdfReadService_1.PDFReadService.summarizeJSONUrl(fileUrl);
+                        break;
+                    case 'html':
+                    case 'htm':
+                        result = await pdfReadService_1.PDFReadService.summarizeHTMLUrl(fileUrl);
+                        break;
+                    case 'txt':
+                    case 'text':
+                    default:
+                        result = await pdfReadService_1.PDFReadService.summarizeTXTUrl(fileUrl);
+                        break;
+                }
+                if (!result.success) {
+                    const errorMessage = result.error?.message || 'Dosya özetleme işlemi başarısız oldu';
+                    logger_1.logger.error({
+                        userId,
+                        chatId,
+                        fileUrl,
+                        format: normalizedFormat,
+                        error: result.error,
+                        operation: 'summarizeDocumentTool'
+                    }, 'Summarize document tool failed');
+                    return {
+                        message: errorMessage,
+                        error: true,
+                        errorCode: result.error?.code || 'summarize_document_failed'
+                    };
+                }
+                const summary = typeof result.data?.summary === 'string'
+                    ? result.data.summary
+                    : undefined;
+                const fullText = typeof result.data?.full_text === 'string'
+                    ? result.data.full_text
+                    : undefined;
+                const responsePayload = {
+                    message: summary || 'Dosya başarıyla özetlendi',
+                    summary: summary || null,
+                    fileId: result.data?.file_id || null,
+                    format: normalizedFormat
+                };
+                if (fullText) {
+                    responsePayload.fullTextLength = fullText.length;
+                }
+                return responsePayload;
             }
         };
     }

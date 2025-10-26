@@ -226,14 +226,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/image-caption
-    r.post('/image-caption', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
+    // POST /pdfread/analyze-image (legacy: /image-caption)
+    r.post(['/analyze-image', '/image-caption'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
         const authReq = req;
         try {
             const { imageBase64 } = req.body;
             const result = await pdfReadService_1.PDFReadService.imageCaption(imageBase64);
             // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_image_caption', {
+            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_image', {
                 imageSize: imageBase64.length,
                 success: result.success
             });
@@ -245,10 +245,10 @@ function createPDFReadExtendedRouter() {
             }
         }
         catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'imageCaption' }, 'Image caption error');
+            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'analyzeImage' }, 'Image analysis error');
             res.status(500).json({
                 error: 'internal_error',
-                message: 'Failed to generate image caption'
+                message: 'Failed to analyze image'
             });
         }
     });
@@ -384,12 +384,16 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/pdf-url
-    r.post('/summarize/pdf-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/pdf-url & /pdfread/summarize-pdf-url
+    r.post(['/summarize/pdf-url', '/summarize-pdf-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizePDFUrl(url);
+            const { url, user_id: userIdFromBody, chat_id: chatIdFromBody } = req.body;
+            const result = await pdfReadService_1.PDFReadService.summarizePDFUrl(url, {
+                authToken: authReq.accessToken,
+                userId: userIdFromBody || authReq.user.id,
+                chatId: chatIdFromBody
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_pdf_url', {
                 url,
@@ -410,12 +414,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/word-url
-    r.post('/summarize/word-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/word-url & /pdfread/summarize-word-url
+    r.post(['/summarize/word-url', '/summarize-word-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeWordUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizeWordUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_word_url', {
                 url,
@@ -436,12 +442,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/excel-url
-    r.post('/summarize/excel-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/excel-url & /pdfread/summarize-excel-url
+    r.post(['/summarize/excel-url', '/summarize-excel-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeExcelUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizeExcelUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_excel_url', {
                 url,
@@ -462,12 +470,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/ppt-url
-    r.post('/summarize/ppt-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/ppt-url & /pdfread/summarize-ppt-url
+    r.post(['/summarize/ppt-url', '/summarize-ppt-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizePPTUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizePPTUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_ppt_url', {
                 url,
@@ -488,12 +498,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/html-url
-    r.post('/summarize/html-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/html-url & /pdfread/summarize-html-url
+    r.post(['/summarize/html-url', '/summarize-html-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeHTMLUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizeHTMLUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_html_url', {
                 url,
@@ -514,12 +526,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/json-url
-    r.post('/summarize/json-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/json-url & /pdfread/summarize-json-url
+    r.post(['/summarize/json-url', '/summarize-json-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeJSONUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizeJSONUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_json_url', {
                 url,
@@ -540,12 +554,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/csv-url
-    r.post('/summarize/csv-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/csv-url & /pdfread/summarize-csv-url
+    r.post(['/summarize/csv-url', '/summarize-csv-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeCSVUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizeCSVUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_csv_url', {
                 url,
@@ -566,12 +582,14 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/summarize/txt-url
-    r.post('/summarize/txt-url', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
+    // POST /pdfread/summarize/txt-url & /pdfread/summarize-txt-url
+    r.post(['/summarize/txt-url', '/summarize-txt-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
         const authReq = req;
         try {
             const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeTXTUrl(url);
+            const result = await pdfReadService_1.PDFReadService.summarizeTXTUrl(url, {
+                authToken: authReq.accessToken
+            });
             // Log the action
             await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_txt_url', {
                 url,
@@ -592,8 +610,8 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/ask-file-question
-    r.post('/ask-file-question', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, upload.single('file'), async (req, res) => {
+    // POST /pdfread/ask-question (legacy: /ask-file-question)
+    r.post(['/ask-question', '/ask-file-question'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, upload.single('file'), async (req, res) => {
         const authReq = req;
         try {
             if (!req.file) {
@@ -605,7 +623,7 @@ function createPDFReadExtendedRouter() {
             const { question } = req.body;
             const result = await pdfReadService_1.PDFReadService.askFileQuestion(req.file.buffer, req.file.originalname, question, req.file.mimetype);
             // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_ask_file_question', {
+            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_ask_question', {
                 fileName: req.file.originalname,
                 fileSize: req.file.size,
                 mimeType: req.file.mimetype,
