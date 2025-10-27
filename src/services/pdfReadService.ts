@@ -82,13 +82,49 @@ export interface DocAdvancedPayload {
 export class PDFReadService {
   private static readonly PDFREAD_BASE_URL = config.api.pdfRead.baseUrl;
   private static readonly PDFREAD_FALLBACK_BASE_URL = config.api.pdfRead.fallbackBaseUrl;
-  private static readonly PDFREAD_API_BASE_PATH = (config.api.pdfRead as any).apiBasePath || '';
+  private static readonly PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
   private static readonly MAX_RETRIES = 1;
   private static readonly ALLOWED_BASE_HOSTS = new Set<string>([
     'google-auth-e4er.onrender.com',
-    'avenia.onrender.com',
+    'avenia.onrender.com'
   ]);
+  private static readonly AVENIA_BASE_URL = 'https://avenia.onrender.com';
+  private static readonly AVENIA_ENDPOINTS: string[] = [
+    '/generate-video',
+    '/generate-video-prompt',
+    '/summarize',
+    '/ask-question',
+    '/summarize-pdf-url',
+    '/summarize-word-url',
+    '/summarize-excel-url',
+    '/summarize-ppt-url',
+    '/summarize-html-url',
+    '/summarize-json-url',
+    '/summarize-csv-url',
+    '/summarize-txt-url',
+    '/generate-doc',
+    '/generate-doc-advanced',
+    '/generate-excel',
+    '/generate-ppt',
+    '/generate-ppt-advanced',
+    '/audio-isolation',
+    '/stt',
+    '/tts-chat',
+    '/ask-with-embeddings',
+    '/search-docs',
+    '/export-chat',
+    '/healthz',
+    '/analyze-image',
+    '/analyze-video',
+    '/check-ai',
+    '/pdf-to-word',
+    '/pdf-to-excel',
+    '/pdf-to-ppt',
+    '/word-to-pdf',
+    '/ppt-to-pdf',
+    '/excel-to-pdf'
+  ];
 
   private static isAllowedBaseUrl(url: string): boolean {
     try {
@@ -120,6 +156,18 @@ export class PDFReadService {
     return `${trimmed}${this.PDFREAD_API_BASE_PATH}`;
   }
 
+  private static normalizeEndpointPath(path: string): string {
+    if (!path) {
+      return '/';
+    }
+
+    const trimmed = path.trim();
+    const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    const withoutTrailing = withLeadingSlash.replace(/\/+$/, '');
+
+    return withoutTrailing || '/';
+  }
+
   private static getBaseUrls(): string[] {
     const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL]
       .filter((url): url is string => Boolean(url && url.trim()))
@@ -142,13 +190,65 @@ export class PDFReadService {
     return [...new Set(urls)];
   }
 
+  private static getAveniaBaseUrls(): string[] {
+    const baseUrl = this.AVENIA_BASE_URL?.trim();
+    if (!baseUrl) {
+      return [];
+    }
+
+    const normalized = baseUrl.replace(/\/+$/, '');
+    if (!normalized) {
+      return [];
+    }
+    if (!this.isAllowedBaseUrl(normalized)) {
+      logger.warn(
+        {
+          configuredEndpoint: baseUrl,
+          normalizedEndpoint: normalized,
+          allowedHosts: Array.from(this.ALLOWED_BASE_HOSTS),
+          operation: 'pdfread_special_endpoint_invalid_base'
+        },
+        'Avenia base URL is not allowed, skipping'
+      );
+      return [];
+    }
+
+    return [normalized];
+  }
+
+  private static shouldUseAveniaBase(path: string): boolean {
+    const normalizedPath = this.normalizeEndpointPath(path);
+    return this.AVENIA_ENDPOINTS.some(
+      (endpoint) => this.normalizeEndpointPath(endpoint) === normalizedPath
+    );
+  }
+
+  private static resolveBaseUrls(path: string): string[] {
+    if (this.shouldUseAveniaBase(path)) {
+      const aveniaBaseUrls = this.getAveniaBaseUrls();
+      if (aveniaBaseUrls.length) {
+        return aveniaBaseUrls;
+      }
+
+      logger.warn(
+        {
+          path: this.normalizeEndpointPath(path),
+          operation: 'pdfread_special_endpoint_fallback'
+        },
+        'Falling back to default PDFRead endpoints for special path'
+      );
+    }
+
+    return this.getBaseUrls();
+  }
+
   private static async requestWithFallback(
     method: 'post' | 'get',
     path: string,
     data: any,
     axiosConfig: any
   ): Promise<any> {
-    const baseUrls = this.getBaseUrls();
+    const baseUrls = this.resolveBaseUrls(path);
     const attemptLimit = Math.min(baseUrls.length, this.MAX_RETRIES + 1);
     const attemptUrls = baseUrls.slice(0, attemptLimit);
     if (baseUrls.length > attemptUrls.length) {
@@ -366,7 +466,7 @@ export class PDFReadService {
       formData.append('mime_type', mimeType);
 
       const response = await this.postWithFallback(
-        '/detect-ai',
+        '/check-ai',
         formData,
         this.buildMultipartConfig(formData, 30000)
       );
@@ -413,7 +513,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/convert/pdf-to-word',
+        '/pdf-to-word',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -437,7 +537,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/convert/pdf-to-excel',
+        '/pdf-to-excel',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -461,7 +561,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/convert/pdf-to-ppt',
+        '/pdf-to-ppt',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -485,7 +585,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/convert/word-to-pdf',
+        '/word-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -509,7 +609,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/convert/excel-to-pdf',
+        '/excel-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );
@@ -533,7 +633,7 @@ export class PDFReadService {
       this.appendFile(formData, file, filename);
 
       const response = await this.postWithFallback(
-        '/convert/ppt-to-pdf',
+        '/ppt-to-pdf',
         formData,
         this.buildMultipartConfig(formData, 60000)
       );

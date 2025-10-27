@@ -35,6 +35,15 @@ class PDFReadService {
         }
         return `${trimmed}${this.PDFREAD_API_BASE_PATH}`;
     }
+    static normalizeEndpointPath(path) {
+        if (!path) {
+            return '/';
+        }
+        const trimmed = path.trim();
+        const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+        const withoutTrailing = withLeadingSlash.replace(/\/+$/, '');
+        return withoutTrailing || '/';
+    }
     static getBaseUrls() {
         const urls = [this.PDFREAD_BASE_URL, this.PDFREAD_FALLBACK_BASE_URL]
             .filter((url) => Boolean(url && url.trim()))
@@ -51,8 +60,45 @@ class PDFReadService {
         }
         return [...new Set(urls)];
     }
+    static getAveniaBaseUrls() {
+        const baseUrl = this.AVENIA_BASE_URL?.trim();
+        if (!baseUrl) {
+            return [];
+        }
+        const normalized = baseUrl.replace(/\/+$/, '');
+        if (!normalized) {
+            return [];
+        }
+        if (!this.isAllowedBaseUrl(normalized)) {
+            logger_1.logger.warn({
+                configuredEndpoint: baseUrl,
+                normalizedEndpoint: normalized,
+                allowedHosts: Array.from(this.ALLOWED_BASE_HOSTS),
+                operation: 'pdfread_special_endpoint_invalid_base'
+            }, 'Avenia base URL is not allowed, skipping');
+            return [];
+        }
+        return [normalized];
+    }
+    static shouldUseAveniaBase(path) {
+        const normalizedPath = this.normalizeEndpointPath(path);
+        return this.AVENIA_ENDPOINTS.some((endpoint) => this.normalizeEndpointPath(endpoint) === normalizedPath);
+    }
+    static resolveBaseUrls(path) {
+        if (this.shouldUseAveniaBase(path)) {
+            const aveniaBaseUrls = this.getAveniaBaseUrls();
+            if (aveniaBaseUrls.length) {
+                return aveniaBaseUrls;
+            }
+            logger_1.logger.warn({
+                path: this.normalizeEndpointPath(path),
+                operation: 'pdfread_special_endpoint_fallback'
+            }, 'Falling back to default PDFRead endpoints for special path');
+        }
+        return this.getBaseUrls();
+    }
     static async requestWithFallback(method, path, data, axiosConfig) {
-        const baseUrls = this.getBaseUrls();
+        const baseUrls = this.resolveBaseUrls(path);
         const attemptLimit = Math.min(baseUrls.length, this.MAX_RETRIES + 1);
         const attemptUrls = baseUrls.slice(0, attemptLimit);
         if (baseUrls.length > attemptUrls.length) {
@@ -205,7 +251,7 @@ class PDFReadService {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename, mimeType);
             formData.append('mime_type', mimeType);
-            const response = await this.postWithFallback('/detect-ai', formData, this.buildMultipartConfig(formData, 30000));
+            const response = await this.postWithFallback('/check-ai', formData, this.buildMultipartConfig(formData, 30000));
             return response_1.ResponseBuilder.success(response.data, 'AI document detection completed');
         }
         catch (error) {
@@ -235,7 +281,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/convert/pdf-to-word', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/pdf-to-word', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PDF converted to Word successfully');
         }
         catch (error) {
@@ -250,7 +296,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/convert/pdf-to-excel', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/pdf-to-excel', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PDF converted to Excel successfully');
         }
         catch (error) {
@@ -265,7 +311,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/convert/pdf-to-ppt', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/pdf-to-ppt', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PDF converted to PPT successfully');
         }
         catch (error) {
@@ -280,7 +326,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/convert/word-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/word-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'Word converted to PDF successfully');
         }
         catch (error) {
@@ -295,7 +341,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/convert/excel-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/excel-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'Excel converted to PDF successfully');
         }
         catch (error) {
@@ -310,7 +356,7 @@ class PDFReadService {
         try {
             const formData = new form_data_1.default();
             this.appendFile(formData, file, filename);
-            const response = await this.postWithFallback('/convert/ppt-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
+            const response = await this.postWithFallback('/ppt-to-pdf', formData, this.buildMultipartConfig(formData, 60000));
             return response_1.ResponseBuilder.success(response.data, 'PPT converted to PDF successfully');
         }
         catch (error) {
@@ -768,4 +814,43 @@ PDFReadService.PDFREAD_FALLBACK_BASE_URL = config_1.config.api.pdfRead.fallbackB
 PDFReadService.PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
 PDFReadService.PDFREAD_API_KEY = config_1.config.api.pdfRead.apiKey;
 PDFReadService.MAX_RETRIES = 1;
-PDFReadService.ALLOWED_BASE_HOSTS = new Set(['google-auth-e4er.onrender.com']);
+PDFReadService.ALLOWED_BASE_HOSTS = new Set([
+    'google-auth-e4er.onrender.com',
+    'avenia.onrender.com'
+]);
+PDFReadService.AVENIA_BASE_URL = 'https://avenia.onrender.com';
+PDFReadService.AVENIA_ENDPOINTS = [
+    '/generate-video',
+    '/generate-video-prompt',
+    '/summarize',
+    '/ask-question',
+    '/summarize-pdf-url',
+    '/summarize-word-url',
+    '/summarize-excel-url',
+    '/summarize-ppt-url',
+    '/summarize-html-url',
+    '/summarize-json-url',
+    '/summarize-csv-url',
+    '/summarize-txt-url',
+    '/generate-doc',
+    '/generate-doc-advanced',
+    '/generate-excel',
+    '/generate-ppt',
+    '/generate-ppt-advanced',
+    '/audio-isolation',
+    '/stt',
+    '/tts-chat',
+    '/ask-with-embeddings',
+    '/search-docs',
+    '/export-chat',
+    '/healthz',
+    '/analyze-image',
+    '/analyze-video',
+    '/check-ai',
+    '/pdf-to-word',
+    '/pdf-to-excel',
+    '/pdf-to-ppt',
+    '/word-to-pdf',
+    '/ppt-to-pdf',
+    '/excel-to-pdf'
+];

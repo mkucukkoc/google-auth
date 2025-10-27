@@ -8,7 +8,6 @@ const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const pdfReadService_1 = require("../services/pdfReadService");
 const authMiddleware_1 = require("../middleware/authMiddleware");
-const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const auditService_1 = require("../services/auditService");
 const logger_1 = require("../utils/logger");
@@ -39,62 +38,8 @@ const upload = (0, multer_1.default)({
 });
 function createPDFReadRouter() {
     const r = (0, express_1.Router)();
-    // POST /pdfread/summarize
-    r.post('/summarize', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, upload.single('file'), async (req, res) => {
-        const authReq = req;
-        try {
-            if (!req.file) {
-                return res.status(400).json({
-                    error: 'no_file',
-                    message: 'No file uploaded'
-                });
-            }
-            const result = await pdfReadService_1.PDFReadService.summarizePDF(req.file.buffer, req.file.originalname);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize', {
-                fileName: req.file.originalname,
-                fileSize: req.file.size,
-                success: result.success
-            });
-            // Dönen sonucu tek noktadan yaz, tekrar log üretimini azalt
-            const status = result.success ? 200 : 400;
-            res.status(status).json(result);
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'pdfSummarize' }, 'PDF summarize error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize PDF'
-            });
-        }
-    });
-    // POST /pdfread/ask-question
-    r.post('/ask-question', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.askQuestion), async (req, res) => {
-        const authReq = req;
-        try {
-            const { pdfText, question } = req.body;
-            const result = await pdfReadService_1.PDFReadService.askPDFQuestion(pdfText, question);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_ask_question', {
-                questionLength: question.length,
-                pdfTextLength: pdfText.length,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'pdfQuestion' }, 'PDF question error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to answer PDF question'
-            });
-        }
-    });
+    // removed: /pdfread/summarize (handled by pdf-read service)
+    // removed: /pdfread/ask-question (handled by pdf-read service)
     // POST /pdfread/detect-ai
     r.post('/detect-ai', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, upload.single('file'), async (req, res) => {
         const authReq = req;
@@ -128,32 +73,7 @@ function createPDFReadRouter() {
             });
         }
     });
-    // POST /pdfread/analyze-image
-    r.post('/analyze-image', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
-        const authReq = req;
-        try {
-            const { imageBase64, user_id, chat_id } = req.body;
-            const result = await pdfReadService_1.PDFReadService.analyzeImage(imageBase64);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_image', {
-                imageSize: imageBase64.length,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'imageAnalysis' }, 'Image analysis error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to analyze image'
-            });
-        }
-    });
+    // removed: /pdfread/analyze-image (handled by pdf-read service)
     // POST /pdfread/convert/pdf-to-word
     r.post('/convert/pdf-to-word', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, upload.single('file'), async (req, res) => {
         const authReq = req;

@@ -36,87 +36,9 @@ const upload = multer({
 export function createPDFReadRouter(): Router {
   const r = Router();
 
-  // POST /pdfread/summarize
-  r.post('/summarize',
-    authRateLimits.general,
-    authenticateToken,
-    upload.single('file'),
-    async (req: Request, res: Response) => {
-      const authReq = req as unknown as AuthRequest;
-      try {
-        if (!req.file) {
-          return res.status(400).json({
-            error: 'no_file',
-            message: 'No file uploaded'
-          });
-        }
+  // removed: /pdfread/summarize (handled by pdf-read service)
 
-        const result = await PDFReadService.summarizePDF(
-          req.file.buffer,
-          req.file.originalname
-        );
-
-        // Log the action
-        await auditService.logUserAction(
-          authReq.user!.id,
-          'pdf_summarize',
-          {
-            fileName: req.file.originalname,
-            fileSize: req.file.size,
-            success: result.success
-          }
-        );
-
-        // Dönen sonucu tek noktadan yaz, tekrar log üretimini azalt
-        const status = result.success ? 200 : 400;
-        res.status(status).json(result);
-      } catch (error) {
-        logger.error({ err: error, userId: authReq.user!.id, operation: 'pdfSummarize' }, 'PDF summarize error');
-        res.status(500).json({
-          error: 'internal_error',
-          message: 'Failed to summarize PDF'
-        });
-      }
-    }
-  );
-
-  // POST /pdfread/ask-question
-  r.post('/ask-question',
-    authRateLimits.general,
-    authenticateToken,
-    validate(pdfReadSchemas.askQuestion),
-    async (req: Request, res: Response) => {
-      const authReq = req as unknown as AuthRequest;
-      try {
-        const { pdfText, question } = req.body;
-
-        const result = await PDFReadService.askPDFQuestion(pdfText, question);
-
-        // Log the action
-        await auditService.logUserAction(
-          authReq.user!.id,
-          'pdf_ask_question',
-          {
-            questionLength: question.length,
-            pdfTextLength: pdfText.length,
-            success: result.success
-          }
-        );
-
-        if (result.success) {
-          res.json(result);
-        } else {
-          res.status(400).json(result);
-        }
-      } catch (error) {
-        logger.error({ err: error, userId: authReq.user!.id, operation: 'pdfQuestion' }, 'PDF question error');
-        res.status(500).json({
-          error: 'internal_error',
-          message: 'Failed to answer PDF question'
-        });
-      }
-    }
-  );
+  // removed: /pdfread/ask-question (handled by pdf-read service)
 
   // POST /pdfread/detect-ai
   r.post('/detect-ai',
@@ -166,42 +88,7 @@ export function createPDFReadRouter(): Router {
     }
   );
 
-  // POST /pdfread/analyze-image
-  r.post('/analyze-image',
-    authRateLimits.general,
-    authenticateToken,
-    validate(pdfReadSchemas.analyzeImage),
-    async (req: Request, res: Response) => {
-      const authReq = req as unknown as AuthRequest;
-      try {
-        const { imageBase64, user_id, chat_id } = req.body;
-
-        const result = await PDFReadService.analyzeImage(imageBase64);
-
-        // Log the action
-        await auditService.logUserAction(
-          authReq.user!.id,
-          'pdf_analyze_image',
-          {
-            imageSize: imageBase64.length,
-            success: result.success
-          }
-        );
-
-        if (result.success) {
-          res.json(result);
-        } else {
-          res.status(400).json(result);
-        }
-      } catch (error) {
-        logger.error({ err: error, userId: authReq.user!.id, operation: 'imageAnalysis' }, 'Image analysis error');
-        res.status(500).json({
-          error: 'internal_error',
-          message: 'Failed to analyze image'
-        });
-      }
-    }
-  );
+  // removed: /pdfread/analyze-image (handled by pdf-read service)
 
   // POST /pdfread/convert/pdf-to-word
   r.post('/convert/pdf-to-word',

@@ -7,7 +7,6 @@ exports.createPDFReadExtendedRouter = createPDFReadExtendedRouter;
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const pdfReadService_1 = require("../services/pdfReadService");
-const pdfService_1 = require("../services/pdfService");
 const authMiddleware_1 = require("../middleware/authMiddleware");
 const validationMiddleware_1 = require("../middleware/validationMiddleware");
 const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
@@ -227,58 +226,8 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/analyze-image (legacy: /image-caption)
-    r.post(['/analyze-image', '/image-caption'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeImage), async (req, res) => {
-        const authReq = req;
-        try {
-            const { imageBase64 } = req.body;
-            const result = await pdfReadService_1.PDFReadService.imageCaption(imageBase64);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_image', {
-                imageSize: imageBase64.length,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'analyzeImage' }, 'Image analysis error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to analyze image'
-            });
-        }
-    });
-    // POST /pdfread/analyze-video
-    r.post('/analyze-video', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.analyzeVideo), async (req, res) => {
-        const authReq = req;
-        try {
-            const { videoBase64, user_id, chat_id } = req.body;
-            const result = await pdfReadService_1.PDFReadService.analyzeVideo(videoBase64);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_analyze_video', {
-                videoSize: videoBase64.length,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'analyzeVideo' }, 'Video analysis error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to analyze video'
-            });
-        }
-    });
+    // removed: /pdfread/analyze-image (now handled by pdf-read service)
+    // removed: /pdfread/analyze-video (now handled by pdf-read service)
     // POST /pdfread/generate-video
     r.post('/generate-video', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.generateDoc), async (req, res) => {
         const authReq = req;
@@ -331,318 +280,24 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/ask-with-embeddings
-    r.post('/ask-with-embeddings', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.askWithEmbeddings), async (req, res) => {
-        const authReq = req;
-        try {
-            const { question, chatId } = req.body;
-            const result = await pdfReadService_1.PDFReadService.askWithEmbeddings(question, chatId);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_ask_with_embeddings', {
-                questionLength: question.length,
-                chatId,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'askWithEmbeddings' }, 'Ask with embeddings error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to answer question with embeddings'
-            });
-        }
-    });
-    // POST /pdfread/search-docs
-    r.post('/search-docs', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.searchDocs), async (req, res) => {
-        const authReq = req;
-        try {
-            const { query, chatId } = req.body;
-            const result = await pdfReadService_1.PDFReadService.searchDocs(query, chatId);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_search_docs', {
-                queryLength: query.length,
-                chatId,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'searchDocs' }, 'Search docs error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to search documents'
-            });
-        }
-    });
-    // POST /pdfread/summarize/pdf-url & /pdfread/summarize-pdf-url
-    r.post(['/summarize/pdf-url', '/summarize-pdf-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url, user_id: userIdFromBody, chat_id: chatIdFromBody } = req.body;
-            // URL tabanlı özetlemede iç servisi doğrudan kullanarak
-            // gereksiz HTTP çağrısı ve potansiyel self-recursion'ı engelle
-            const result = await pdfService_1.PDFService.extractAndSummarizePDF({
-                fileUrl: url,
-                userId: userIdFromBody || authReq.user.id,
-                chatId: chatIdFromBody || 'unknown'
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_pdf_url', {
-                url,
-                success: result.success
-            });
-            res.status(result.success ? 200 : 400).json(result);
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizePDFUrl' }, 'Summarize PDF URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize PDF URL'
-            });
-        }
-    });
+    // removed: /pdfread/ask-with-embeddings (now handled by pdf-read service)
+    // removed: /pdfread/search-docs (now handled by pdf-read service)
+    // removed: /pdfread/summarize-pdf-url (now handled by pdf-read service)
     // POST /pdfread/summarize/word-url & /pdfread/summarize-word-url
-    r.post(['/summarize/word-url', '/summarize-word-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeWordUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_word_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizeWordUrl' }, 'Summarize Word URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize Word URL'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-word-url
     // POST /pdfread/summarize/excel-url & /pdfread/summarize-excel-url
-    r.post(['/summarize/excel-url', '/summarize-excel-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeExcelUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_excel_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizeExcelUrl' }, 'Summarize Excel URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize Excel URL'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-excel-url
     // POST /pdfread/summarize/ppt-url & /pdfread/summarize-ppt-url
-    r.post(['/summarize/ppt-url', '/summarize-ppt-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizePPTUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_ppt_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizePPTUrl' }, 'Summarize PPT URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize PPT URL'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-ppt-url
     // POST /pdfread/summarize/html-url & /pdfread/summarize-html-url
-    r.post(['/summarize/html-url', '/summarize-html-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeHTMLUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_html_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizeHTMLUrl' }, 'Summarize HTML URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize HTML URL'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-html-url
     // POST /pdfread/summarize/json-url & /pdfread/summarize-json-url
-    r.post(['/summarize/json-url', '/summarize-json-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeJSONUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_json_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizeJSONUrl' }, 'Summarize JSON URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize JSON URL'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-json-url
     // POST /pdfread/summarize/csv-url & /pdfread/summarize-csv-url
-    r.post(['/summarize/csv-url', '/summarize-csv-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeCSVUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_csv_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizeCSVUrl' }, 'Summarize CSV URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize CSV URL'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-csv-url
     // POST /pdfread/summarize/txt-url & /pdfread/summarize-txt-url
-    r.post(['/summarize/txt-url', '/summarize-txt-url'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.summarizeUrl), async (req, res) => {
-        const authReq = req;
-        try {
-            const { url } = req.body;
-            const result = await pdfReadService_1.PDFReadService.summarizeTXTUrl(url, {
-                authToken: authReq.accessToken
-            });
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_summarize_txt_url', {
-                url,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'summarizeTXTUrl' }, 'Summarize TXT URL error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to summarize TXT URL'
-            });
-        }
-    });
-    // POST /pdfread/ask-question (legacy: /ask-file-question)
-    r.post(['/ask-question', '/ask-file-question'], rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, upload.single('file'), async (req, res) => {
-        const authReq = req;
-        try {
-            if (!req.file) {
-                return res.status(400).json({
-                    error: 'no_file',
-                    message: 'No file uploaded'
-                });
-            }
-            const { question } = req.body;
-            const result = await pdfReadService_1.PDFReadService.askFileQuestion(req.file.buffer, req.file.originalname, question, req.file.mimetype);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_ask_question', {
-                fileName: req.file.originalname,
-                fileSize: req.file.size,
-                mimeType: req.file.mimetype,
-                questionLength: question.length,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'askFileQuestion' }, 'Ask file question error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to answer file question'
-            });
-        }
-    });
+    // removed: /pdfread/summarize-txt-url
+    // removed: /pdfread/ask-question (legacy)
     // POST /pdfread/export-chat
     r.post('/export-chat', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.exportChat), async (req, res) => {
         const authReq = req;
@@ -670,50 +325,7 @@ function createPDFReadExtendedRouter() {
             });
         }
     });
-    // POST /pdfread/audio-isolation
-    r.post('/audio-isolation', rateLimitMiddleware_1.authRateLimits.general, authMiddleware_1.authenticateToken, (0, validationMiddleware_1.validate)(validationMiddleware_1.pdfReadSchemas.audioIsolation), async (req, res) => {
-        const authReq = req;
-        try {
-            const { audioBase64 } = req.body;
-            const result = await pdfReadService_1.PDFReadService.audioIsolation(audioBase64);
-            // Log the action
-            await auditService_1.auditService.logUserAction(authReq.user.id, 'pdf_audio_isolation', {
-                audioSize: audioBase64.length,
-                success: result.success
-            });
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(400).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, userId: authReq.user.id, operation: 'audioIsolation' }, 'Audio isolation error');
-            res.status(500).json({
-                error: 'internal_error',
-                message: 'Failed to process audio isolation'
-            });
-        }
-    });
-    // GET /pdfread/health
-    r.get('/health', async (req, res) => {
-        try {
-            const result = await pdfReadService_1.PDFReadService.healthCheck();
-            if (result.success) {
-                res.json(result);
-            }
-            else {
-                res.status(503).json(result);
-            }
-        }
-        catch (error) {
-            logger_1.logger.error({ err: error, operation: 'healthCheck' }, 'Health check error');
-            res.status(503).json({
-                error: 'service_unavailable',
-                message: 'PDFRead service is not available'
-            });
-        }
-    });
+    // removed: /pdfread/audio-isolation
+    // removed: /pdfread/health
     return r;
 }
