@@ -82,10 +82,13 @@ export interface DocAdvancedPayload {
 export class PDFReadService {
   private static readonly PDFREAD_BASE_URL = config.api.pdfRead.baseUrl;
   private static readonly PDFREAD_FALLBACK_BASE_URL = config.api.pdfRead.fallbackBaseUrl;
-  private static readonly PDFREAD_API_BASE_PATH = '/api/v1/pdfread';
+  private static readonly PDFREAD_API_BASE_PATH = (config.api.pdfRead as any).apiBasePath || '';
   private static readonly PDFREAD_API_KEY = config.api.pdfRead.apiKey;
   private static readonly MAX_RETRIES = 1;
-  private static readonly ALLOWED_BASE_HOSTS = new Set<string>(['google-auth-e4er.onrender.com']);
+  private static readonly ALLOWED_BASE_HOSTS = new Set<string>([
+    'google-auth-e4er.onrender.com',
+    'avenia.onrender.com',
+  ]);
 
   private static isAllowedBaseUrl(url: string): boolean {
     try {
