@@ -117,7 +117,7 @@ const initializeServices = async () => {
 
     logger.info('All services initialized successfully');
   } catch (error) {
-    logger.error({ error }, 'Service initialization failed');
+    logger.error({ err: error }, 'Service initialization failed');
     process.exit(1);
   }
 };
@@ -132,6 +132,26 @@ const startServer = async () => {
     
     // Create app after services are initialized
     app = express();
+
+    const mountRouter = (path: string, routerFactory: () => express.Router, name: string) => {
+      try {
+        app.use(path, routerFactory());
+        logger.info({ route: name, path }, 'Route mounted');
+      } catch (err) {
+        logger.error({ err, route: name, path }, 'Failed to mount route');
+        throw err;
+      }
+    };
+
+    const mountRouterInstance = (path: string, routerInstance: express.Router, name: string) => {
+      try {
+        app.use(path, routerInstance);
+        logger.info({ route: name, path }, 'Route mounted');
+      } catch (err) {
+        logger.error({ err, route: name, path }, 'Failed to mount route instance');
+        throw err;
+      }
+    };
     
     // Trust proxy for accurate IP addresses
     app.set('trust proxy', 1);
@@ -156,7 +176,13 @@ const startServer = async () => {
     app.use(limiter);
 
     // Swagger documentation
-    app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    try {
+      app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+      logger.info({ path: '/docs' }, 'Swagger mounted');
+    } catch (err) {
+      logger.error({ err }, 'Swagger setup failed');
+      throw err;
+    }
 
     // Health check
     app.get('/health', (_req, res) => {
@@ -171,27 +197,27 @@ const startServer = async () => {
     const API_VERSION = process.env.API_VERSION || 'v1';
 
     // API routes with versioning
-    app.use(`/api/${API_VERSION}/auth`, createAuthRouter());
-    app.use(`/api/${API_VERSION}/auth/email`, createEmailOtpRouter());
-    app.use(`/api/${API_VERSION}/auth/google`, createGoogleAuthRouter());
-    app.use(`/api/${API_VERSION}/auth/apple`, createAppleAuthRouter());
-    app.use(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter());
-    app.use(`/api/${API_VERSION}/pdfread`, createPDFReadRouter());
-    app.use(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter());
-    app.use(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter());
-    app.use(`/api/${API_VERSION}/chat`, createChatRouter());
+    mountRouter(`/api/${API_VERSION}/auth`, createAuthRouter, 'auth');
+    mountRouter(`/api/${API_VERSION}/auth/email`, createEmailOtpRouter, 'emailOtp');
+    mountRouter(`/api/${API_VERSION}/auth/google`, createGoogleAuthRouter, 'googleAuth');
+    mountRouter(`/api/${API_VERSION}/auth/apple`, createAppleAuthRouter, 'appleAuth');
+    mountRouter(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter, 'passwordReset');
+    mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadRouter, 'pdfRead');
+    mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter, 'pdfReadExtended');
+    mountRouter(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter, 'pdfSummary');
+    mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
 
 
     // Legacy routes (backward compatibility)
-    app.use('/auth', createAuthRouter());
-    app.use('/auth/email', createEmailOtpRouter());
-    app.use('/auth/google', createGoogleAuthRouter());
-    app.use('/auth/apple', createAppleAuthRouter());
-    app.use('/auth/password-reset', createPasswordResetRouter());
-    app.use('/pdfread', createPDFReadRouter());
-    app.use('/pdfread', createPDFReadExtendedRouter());
-    app.use('/pdf', createPDFSummaryRouter());
-    app.use('/notifications', notificationRouter);
+    mountRouter('/auth', createAuthRouter, 'auth (legacy)');
+    mountRouter('/auth/email', createEmailOtpRouter, 'emailOtp (legacy)');
+    mountRouter('/auth/google', createGoogleAuthRouter, 'googleAuth (legacy)');
+    mountRouter('/auth/apple', createAppleAuthRouter, 'appleAuth (legacy)');
+    mountRouter('/auth/password-reset', createPasswordResetRouter, 'passwordReset (legacy)');
+    mountRouter('/pdfread', createPDFReadRouter, 'pdfRead (legacy)');
+    mountRouter('/pdfread', createPDFReadExtendedRouter, 'pdfReadExtended (legacy)');
+    mountRouter('/pdf', createPDFSummaryRouter, 'pdfSummary (legacy)');
+    mountRouterInstance('/notifications', notificationRouter, 'notifications');
 
     // 404 handler (must be before error handler)
     app.use(notFound);
@@ -283,7 +309,7 @@ const startServer = async () => {
     }, 7 * 24 * 60 * 60 * 1000); // 7 days
 
   } catch (error) {
-    logger.error({ error }, 'Server startup failed');
+    logger.error({ err: error }, 'Server startup failed');
     process.exit(1);
   }
 };
