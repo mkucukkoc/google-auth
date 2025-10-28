@@ -58,7 +58,8 @@ import { createPasswordResetRouter } from './routes/passwordReset';
 import { createPDFReadRouter } from './routes/pdfRead';
 import { createPDFReadExtendedRouter } from './routes/pdfReadExtended';
 import { createPDFSummaryRouter } from './routes/pdfSummary';
-import { createChatRouter } from './routes/chatBridge';
+// Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
+// We intentionally avoid static import here
 import notificationRouter from './routes/notifications';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
@@ -133,6 +134,20 @@ const startServer = async () => {
     // Create app after services are initialized
     app = express();
 
+    // Dynamically load chat router to handle default/named export differences
+    let createChatRouter: (() => express.Router) | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require('./routes/chatBridge');
+      createChatRouter = (mod && (mod.createChatRouter || mod.default)) as (() => express.Router) | null;
+      if (typeof createChatRouter !== 'function') {
+        logger.warn({ modKeys: Object.keys(mod || {}) }, 'chatBridge export not a function');
+        createChatRouter = null;
+      }
+    } catch (err) {
+      logger.error({ err }, 'Failed to load chatBridge module');
+    }
+
     const mountRouter = (path: string, routerFactory: () => express.Router, name: string) => {
       try {
         app.use(path, routerFactory());
@@ -205,7 +220,9 @@ const startServer = async () => {
     mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadRouter, 'pdfRead');
     mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter, 'pdfReadExtended');
     mountRouter(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter, 'pdfSummary');
-    mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
+    if (createChatRouter) {
+      mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
+    }
 
 
     // Legacy routes (backward compatibility)
@@ -217,6 +234,9 @@ const startServer = async () => {
     mountRouter('/pdfread', createPDFReadRouter, 'pdfRead (legacy)');
     mountRouter('/pdfread', createPDFReadExtendedRouter, 'pdfReadExtended (legacy)');
     mountRouter('/pdf', createPDFSummaryRouter, 'pdfSummary (legacy)');
+    if (createChatRouter) {
+      mountRouter('/chat', createChatRouter, 'chat (legacy)');
+    }
     mountRouterInstance('/notifications', notificationRouter, 'notifications');
 
     // 404 handler (must be before error handler)
