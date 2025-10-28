@@ -58,7 +58,7 @@ import { createPasswordResetRouter } from './routes/passwordReset';
 import { createPDFReadRouter } from './routes/pdfRead';
 import { createPDFReadExtendedRouter } from './routes/pdfReadExtended';
 import { createPDFSummaryRouter } from './routes/pdfSummary';
-import { createChatRouter } from './routes/chat';
+import { createChatRouter } from './routes/chatBridge';
 import notificationRouter from './routes/notifications';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';

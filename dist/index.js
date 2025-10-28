@@ -85,7 +85,7 @@ const passwordReset_1 = require("./routes/passwordReset");
 const pdfRead_1 = require("./routes/pdfRead");
 const pdfReadExtended_1 = require("./routes/pdfReadExtended");
 const pdfSummary_1 = require("./routes/pdfSummary");
-const chat_1 = require("./routes/chat");
+const chatBridge_1 = require("./routes/chatBridge");
 const notifications_1 = __importDefault(require("./routes/notifications"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
@@ -185,7 +185,7 @@ const startServer = async () => {
         app.use(`/api/${API_VERSION}/pdfread`, (0, pdfRead_1.createPDFReadRouter)());
         app.use(`/api/${API_VERSION}/pdfread`, (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
         app.use(`/api/${API_VERSION}/pdf`, (0, pdfSummary_1.createPDFSummaryRouter)());
-        app.use(`/api/${API_VERSION}/chat`, (0, chat_1.createChatRouter)());
+        app.use(`/api/${API_VERSION}/chat`, (0, chatBridge_1.createChatRouter)());
         // Legacy routes (backward compatibility)
         app.use('/auth', (0, auth_1.createAuthRouter)());
         app.use('/auth/email', (0, emailOtp_1.createEmailOtpRouter)());
