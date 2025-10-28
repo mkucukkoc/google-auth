@@ -117,7 +117,7 @@ const initializeServices = async () => {
 
     logger.info('All services initialized successfully');
   } catch (error) {
-    logger.error('Service initialization failed:', error);
+    logger.error({ error }, 'Service initialization failed');
     process.exit(1);
   }
 };
@@ -283,7 +283,7 @@ const startServer = async () => {
     }, 7 * 24 * 60 * 60 * 1000); // 7 days
 
   } catch (error) {
-    logger.error('Server startup failed:', error);
+    logger.error({ error }, 'Server startup failed');
     process.exit(1);
   }
 };
