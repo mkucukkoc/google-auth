@@ -86,7 +86,6 @@ const pdfRead_1 = require("./routes/pdfRead");
 const pdfReadExtended_1 = require("./routes/pdfReadExtended");
 const pdfSummary_1 = require("./routes/pdfSummary");
 const chat_1 = require("./routes/chat");
-const presentation_1 = require("./routes/presentation");
 const notifications_1 = __importDefault(require("./routes/notifications"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
@@ -187,7 +186,6 @@ const startServer = async () => {
         app.use(`/api/${API_VERSION}/pdfread`, (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
         app.use(`/api/${API_VERSION}/pdf`, (0, pdfSummary_1.createPDFSummaryRouter)());
         app.use(`/api/${API_VERSION}/chat`, (0, chat_1.createChatRouter)());
-        app.use(`/api/${API_VERSION}/presentation`, (0, presentation_1.createPresentationRouter)());
         // Legacy routes (backward compatibility)
         app.use('/auth', (0, auth_1.createAuthRouter)());
         app.use('/auth/email', (0, emailOtp_1.createEmailOtpRouter)());
@@ -197,7 +195,6 @@ const startServer = async () => {
         app.use('/pdfread', (0, pdfRead_1.createPDFReadRouter)());
         app.use('/pdfread', (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
         app.use('/pdf', (0, pdfSummary_1.createPDFSummaryRouter)());
-        app.use('/presentation', (0, presentation_1.createPresentationRouter)());
         app.use('/notifications', notifications_1.default);
         // 404 handler (must be before error handler)
         app.use(errorHandler_1.notFound);

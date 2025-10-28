@@ -97,16 +97,6 @@ exports.authRateLimits = {
         standardHeaders: true,
         legacyHeaders: false,
     }),
-    presentation: (0, express_rate_limit_1.default)({
-        windowMs: 5 * 60 * 1000, // 5 minutes
-        max: 3, // 3 presentations per 5 minutes
-        message: {
-            error: 'presentation_rate_limit_exceeded',
-            message: 'Too many presentation requests. Please try again later.',
-        },
-        standardHeaders: true,
-        legacyHeaders: false,
-    }),
 };
 // Cleanup function for rate limit stores
 function cleanupRateLimits() {
