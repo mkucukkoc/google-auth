@@ -7,7 +7,6 @@ describe('🔄 Regression Test Suite - Critical Path Testing', () => {
   let testUserId: string;
   let testSessionId: string;
   let testFileId: string;
-  let testPresentationId: string;
 
   beforeAll(async () => {
     logger.info('🚀 Starting Regression Test Suite');
@@ -15,7 +14,6 @@ describe('🔄 Regression Test Suite - Critical Path Testing', () => {
     testUserId = 'test-user-123';
     testSessionId = 'test-session-123';
     testFileId = 'test-file-123';
-    testPresentationId = 'test-presentation-123';
   });
 
   afterAll(async () => {
@@ -314,86 +312,7 @@ describe('🔄 Regression Test Suite - Critical Path Testing', () => {
     });
   });
 
-  describe('🎯 Critical Path 4: Presentation System Flow', () => {
-    it('Complete presentation creation and management flow', async () => {
-      logger.info('🧪 Running: Complete presentation creation and management flow');
-      
-      // Step 1: Generate presentation
-      const generateStart = Date.now();
-      const generateResponse = await request(app)
-        .post('/presentation/generate')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({
-          topic: 'Climate Change and Renewable Energy Solutions',
-          slides: 15,
-          style: 'modern',
-          includeImages: true
-        });
-      const generateDuration = Date.now() - generateStart;
-      
-      expect(generateResponse.status).toBe(200);
-      expect(generateResponse.body.success).toBe(true);
-      expect(generateResponse.body.data.presentationId).toBeDefined();
-      expect(generateResponse.body.data.downloadUrl).toBeDefined();
-      
-      logger.info(`✅ Presentation generation completed in ${generateDuration}ms`);
-      
-      // Step 2: Get presentation details
-      const detailsStart = Date.now();
-      const detailsResponse = await request(app)
-        .get(`/presentation/${testPresentationId}`)
-        .set('Authorization', `Bearer ${authToken}`);
-      const detailsDuration = Date.now() - detailsStart;
-      
-      expect(detailsResponse.status).toBe(200);
-      expect(detailsResponse.body.success).toBe(true);
-      expect(detailsResponse.body.data.presentation).toBeDefined();
-      expect(detailsResponse.body.data.presentation.id).toBeDefined();
-      
-      logger.info(`✅ Presentation details retrieved in ${detailsDuration}ms`);
-      
-      // Step 3: Duplicate presentation
-      const duplicateStart = Date.now();
-      const duplicateResponse = await request(app)
-        .post(`/presentation/${testPresentationId}/duplicate`)
-        .set('Authorization', `Bearer ${authToken}`);
-      const duplicateDuration = Date.now() - duplicateStart;
-      
-      expect(duplicateResponse.status).toBe(200);
-      expect(duplicateResponse.body.success).toBe(true);
-      expect(duplicateResponse.body.data.duplicatedPresentationId).toBeDefined();
-      
-      logger.info(`✅ Presentation duplication completed in ${duplicateDuration}ms`);
-      
-      // Step 4: Get user presentations
-      const listStart = Date.now();
-      const listResponse = await request(app)
-        .get('/presentation')
-        .set('Authorization', `Bearer ${authToken}`);
-      const listDuration = Date.now() - listStart;
-      
-      expect(listResponse.status).toBe(200);
-      expect(listResponse.body.success).toBe(true);
-      expect(listResponse.body.data.presentations).toBeDefined();
-      expect(Array.isArray(listResponse.body.data.presentations)).toBe(true);
-      
-      logger.info(`✅ User presentations retrieved in ${listDuration}ms`);
-      
-      // Step 5: Delete presentation
-      const deleteStart = Date.now();
-      const deleteResponse = await request(app)
-        .delete(`/presentation/${testPresentationId}`)
-        .set('Authorization', `Bearer ${authToken}`);
-      const deleteDuration = Date.now() - deleteStart;
-      
-      expect(deleteResponse.status).toBe(200);
-      expect(deleteResponse.body.success).toBe(true);
-      
-      logger.info(`✅ Presentation deletion completed in ${deleteDuration}ms`);
-    });
-  });
-
-  describe('🔔 Critical Path 5: Notification System Flow', () => {
+  describe('🔔 Critical Path 4: Notification System Flow', () => {
     it('Complete notification management flow', async () => {
       logger.info('🧪 Running: Complete notification management flow');
       
@@ -469,7 +388,7 @@ describe('🔄 Regression Test Suite - Critical Path Testing', () => {
     });
   });
 
-  describe('🔄 Critical Path 6: End-to-End Integration Flow', () => {
+  describe('🔄 Critical Path 5: End-to-End Integration Flow', () => {
     it('Complete user journey from registration to content creation', async () => {
       logger.info('🧪 Running: Complete user journey from registration to content creation');
       
@@ -529,23 +448,7 @@ describe('🔄 Regression Test Suite - Critical Path Testing', () => {
       
       logger.info('✅ Step 4: PDF uploaded for analysis');
       
-      // Step 5: Generate presentation based on PDF
-      const presentationResponse = await request(app)
-        .post('/presentation/generate')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({
-          topic: 'Renewable Energy Solutions',
-          slides: 12,
-          style: 'modern',
-          includeImages: true
-        });
-      
-      expect(presentationResponse.status).toBe(200);
-      expect(presentationResponse.body.success).toBe(true);
-      
-      logger.info('✅ Step 5: Presentation generated');
-      
-      // Step 6: Send notification about completion
+      // Step 5: Send notification about completion
       const notificationResponse = await request(app)
         .post('/notifications/send')
         .set('Authorization', `Bearer ${userToken}`)
@@ -559,12 +462,13 @@ describe('🔄 Regression Test Suite - Critical Path Testing', () => {
       expect(notificationResponse.status).toBe(200);
       expect(notificationResponse.body.success).toBe(true);
       
-      logger.info('✅ Step 6: Completion notification sent');
+      logger.info('✅ Step 5: Completion notification sent');
       
       const journeyDuration = Date.now() - journeyStart;
       logger.info(`🎉 Complete E2E journey completed in ${journeyDuration}ms`);
     });
   });
 });
+
 
 

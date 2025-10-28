@@ -121,24 +121,6 @@ node test/run-tests.js --help
 - ❌ Geçersiz fileId
 - ❌ Geçersiz seçenekler
 
-### 🎯 Presentation Endpoints (presentation.test.ts)
-- **Test Case Sayısı**: 20+
-- **Kapsanan Endpoint'ler**:
-  - `POST /presentation/generate` - Sunum oluşturma
-  - `GET /presentation/:presentationId` - Sunum detayları
-  - `GET /presentation` - Kullanıcı sunumları
-  - `DELETE /presentation/:presentationId` - Sunum silme
-  - `POST /presentation/:presentationId/duplicate` - Sunum kopyalama
-
-**Test Senaryoları**:
-- ✅ Geçerli sunum oluşturma
-- ❌ Eksik topic
-- ❌ Auth token eksik
-- ❌ Boş topic
-- ❌ Geçersiz slide sayısı
-- ❌ Geçersiz style
-- ❌ Çok uzun topic
-
 ### 🔔 Notifications Endpoints (notifications.test.ts)
 - **Test Case Sayısı**: 20+
 - **Kapsanan Endpoint'ler**:
@@ -176,7 +158,6 @@ node test/run-tests.js --help
 - **Auth Endpoints**: `/auth/test-firebase`
 - **Chat Endpoints**: `/chat/sessions`
 - **PDF Endpoints**: `/pdf-read/files`
-- **Presentation Endpoints**: `/presentation`
 - **Notification Endpoints**: `/notifications`
 
 ## 🔄 Regression Tests (regression.test.ts)
@@ -191,14 +172,11 @@ node test/run-tests.js --help
 3. **PDF Processing Flow**
    - Yükleme → Özetleme → Doküman Oluşturma → Sunum Oluşturma
 
-4. **Presentation System Flow**
-   - Oluşturma → Detaylar → Kopyalama → Listeleme → Silme
-
-5. **Notification System Flow**
+4. **Notification System Flow**
    - Gönderme → Listeleme → Okundu İşaretleme → Silme
 
-6. **End-to-End Integration Flow**
-   - Kayıt → Giriş → Chat → PDF → Sunum → Bildirim
+5. **End-to-End Integration Flow**
+   - Kayıt → Giriş → Chat → PDF → Bildirim
 
 ## 📈 Test Metrics
 
@@ -290,5 +268,6 @@ Test suite ile ilgili sorularınız için:
 ---
 
 **🎉 Happy Testing!** Bu test suite ile Avenia backend'inizin güvenilirliğini ve performansını garanti altına alabilirsiniz.
+
 
 

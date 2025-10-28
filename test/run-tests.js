@@ -78,7 +78,6 @@ class TestRunner {
       { name: 'Auth Endpoints', file: 'test/endpoints/auth.test.ts' },
       { name: 'Chat Endpoints', file: 'test/endpoints/chat.test.ts' },
       { name: 'PDF Read Endpoints', file: 'test/endpoints/pdfRead.test.ts' },
-      { name: 'Presentation Endpoints', file: 'test/endpoints/presentation.test.ts' },
       { name: 'Notifications Endpoints', file: 'test/endpoints/notifications.test.ts' },
       { name: 'Performance Tests', file: 'test/performance/load.test.ts' }
     ];
@@ -196,7 +195,6 @@ if (args.includes('--suite')) {
     'auth': { name: 'Auth Endpoints', file: 'test/endpoints/auth.test.ts' },
     'chat': { name: 'Chat Endpoints', file: 'test/endpoints/chat.test.ts' },
     'pdf': { name: 'PDF Read Endpoints', file: 'test/endpoints/pdfRead.test.ts' },
-    'presentation': { name: 'Presentation Endpoints', file: 'test/endpoints/presentation.test.ts' },
     'notifications': { name: 'Notifications Endpoints', file: 'test/endpoints/notifications.test.ts' },
     'performance': { name: 'Performance Tests', file: 'test/performance/load.test.ts' }
   };
@@ -220,7 +218,6 @@ if (args.includes('--suite')) {
     { name: 'Auth Endpoints', file: 'test/endpoints/auth.test.ts' },
     { name: 'Chat Endpoints', file: 'test/endpoints/chat.test.ts' },
     { name: 'PDF Read Endpoints', file: 'test/endpoints/pdfRead.test.ts' },
-    { name: 'Presentation Endpoints', file: 'test/endpoints/presentation.test.ts' },
     { name: 'Notifications Endpoints', file: 'test/endpoints/notifications.test.ts' }
   ];
   
@@ -234,5 +231,6 @@ if (args.includes('--suite')) {
   // Run all tests
   testRunner.runAllTests();
 }
+
 
 

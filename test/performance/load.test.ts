@@ -284,7 +284,6 @@ describe('⚡ Performance Tests - Load Testing Suite', () => {
       { path: '/auth/test-firebase', method: 'GET' },
       { path: '/chat/sessions', method: 'GET', auth: true },
       { path: '/pdf-read/files', method: 'GET', auth: true },
-      { path: '/presentation', method: 'GET', auth: true },
       { path: '/notifications', method: 'GET', auth: true }
     ];
 
@@ -337,5 +336,6 @@ describe('⚡ Performance Tests - Load Testing Suite', () => {
     });
   });
 });
+
 
 
