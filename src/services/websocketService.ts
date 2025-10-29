@@ -5,6 +5,7 @@ import { TokenService } from './tokenService';
 import { UserService } from './userService';
 import { SessionService } from './sessionService';
 import { auditService } from './auditService';
+import { getAllowedOriginsSnapshot, isWebSocketOriginAllowed } from '../utils/cors';
 
 export interface SocketUser {
   userId: string;
@@ -36,12 +37,22 @@ export class WebSocketService {
   constructor(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin: process.env.CORS_ORIGIN || "*",
-        methods: ["GET", "POST"],
-        credentials: true
+        origin: (origin, callback) => {
+          if (isWebSocketOriginAllowed(origin)) {
+            callback(null, true);
+            return;
+          }
+
+          logger.warn({ origin }, 'WebSocket origin rejected by CORS policy');
+          callback(new Error('Not allowed by CORS'));
+        },
+        methods: ['GET', 'POST'],
+        credentials: true,
       },
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
     });
+
+    logger.info({ allowedOrigins: getAllowedOriginsSnapshot(), transports: ['websocket', 'polling'] }, 'WebSocket server initialized with CORS support');
 
     this.setupMiddleware();
     this.setupEventHandlers();

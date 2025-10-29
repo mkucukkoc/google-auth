@@ -1,6 +1,36 @@
+const parseCorsOrigins = (): string[] => {
+  const raw = process.env.CORS_ORIGIN;
+  if (raw && raw.trim() !== '') {
+    return raw
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(origin => origin.length > 0);
+  }
+
+  const fallbacks = new Set<string>();
+
+  const renderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderExternalUrl && renderExternalUrl.trim() !== '') {
+    fallbacks.add(renderExternalUrl.trim());
+  }
+
+  const renderExternalHostname = process.env.RENDER_EXTERNAL_HOSTNAME;
+  if (renderExternalHostname && renderExternalHostname.trim() !== '') {
+    const host = renderExternalHostname.trim();
+    fallbacks.add(`https://${host}`);
+    fallbacks.add(`http://${host}`);
+  }
+
+  if (fallbacks.size > 0) {
+    return Array.from(fallbacks);
+  }
+
+  return ['*'];
+};
+
 export const config = {
   port: Number(process.env.PORT || 4000),
-  corsOrigin: (process.env.CORS_ORIGIN || '*').split(','),
+  corsOrigin: parseCorsOrigins(),
   jwt: {
     iss: process.env.JWT_ISS || 'chatgbtmini',
     aud: process.env.JWT_AUD || 'chatgbtmini-mobile',

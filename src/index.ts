@@ -72,6 +72,7 @@ import { databaseManager } from './config/database';
 import { backupService } from './services/backupService';
 import { dataRetentionService } from './services/dataRetentionService';
 import { initializeWebSocket } from './services/websocketService';
+import { createCorsOptions, getAllowedOriginsSnapshot } from './utils/cors';
 import { 
   globalErrorHandler, 
   notFound, 
@@ -176,7 +177,9 @@ const startServer = async () => {
 
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-    app.use(cors({ origin: config.corsOrigin, credentials: true }));
+    const corsOptions = createCorsOptions();
+    logger.info({ allowedOrigins: getAllowedOriginsSnapshot() }, 'Configured CORS origins');
+    app.use(cors(corsOptions));
     app.use(helmet());
 
     // Global rate limiting
