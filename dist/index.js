@@ -85,7 +85,8 @@ const passwordReset_1 = require("./routes/passwordReset");
 const pdfRead_1 = require("./routes/pdfRead");
 const pdfReadExtended_1 = require("./routes/pdfReadExtended");
 const pdfSummary_1 = require("./routes/pdfSummary");
-const chatBridge_1 = require("./routes/chatBridge");
+// Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
+// We intentionally avoid static import here
 const notifications_1 = __importDefault(require("./routes/notifications"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
@@ -134,7 +135,7 @@ const initializeServices = async () => {
         logger_1.logger.info('All services initialized successfully');
     }
     catch (error) {
-        logger_1.logger.error('Service initialization failed:', error);
+        logger_1.logger.error({ err: error }, 'Service initialization failed');
         process.exit(1);
     }
 };
@@ -146,6 +147,40 @@ const startServer = async () => {
         await initializeServices();
         // Create app after services are initialized
         app = (0, express_1.default)();
+        // Dynamically load chat router to handle default/named export differences
+        let createChatRouter = null;
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const mod = require('./routes/chatBridge');
+            createChatRouter = (mod && (mod.createChatRouter || mod.default));
+            if (typeof createChatRouter !== 'function') {
+                logger_1.logger.warn({ modKeys: Object.keys(mod || {}) }, 'chatBridge export not a function');
+                createChatRouter = null;
+            }
+        }
+        catch (err) {
+            logger_1.logger.error({ err }, 'Failed to load chatBridge module');
+        }
+        const mountRouter = (path, routerFactory, name) => {
+            try {
+                app.use(path, routerFactory());
+                logger_1.logger.info({ route: name, path }, 'Route mounted');
+            }
+            catch (err) {
+                logger_1.logger.error({ err, route: name, path }, 'Failed to mount route');
+                throw err;
+            }
+        };
+        const mountRouterInstance = (path, routerInstance, name) => {
+            try {
+                app.use(path, routerInstance);
+                logger_1.logger.info({ route: name, path }, 'Route mounted');
+            }
+            catch (err) {
+                logger_1.logger.error({ err, route: name, path }, 'Failed to mount route instance');
+                throw err;
+            }
+        };
         // Trust proxy for accurate IP addresses
         app.set('trust proxy', 1);
         // Request logging
@@ -165,7 +200,14 @@ const startServer = async () => {
         });
         app.use(limiter);
         // Swagger documentation
-        app.use('/docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_1.swaggerSpec));
+        try {
+            app.use('/docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_1.swaggerSpec));
+            logger_1.logger.info({ path: '/docs' }, 'Swagger mounted');
+        }
+        catch (err) {
+            logger_1.logger.error({ err }, 'Swagger setup failed');
+            throw err;
+        }
         // Health check
         app.get('/health', (_req, res) => {
             res.json({
@@ -177,25 +219,30 @@ const startServer = async () => {
         // API Versioning
         const API_VERSION = process.env.API_VERSION || 'v1';
         // API routes with versioning
-        app.use(`/api/${API_VERSION}/auth`, (0, auth_1.createAuthRouter)());
-        app.use(`/api/${API_VERSION}/auth/email`, (0, emailOtp_1.createEmailOtpRouter)());
-        app.use(`/api/${API_VERSION}/auth/google`, (0, google_1.createGoogleAuthRouter)());
-        app.use(`/api/${API_VERSION}/auth/apple`, (0, apple_1.createAppleAuthRouter)());
-        app.use(`/api/${API_VERSION}/auth/password-reset`, (0, passwordReset_1.createPasswordResetRouter)());
-        app.use(`/api/${API_VERSION}/pdfread`, (0, pdfRead_1.createPDFReadRouter)());
-        app.use(`/api/${API_VERSION}/pdfread`, (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
-        app.use(`/api/${API_VERSION}/pdf`, (0, pdfSummary_1.createPDFSummaryRouter)());
-        app.use(`/api/${API_VERSION}/chat`, (0, chatBridge_1.createChatRouter)());
+        mountRouter(`/api/${API_VERSION}/auth`, auth_1.createAuthRouter, 'auth');
+        mountRouter(`/api/${API_VERSION}/auth/email`, emailOtp_1.createEmailOtpRouter, 'emailOtp');
+        mountRouter(`/api/${API_VERSION}/auth/google`, google_1.createGoogleAuthRouter, 'googleAuth');
+        mountRouter(`/api/${API_VERSION}/auth/apple`, apple_1.createAppleAuthRouter, 'appleAuth');
+        mountRouter(`/api/${API_VERSION}/auth/password-reset`, passwordReset_1.createPasswordResetRouter, 'passwordReset');
+        mountRouter(`/api/${API_VERSION}/pdfread`, pdfRead_1.createPDFReadRouter, 'pdfRead');
+        mountRouter(`/api/${API_VERSION}/pdfread`, pdfReadExtended_1.createPDFReadExtendedRouter, 'pdfReadExtended');
+        mountRouter(`/api/${API_VERSION}/pdf`, pdfSummary_1.createPDFSummaryRouter, 'pdfSummary');
+        if (createChatRouter) {
+            mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
+        }
         // Legacy routes (backward compatibility)
-        app.use('/auth', (0, auth_1.createAuthRouter)());
-        app.use('/auth/email', (0, emailOtp_1.createEmailOtpRouter)());
-        app.use('/auth/google', (0, google_1.createGoogleAuthRouter)());
-        app.use('/auth/apple', (0, apple_1.createAppleAuthRouter)());
-        app.use('/auth/password-reset', (0, passwordReset_1.createPasswordResetRouter)());
-        app.use('/pdfread', (0, pdfRead_1.createPDFReadRouter)());
-        app.use('/pdfread', (0, pdfReadExtended_1.createPDFReadExtendedRouter)());
-        app.use('/pdf', (0, pdfSummary_1.createPDFSummaryRouter)());
-        app.use('/notifications', notifications_1.default);
+        mountRouter('/auth', auth_1.createAuthRouter, 'auth (legacy)');
+        mountRouter('/auth/email', emailOtp_1.createEmailOtpRouter, 'emailOtp (legacy)');
+        mountRouter('/auth/google', google_1.createGoogleAuthRouter, 'googleAuth (legacy)');
+        mountRouter('/auth/apple', apple_1.createAppleAuthRouter, 'appleAuth (legacy)');
+        mountRouter('/auth/password-reset', passwordReset_1.createPasswordResetRouter, 'passwordReset (legacy)');
+        mountRouter('/pdfread', pdfRead_1.createPDFReadRouter, 'pdfRead (legacy)');
+        mountRouter('/pdfread', pdfReadExtended_1.createPDFReadExtendedRouter, 'pdfReadExtended (legacy)');
+        mountRouter('/pdf', pdfSummary_1.createPDFSummaryRouter, 'pdfSummary (legacy)');
+        if (createChatRouter) {
+            mountRouter('/chat', createChatRouter, 'chat (legacy)');
+        }
+        mountRouterInstance('/notifications', notifications_1.default, 'notifications');
         // 404 handler (must be before error handler)
         app.use(errorHandler_1.notFound);
         // Sentry error handler (must be before other error handlers)
@@ -280,7 +327,7 @@ const startServer = async () => {
         }, 7 * 24 * 60 * 60 * 1000); // 7 days
     }
     catch (error) {
-        logger_1.logger.error('Server startup failed:', error);
+        logger_1.logger.error({ err: error }, 'Server startup failed');
         process.exit(1);
     }
 };
