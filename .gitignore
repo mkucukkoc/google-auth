@@ -39,3 +39,6 @@ android_build_steps.txt
 # Duplicate backups
 .gitignore 2
 Dockerfile 2
+
+# Expo project state
+.expo/
