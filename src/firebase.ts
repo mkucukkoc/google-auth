@@ -342,6 +342,10 @@ const mockAuth = () => ({
   async deleteUser(uid: string) {
     authUsers.delete(uid);
     logger.debug({ uid }, 'Mock Firebase Auth: deleteUser');
+  },
+  async createCustomToken(uid: string, developerClaims?: Record<string, unknown>) {
+    logger.debug({ uid, developerClaims }, 'Mock Firebase Auth: createCustomToken');
+    return `mock_custom_token_${uid}`;
   }
 });
 
