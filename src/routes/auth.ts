@@ -313,6 +313,51 @@ export function createAuthRouter(): Router {
     }
   );
 
+  // POST /auth/firebase-token
+  r.post(
+    '/firebase-token',
+    authRateLimits.general,
+    authenticateToken,
+    async (req: Request, res: Response) => {
+      const authReq = req as AuthRequest;
+      const user = authReq.user;
+
+      if (!user?.id) {
+        return res.status(401).json(
+          ResponseBuilder.error(
+            'unauthorized',
+            'Authentication required to request Firebase token'
+          )
+        );
+      }
+
+      try {
+        const firebaseCustomToken = await admin.auth().createCustomToken(user.id, {
+          email: user.email,
+        });
+
+        return res.json(
+          ResponseBuilder.success(
+            { firebaseCustomToken },
+            'Firebase custom token generated successfully'
+          )
+        );
+      } catch (error) {
+        logger.error(
+          { err: error, userId: user.id, operation: 'firebaseCustomToken' },
+          'Failed to create Firebase custom token'
+        );
+
+        return res.status(500).json(
+          ResponseBuilder.error(
+            'firebase_token_creation_failed',
+            'Failed to generate Firebase custom token'
+          )
+        );
+      }
+    }
+  );
+
   // POST /auth/logout
   r.post('/logout',
     authRateLimits.general,
