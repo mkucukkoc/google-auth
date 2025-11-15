@@ -253,7 +253,7 @@ class DeleteAccountService {
     userId: string,
     context: DeleteAccountContext = {}
   ): Promise<RestoreAccountResult> {
-    const registrySnap = await db.collection('deleted_users').doc(userId).get();
+  const registrySnap = await db.collection('deleted_users_subsc').doc(userId).get();
     if (!registrySnap.exists) {
       throw new DeleteAccountError('NOT_DELETED', 'Kullanıcı silinmiş değil', 404);
     }
@@ -305,7 +305,7 @@ class DeleteAccountService {
 
     await batch.commit();
     await db
-      .collection('deleted_users')
+      .collection('deleted_users_subsc')
       .doc(userId)
       .update({
         restoreCompletedAt: FieldValue.serverTimestamp(),
@@ -354,7 +354,7 @@ class DeleteAccountService {
       db.collection('users').doc(userId).get(),
       db.collection('subsc').doc(userId).get(),
       db.collection('premiumusers').doc(userId).get(),
-      db.collection('deleted_users').doc(userId).get(),
+      db.collection('deleted_users_subsc').doc(userId).get(),
     ]);
 
     const registry = registryDoc.exists ? (registryDoc.data() as DeletedUserRegistryRecord) : undefined;
@@ -460,7 +460,7 @@ class DeleteAccountService {
     };
 
     await db
-      .collection('deleted_users')
+      .collection('deleted_users_subsc')
       .doc(userId)
       .set(
         {
