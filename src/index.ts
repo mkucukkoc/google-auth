@@ -58,6 +58,7 @@ import { createPasswordResetRouter } from './routes/passwordReset';
 import { createPDFReadRouter } from './routes/pdfRead';
 import { createPDFReadExtendedRouter } from './routes/pdfReadExtended';
 import { createPDFSummaryRouter } from './routes/pdfSummary';
+import { createDeleteAccountRouter } from './routes/deleteAccount';
 // Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
 // We intentionally avoid static import here
 import notificationRouter from './routes/notifications';
@@ -223,6 +224,7 @@ const startServer = async () => {
     mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadRouter, 'pdfRead');
     mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter, 'pdfReadExtended');
     mountRouter(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter, 'pdfSummary');
+    mountRouter(`/api/${API_VERSION}/delete-account`, createDeleteAccountRouter, 'deleteAccount');
     if (createChatRouter) {
       mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
     }
@@ -237,6 +239,7 @@ const startServer = async () => {
     mountRouter('/pdfread', createPDFReadRouter, 'pdfRead (legacy)');
     mountRouter('/pdfread', createPDFReadExtendedRouter, 'pdfReadExtended (legacy)');
     mountRouter('/pdf', createPDFSummaryRouter, 'pdfSummary (legacy)');
+    mountRouter('/delete-account', createDeleteAccountRouter, 'deleteAccount (legacy)');
     if (createChatRouter) {
       mountRouter('/chat', createChatRouter, 'chat (legacy)');
     }

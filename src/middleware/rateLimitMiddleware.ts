@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { logger } from '../utils/logger';
+import { config } from '../config';
 
 // Rate limiting configurations for different auth endpoints
 export const authRateLimits = {
@@ -97,6 +98,26 @@ export const authRateLimits = {
     },
     standardHeaders: true,
     legacyHeaders: false,
+  }),
+
+  // Delete account rate limiting - extremely restrictive
+  deleteAccount: rateLimit({
+    windowMs: (config.deleteAccount.rateLimitWindowSeconds || 600) * 1000,
+    max: config.deleteAccount.rateLimitMaxRequests || 2,
+    message: {
+      error: 'rate_limit_exceeded',
+      message: 'Delete account isteği kısa süre içinde çok kez denendi. Lütfen tekrar deneyin.',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: req => {
+      const userId = (req as any).user?.id;
+      if (userId) {
+        return `delete-account:${userId}`;
+      }
+      const ip = req.ip || req.connection.remoteAddress || 'unknown';
+      return `delete-account-ip:${ip}`;
+    },
   }),
 };
 

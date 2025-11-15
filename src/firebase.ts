@@ -258,7 +258,11 @@ const mockFirestore = () => ({
     async commit() {
       logger.debug('Mock Firebase: batch commit');
     }
-  })
+  }),
+  async recursiveDelete(target: any) {
+    logger.debug({ target }, 'Mock Firebase: recursive delete invoked');
+    return 0;
+  }
 });
 
 // db is now exported above
@@ -288,6 +292,35 @@ interface MockUserRecord {
 }
 
 const authUsers = new Map<string, MockUserRecord>();
+
+const mockStorage = () => ({
+  bucket() {
+    return {
+      async deleteFiles(options?: { prefix?: string }) {
+        logger.debug({ options }, 'Mock Firebase: deleteFiles called');
+      },
+      file(path: string) {
+        return {
+          async delete() {
+            logger.debug({ path }, 'Mock Firebase: file delete called');
+          },
+          async exists() {
+            logger.debug({ path }, 'Mock Firebase: file exists check');
+            return [false];
+          },
+          async getFiles() {
+            logger.debug({ path }, 'Mock Firebase: getFiles under prefix');
+            return [[]];
+          }
+        };
+      },
+      async getFiles(options?: { prefix?: string }) {
+        logger.debug({ options }, 'Mock Firebase: bucket getFiles');
+        return [[]];
+      }
+    };
+  }
+});
 
 const mockAuth = () => ({
   async getUser(uid: string) {
@@ -354,7 +387,8 @@ const isFirebaseInitialized = firebaseAdmin.apps.length > 0;
 
 export const admin = {
   auth: () => isFirebaseInitialized ? firebaseAdmin.auth() : mockAuth(),
-  firestore: () => isFirebaseInitialized ? firebaseAdmin.firestore() : mockFirestore()
+  firestore: () => isFirebaseInitialized ? firebaseAdmin.firestore() : (mockFirestore() as any),
+  storage: () => isFirebaseInitialized ? firebaseAdmin.storage() : mockStorage()
 };
 
 export const FieldValue = {
@@ -363,4 +397,5 @@ export const FieldValue = {
 
 // Export Firestore instance
 export const db = admin.firestore();
+export const storage = admin.storage();
 

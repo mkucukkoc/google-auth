@@ -262,6 +262,44 @@ export const pdfSummarySchemas = {
   }),
 };
 
+const deleteReasonEnum = z.enum(['security', 'dissatisfied', 'not_using', 'switching_service', 'other']);
+const deviceInfoSchema = z.object({
+  os: z.string().optional(),
+  model: z.string().optional(),
+  appVersion: z.string().optional(),
+  platform: z.string().optional(),
+}).partial();
+
+export const deleteAccountSchemas = {
+  initiate: z.object({
+    deleteReason: deleteReasonEnum,
+    deleteReasonNote: z.string().max(1000, 'Açıklama en fazla 1000 karakter olabilir').optional(),
+    confirmPermanentDeletion: z.boolean().refine(value => value === true, {
+      message: 'Kalıcı silme onayı verilmelidir',
+    }),
+    gdprAcknowledged: z.boolean().refine(value => value === true, {
+      message: 'GDPR/KVKK bilgilendirmesi onaylanmalıdır',
+    }),
+    skipDataExport: z.boolean().optional(),
+    initiatedFrom: z.string().max(50).optional(),
+    appVersion: z.string().max(50).optional(),
+    locale: z.string().max(10).optional(),
+    deviceInfo: deviceInfoSchema.optional(),
+    platform: z.string().max(50).optional(),
+    anonymous: z.boolean().optional(),
+  }),
+  dataExport: z.object({
+    forceRegenerate: z.boolean().optional(),
+  }),
+  restore: z.object({
+    confirmationCode: z.string().min(4).max(12).optional(),
+    reason: z.string().max(500).optional(),
+  }),
+  jobParams: z.object({
+    jobId: z.string().min(10, 'Geçerli bir jobId gereklidir'),
+  }),
+};
+
 /**
  * Query parameter validation
  */

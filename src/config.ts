@@ -1,3 +1,5 @@
+import path from 'path';
+
 const parseCorsOrigins = (): string[] => {
   const raw = process.env.CORS_ORIGIN;
   if (raw && raw.trim() !== '') {
@@ -27,6 +29,8 @@ const parseCorsOrigins = (): string[] => {
 
   return ['*'];
 };
+
+const deleteLogsDir = process.env.DELETE_ACCOUNT_LOG_DIR || path.join(process.cwd(), 'logs');
 
 export const config = {
   port: Number(process.env.PORT || 4000),
@@ -81,6 +85,33 @@ export const config = {
     tts: {
       baseUrl: process.env.TTS_BASE_URL || 'https://google-auth-e4er.onrender.com',
     },
+  },
+  revenueCat: {
+    apiKey: process.env.REVENUECAT_API_KEY || '',
+    baseUrl: process.env.REVENUECAT_BASE_URL || 'https://api.revenuecat.com',
+    timeoutMs: Number(process.env.REVENUECAT_TIMEOUT_MS || 10000),
+    environment: process.env.REVENUECAT_ENVIRONMENT || 'production',
+    enforceRealMode: process.env.REVENUECAT_ENFORCE_REAL === 'true',
+  },
+  deleteAccount: {
+    restoreWindowDays: Number(process.env.DELETE_RESTORE_DAYS || 30),
+    jobTimeoutMs: Number(process.env.DELETE_JOB_TIMEOUT_MS || 120000),
+    rateLimitWindowSeconds: Number(process.env.DELETE_RATE_WINDOW_SECONDS || 600),
+    rateLimitMaxRequests: Number(process.env.DELETE_RATE_MAX_REQUESTS || 2),
+    telemetryEnabled: process.env.DELETE_TELEMETRY_ENABLED !== 'false',
+    dataExportEnabled: process.env.DELETE_DATA_EXPORT_ENABLED !== 'false',
+    logDirectory: deleteLogsDir,
+    backupRetentionDays: Number(process.env.DELETE_BACKUP_RETENTION_DAYS || 365),
+  },
+  dataExport: {
+    maxChats: Number(process.env.DATA_EXPORT_MAX_CHATS || 500),
+    maxMessagesPerChat: Number(process.env.DATA_EXPORT_MAX_MESSAGES || 1000),
+    maxSessions: Number(process.env.DATA_EXPORT_MAX_SESSIONS || 50),
+  },
+  thirdParty: {
+    crmEndpoint: process.env.CRM_WEBHOOK_URL || '',
+    analyticsEndpoint: process.env.ANALYTICS_WEBHOOK_URL || '',
+    supportEndpoint: process.env.SUPPORT_WEBHOOK_URL || '',
   },
 };
 
