@@ -1,4 +1,5 @@
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
+import { admin } from '../firebase';
 import { logger } from '../utils/logger';
 import { databaseManager } from '../config/database';
 
@@ -438,4 +439,34 @@ class PushNotificationService {
 }
 
 export const pushNotificationService = PushNotificationService.getInstance();
+
+interface FirebasePushPayload {
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}
+
+class FirebasePushNotificationService {
+  async sendPushNotification(token: string, payload: FirebasePushPayload): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    try {
+      await admin.messaging().send({
+        token,
+        notification: {
+          title: payload.title,
+          body: payload.body,
+        },
+        data: payload.data,
+      });
+    } catch (error) {
+      logger.error({ err: error, token }, 'Failed to send Firebase push notification');
+      throw error;
+    }
+  }
+}
+
+export const firebasePushNotificationService = new FirebasePushNotificationService();
 

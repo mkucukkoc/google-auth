@@ -382,13 +382,21 @@ const mockAuth = () => ({
   }
 });
 
+const mockMessaging = () => ({
+  async send(message: any) {
+    logger.debug({ message }, 'Mock Firebase Messaging: send');
+    return 'mock_message_id';
+  }
+});
+
 // Use real Firebase Admin SDK if available, otherwise fallback to mock
 const isFirebaseInitialized = firebaseAdmin.apps.length > 0;
 
 export const admin = {
   auth: () => isFirebaseInitialized ? firebaseAdmin.auth() : mockAuth(),
   firestore: () => isFirebaseInitialized ? firebaseAdmin.firestore() : (mockFirestore() as any),
-  storage: () => isFirebaseInitialized ? firebaseAdmin.storage() : mockStorage()
+  storage: () => isFirebaseInitialized ? firebaseAdmin.storage() : mockStorage(),
+  messaging: () => isFirebaseInitialized ? firebaseAdmin.messaging() : mockMessaging(),
 };
 
 export const FieldValue = {

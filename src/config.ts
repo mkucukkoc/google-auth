@@ -121,6 +121,11 @@ export const config = {
     analyticsEndpoint: process.env.ANALYTICS_WEBHOOK_URL || '',
     supportEndpoint: process.env.SUPPORT_WEBHOOK_URL || '',
   },
+  notification: {
+    supportEmail: process.env.SUPPORT_EMAIL || 'support@aveniaichat.com',
+    suppressInTest: process.env.NOTIFICATION_SUPPRESS === 'true' || process.env.NODE_ENV === 'test',
+    restoreWindowDays: Number(process.env.DELETE_RESTORE_DAYS || 30),
+  },
 };
 
 

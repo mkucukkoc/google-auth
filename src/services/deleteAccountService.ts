@@ -18,6 +18,7 @@ import { SessionService } from './sessionService';
 import { cacheService } from './cacheService';
 import { auditService } from './auditService';
 import { thirdPartyIntegrationService } from './thirdPartyIntegrationService';
+import { notificationService, DeleteNotificationUser } from './notificationService';
 
 type PhaseName =
   | 'preflight_checks'
@@ -128,6 +129,8 @@ class DeleteAccountService {
       const appUserId = preflight.appUserId;
       const isAnonymous = body.anonymous === true || providersToUnlink.length === 0;
 
+      const notificationUser = this.buildNotificationUser(userId, preflight);
+
       if (!isAnonymous) {
         await this.assertNoActiveSubscription(appUserId);
       }
@@ -146,6 +149,14 @@ class DeleteAccountService {
       });
       this.updatePhase(phases, 'soft_delete', 'completed');
       await jobRef.update({ phases });
+
+      await notificationService.sendDeleteAccountStarted(notificationUser);
+      await auditService.logUserAction(userId, 'delete_account_requested', {
+        jobId,
+        reason: body.deleteReason,
+        ipAddress: cleanContext.ipAddress,
+        userAgent: cleanContext.userAgent,
+      });
 
       await this.revokeSessionsAndTokens(userId);
       this.updatePhase(phases, 'sessions_tokens', 'completed');
@@ -202,6 +213,8 @@ class DeleteAccountService {
       await this.appendDeletionLog(
         `[${new Date().toISOString()}] DELETE_ACCOUNT_COMPLETED uid:${userId} job:${jobId} reason:${body.deleteReason}`
       );
+
+      await notificationService.sendDeleteAccountCompleted(notificationUser);
 
       await auditService.logUserAction(userId, 'delete_account_completed', {
         jobId,
@@ -351,12 +364,6 @@ class DeleteAccountService {
 
     const userData = userDoc.data() || {};
     const subscData = subscDoc.data() || {};
-
-    await auditService.logUserAction(userId, 'delete_account_requested', {
-      reason: body.deleteReason,
-      ipAddress: context.ipAddress,
-      userAgent: context.userAgent,
-    });
 
     return {
       email: subscData.email || userData.email,
@@ -652,6 +659,25 @@ class DeleteAccountService {
       logger.debug({ path: pathLike, err: error }, 'Recursive delete skipped');
       return 0;
     }
+  }
+
+  private buildNotificationUser(userId: string, preflight: PreflightResult): DeleteNotificationUser {
+    const profile = preflight.userProfile || {};
+    return {
+      id: userId,
+      email: preflight.email || profile.email,
+      name:
+        profile.displayName ||
+        profile.name ||
+        profile.fullName ||
+        profile.username ||
+        profile.email,
+      language: profile.language || profile.locale,
+      pushToken: profile.pushToken,
+      fcmToken: profile.fcmToken,
+      expoPushToken: profile.expoPushToken,
+      notificationToken: profile.notificationToken,
+    };
   }
 
   private createPhaseTracker(): DeletionJobPhase[] {
