@@ -737,7 +737,9 @@ class DeleteAccountService {
       return { message: details.message, stack: details.stack };
     }
     if (Array.isArray(details)) {
-      return details.map((entry) => this.sanitizeDetails(entry));
+      return details
+        .map((entry) => this.sanitizeDetails(entry))
+        .filter((entry) => entry !== undefined);
     }
     if (typeof details === 'object') {
       const sanitized: Record<string, unknown> = {};
