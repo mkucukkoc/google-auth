@@ -76,6 +76,17 @@ class DeleteAccountService {
     const jobId = uuidv4();
     const phases = this.createPhaseTracker();
     const jobRef = db.collection('deletion_jobs').doc(jobId);
+    // Clean context object - remove undefined values
+    const cleanContext: any = {};
+    if (context) {
+      Object.keys(context).forEach((key) => {
+        const value = (context as any)[key];
+        if (value !== undefined && value !== null) {
+          cleanContext[key] = value;
+        }
+      });
+    }
+
     const jobRecordBase: any = {
       id: jobId,
       userId,
@@ -88,7 +99,7 @@ class DeleteAccountService {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       phases,
-      context,
+      context: cleanContext,
       metrics: {},
     };
 
@@ -168,7 +179,7 @@ class DeleteAccountService {
         deleteReason: body.deleteReason,
         restoreUntil,
         durationMs: Date.now() - start,
-        context,
+        context: cleanContext,
         anonymous: isAnonymous,
       });
       this.updatePhase(phases, 'telemetry', 'completed');
