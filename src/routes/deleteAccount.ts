@@ -51,7 +51,23 @@ export function createDeleteAccountRouter(): Router {
         return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
       }
 
+      logger.debug(
+        {
+          userId: authReq.user.id,
+          dataExportEnabled: config.deleteAccount.dataExportEnabled,
+          envValue: process.env.DELETE_DATA_EXPORT_ENABLED,
+        },
+        'Data export endpoint check'
+      );
+
       if (!config.deleteAccount.dataExportEnabled) {
+        logger.warn(
+          {
+            userId: authReq.user.id,
+            envValue: process.env.DELETE_DATA_EXPORT_ENABLED,
+          },
+          'Data export disabled - returning 403'
+        );
         return res
           .status(403)
           .json(

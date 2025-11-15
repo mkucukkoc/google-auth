@@ -99,7 +99,11 @@ export const config = {
     rateLimitWindowSeconds: Number(process.env.DELETE_RATE_WINDOW_SECONDS || 600),
     rateLimitMaxRequests: Number(process.env.DELETE_RATE_MAX_REQUESTS || 2),
     telemetryEnabled: process.env.DELETE_TELEMETRY_ENABLED !== 'false',
-    dataExportEnabled: process.env.DELETE_DATA_EXPORT_ENABLED !== 'false',
+    dataExportEnabled: (() => {
+      const envValue = process.env.DELETE_DATA_EXPORT_ENABLED;
+      if (envValue === undefined || envValue === '') return true; // Default: enabled
+      return envValue.toLowerCase() === 'true';
+    })(),
     logDirectory: deleteLogsDir,
     backupRetentionDays: Number(process.env.DELETE_BACKUP_RETENTION_DAYS || 365),
   },
