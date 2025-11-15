@@ -75,7 +75,7 @@ export interface DeletedUserRegistryRecord {
   deletedAt: string;
   deleteReason: DeleteReason | 'user_request';
   deleteReasonNote?: string;
-  canRestoreUntil?: string;
+  canRestoreUntil?: string | null;
   ip?: string;
   userAgent?: string;
   restoreRequestedAt?: string;
