@@ -101,8 +101,12 @@ export const config = {
     telemetryEnabled: process.env.DELETE_TELEMETRY_ENABLED !== 'false',
     dataExportEnabled: (() => {
       const envValue = process.env.DELETE_DATA_EXPORT_ENABLED;
-      if (envValue === undefined || envValue === '') return true; // Default: enabled
-      return envValue.toLowerCase() === 'true';
+      // Default: enabled (true) if not set
+      if (envValue === undefined || envValue === '') return true;
+      // Explicitly check for 'false' string
+      if (envValue.toLowerCase() === 'false') return false;
+      // Everything else (including 'true', '1', 'yes') enables it
+      return true;
     })(),
     logDirectory: deleteLogsDir,
     backupRetentionDays: Number(process.env.DELETE_BACKUP_RETENTION_DAYS || 365),

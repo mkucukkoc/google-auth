@@ -38,10 +38,12 @@ class DataExportService {
             .limit(config.dataExport.maxMessagesPerChat)
             .get();
 
-          const messages = messagesSnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
+          const messages = messagesSnapshot.docs.map(
+            (doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => ({
+              id: doc.id,
+              ...doc.data(),
+            })
+          );
 
           return {
             ...chat,
@@ -134,11 +136,13 @@ class DataExportService {
               .get();
             
             messagesFromSubcollection.push(
-              ...snapshot.docs.map((doc) => ({
-                id: doc.id,
-                subcollection: subcollection.id,
-                ...doc.data(),
-              }))
+              ...snapshot.docs.map(
+                (doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => ({
+                  id: doc.id,
+                  subcollection: subcollection.id,
+                  ...doc.data(),
+                })
+              )
             );
           }
         } catch (subcollectionError) {
@@ -275,10 +279,17 @@ class DataExportService {
           
           for (const file of fileList) {
             const [metadata] = await file.getMetadata().catch(() => [null]);
+            const metadataSize = metadata?.size;
             files.push({
               path: file.name,
               name: file.name.split('/').pop() || file.name,
-              size: metadata?.size ? parseInt(metadata.size, 10) : undefined,
+              size: metadataSize
+                ? typeof metadataSize === 'string'
+                  ? parseInt(metadataSize, 10)
+                  : typeof metadataSize === 'number'
+                  ? metadataSize
+                  : undefined
+                : undefined,
               contentType: metadata?.contentType,
               timeCreated: metadata?.timeCreated,
               updated: metadata?.updated,
@@ -286,9 +297,10 @@ class DataExportService {
           }
 
           // Check for subdirectories
-          const [subdirs] = await bucket.getFiles({ prefix, delimiter: '/', maxResults: 1000 });
-          for (const subdir of subdirs.prefixes || []) {
-            if (!prefixes.includes(subdir)) {
+          const [subdirs, , apiResponse] = await bucket.getFiles({ prefix, delimiter: '/', maxResults: 1000 });
+          const subdirPrefixes = (apiResponse as any)?.prefixes || [];
+          for (const subdir of subdirPrefixes) {
+            if (typeof subdir === 'string' && !prefixes.includes(subdir)) {
               prefixes.push(subdir);
             }
           }
