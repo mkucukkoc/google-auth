@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/templates && cp -R src/templates dist/templates",
     "test": "jest",
     "test:endpoints": "jest test/endpoints --verbose",
     "test:performance": "jest test/performance --verbose",
