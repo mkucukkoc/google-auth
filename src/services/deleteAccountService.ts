@@ -76,12 +76,11 @@ class DeleteAccountService {
     const jobId = uuidv4();
     const phases = this.createPhaseTracker();
     const jobRef = db.collection('deletion_jobs').doc(jobId);
-    const jobRecordBase = {
+    const jobRecordBase: any = {
       id: jobId,
       userId,
       status: 'pending' as DeletionJobStatus,
       reason: body.deleteReason,
-      reasonNote: body.deleteReasonNote,
       skipDataExport: body.skipDataExport ?? false,
       anonymous: body.anonymous ?? false,
       initiatedFrom: body.initiatedFrom || 'user',
@@ -92,6 +91,11 @@ class DeleteAccountService {
       context,
       metrics: {},
     };
+
+    // Only include reasonNote if it's provided (not undefined)
+    if (body.deleteReasonNote !== undefined && body.deleteReasonNote !== null) {
+      jobRecordBase.reasonNote = body.deleteReasonNote;
+    }
     await jobRef.set(jobRecordBase);
 
     const start = Date.now();
