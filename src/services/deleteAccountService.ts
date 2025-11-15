@@ -225,7 +225,7 @@ class DeleteAccountService {
         error: {
           code: deleteError.code,
           message: deleteError.message,
-          details: deleteError.details,
+          details: this.sanitizeDetails(deleteError.details),
         },
         phases,
       });
@@ -724,6 +724,31 @@ class DeleteAccountService {
     }
     const err = error as Error;
     return new DeleteAccountError('DELETE_FAILED', err?.message || 'Delete account failed', 500, error);
+  }
+
+  private sanitizeDetails(details: unknown): unknown {
+    if (details === null || details === undefined) {
+      return null;
+    }
+    if (typeof details === 'string' || typeof details === 'number' || typeof details === 'boolean') {
+      return details;
+    }
+    if (details instanceof Error) {
+      return { message: details.message, stack: details.stack };
+    }
+    if (Array.isArray(details)) {
+      return details.map((entry) => this.sanitizeDetails(entry));
+    }
+    if (typeof details === 'object') {
+      const sanitized: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(details as Record<string, unknown>)) {
+        if (value !== undefined && typeof value !== 'function') {
+          sanitized[key] = this.sanitizeDetails(value);
+        }
+      }
+      return sanitized;
+    }
+    return String(details);
   }
 
   private extractProviders(authRecord: any): string[] {
