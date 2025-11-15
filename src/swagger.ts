@@ -922,6 +922,333 @@ export const swaggerSpec = {
       }
     },
 
+    // ==================== DELETE ACCOUNT ====================
+    '/api/v1/delete-account': {
+      post: {
+        summary: 'Initiate account deletion',
+        description: 'Start the account deletion process. This will check for active subscriptions, perform soft-delete, and schedule background cleanup jobs.',
+        tags: ['Delete Account'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  deleteReason: {
+                    type: 'string',
+                    enum: ['security', 'dissatisfied', 'not_using', 'switching_service', 'other'],
+                    example: 'not_using',
+                    description: 'Reason for account deletion'
+                  },
+                  deleteReasonNote: {
+                    type: 'string',
+                    maxLength: 1000,
+                    example: 'I no longer use this app',
+                    description: 'Optional additional details about deletion reason'
+                  },
+                  confirmPermanentDeletion: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Must be true to confirm permanent deletion'
+                  },
+                  gdprAcknowledged: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Must be true to acknowledge GDPR/KVKK notice'
+                  },
+                  skipDataExport: {
+                    type: 'boolean',
+                    example: false,
+                    description: 'Skip data export before deletion'
+                  },
+                  initiatedFrom: {
+                    type: 'string',
+                    maxLength: 50,
+                    example: 'settings_screen',
+                    description: 'Where the deletion was initiated from'
+                  },
+                  appVersion: {
+                    type: 'string',
+                    maxLength: 50,
+                    example: '1.0.0',
+                    description: 'App version'
+                  },
+                  locale: {
+                    type: 'string',
+                    maxLength: 10,
+                    example: 'tr',
+                    description: 'User locale'
+                  },
+                  platform: {
+                    type: 'string',
+                    maxLength: 50,
+                    example: 'ios',
+                    description: 'Platform (ios/android)'
+                  },
+                  anonymous: {
+                    type: 'boolean',
+                    example: false,
+                    description: 'Whether user is anonymous'
+                  }
+                },
+                required: ['deleteReason', 'confirmPermanentDeletion', 'gdprAcknowledged']
+              }
+            }
+          }
+        },
+        responses: {
+          202: {
+            description: 'Deletion process initiated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        jobId: { type: 'string', example: 'job_123456789' },
+                        status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'failed'], example: 'pending' },
+                        providersToUnlink: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          example: ['google.com', 'apple.com'],
+                          description: 'Firebase Auth providers to unlink on client side'
+                        },
+                        restoreUntil: {
+                          type: 'string',
+                          format: 'date-time',
+                          example: '2024-02-14T12:00:00.000Z',
+                          description: 'Date until which account can be restored (30 days)'
+                        },
+                        message: { type: 'string', example: 'Delete account işlemi başlatıldı' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: 'Invalid request data or validation error' },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Active subscription exists or legal hold' },
+          409: { description: 'Deletion already in progress' },
+          429: { description: 'Rate limit exceeded' }
+        }
+      }
+    },
+
+    '/api/v1/delete-account/export': {
+      post: {
+        summary: 'Export user data (GDPR)',
+        description: 'Generate a downloadable archive of all user data before account deletion',
+        tags: ['Delete Account'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  forceRegenerate: {
+                    type: 'boolean',
+                    example: false,
+                    description: 'Force regeneration even if export exists'
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Data export generated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        archiveBase64: { type: 'string', description: 'Base64 encoded gzipped JSON archive' },
+                        fileName: { type: 'string', example: 'avenia-export-user123-1234567890.json.gz' },
+                        size: { type: 'number', example: 102400, description: 'Size in bytes' },
+                        generatedAt: { type: 'string', format: 'date-time' },
+                        expiresAt: { type: 'string', format: 'date-time', description: 'Download link expiration' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: { description: 'Unauthorized' },
+          403: { description: 'Data export disabled' },
+          500: { description: 'Export generation failed' }
+        }
+      }
+    },
+
+    '/api/v1/delete-account/restore': {
+      post: {
+        summary: 'Restore deleted account',
+        description: 'Restore a deleted account within the 30-day restoration window. Premium subscriptions are NOT automatically restored.',
+        tags: ['Delete Account'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  confirmationCode: {
+                    type: 'string',
+                    minLength: 4,
+                    maxLength: 12,
+                    description: 'Optional confirmation code sent via email'
+                  },
+                  reason: {
+                    type: 'string',
+                    maxLength: 500,
+                    example: 'I changed my mind',
+                    description: 'Reason for restoration'
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Account restored successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        restored: { type: 'boolean', example: true },
+                        restoredAt: { type: 'string', format: 'date-time' },
+                        message: { type: 'string', example: 'Hesabınız geri alındı' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          400: { description: 'Restoration window expired or invalid request' },
+          401: { description: 'Unauthorized' },
+          404: { description: 'No deletion record found' }
+        }
+      }
+    },
+
+    '/api/v1/delete-account/jobs/:jobId': {
+      get: {
+        summary: 'Get deletion job status',
+        description: 'Check the status of an account deletion job',
+        tags: ['Delete Account'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            in: 'path',
+            name: 'jobId',
+            required: true,
+            schema: { type: 'string', minLength: 10 },
+            description: 'Deletion job ID'
+          }
+        ],
+        responses: {
+          200: {
+            description: 'Job status retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', example: 'job_123456789' },
+                        userId: { type: 'string' },
+                        status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'failed'] },
+                        reason: { type: 'string' },
+                        phases: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              name: { type: 'string' },
+                              status: { type: 'string', enum: ['pending', 'running', 'completed', 'failed', 'skipped'] },
+                              startedAt: { type: 'string', format: 'date-time' },
+                              completedAt: { type: 'string', format: 'date-time' },
+                              error: { type: 'string' }
+                            }
+                          }
+                        },
+                        metrics: {
+                          type: 'object',
+                          properties: {
+                            firestoreDocsDeleted: { type: 'number' },
+                            storageObjectsDeleted: { type: 'number' },
+                            durationMs: { type: 'number' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: { description: 'Unauthorized' },
+          404: { description: 'Job not found' }
+        }
+      }
+    },
+
+    '/api/v1/delete-account/jobs/latest': {
+      get: {
+        summary: 'Get latest deletion job for user',
+        description: 'Get the most recent account deletion job for the authenticated user',
+        tags: ['Delete Account'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Latest job retrieved successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      description: 'Same structure as /jobs/:jobId response'
+                    }
+                  }
+                }
+              }
+            }
+          },
+          401: { description: 'Unauthorized' },
+          404: { description: 'No deletion job found' }
+        }
+      }
+    },
+
     // ==================== PRESENTATION ====================
   },
   tags: [
@@ -932,6 +1259,7 @@ export const swaggerSpec = {
     { name: 'Apple Auth', description: 'Apple Sign-In authentication' },
     { name: 'Password Reset', description: 'Password reset functionality' },
     { name: 'PDF Read', description: 'PDF processing and AI analysis' },
-    { name: 'Notifications', description: 'Push notification management' }
+    { name: 'Notifications', description: 'Push notification management' },
+    { name: 'Delete Account', description: 'Account deletion and data export (GDPR/KVKK compliant)' }
   ]
 } as const;
