@@ -445,13 +445,13 @@ class DeleteAccountService {
 
     await batch.commit();
 
-    const registry: DeletedUserRegistryRecord = {
+      const registry: DeletedUserRegistryRecord = {
       uid: userId,
       email,
       provider,
       deletedAt: new Date().toISOString(),
       deleteReason: body.deleteReason || 'user_request',
-      canRestoreUntil: restoreUntil,
+        canRestoreUntil: restoreUntil ?? null,
       ip: context.ipAddress,
       userAgent: context.userAgent,
       blockedForWebhook: true,
