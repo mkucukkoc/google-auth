@@ -27,6 +27,10 @@ export function createAuthRouter(): Router {
         const { email, password, device, deviceId, name }: RegisterRequest = req.body;
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
         const userAgent = (req as any).get('User-Agent');
+        logger.info(
+          { email, deviceId, device, name, ipAddress },
+          'Registration request payload'
+        );
 
         // Check if email is already registered
         const existingUser = await UserService.findByEmail(email);
@@ -93,6 +97,7 @@ export function createAuthRouter(): Router {
           deviceId,
           firebaseCustomToken,
         };
+        logger.debug({ email, userId: user.id, response }, 'Registration response payload');
 
         res.status(201).json(ResponseBuilder.success(response, 'User registered successfully'));
       } catch (error) {
@@ -114,6 +119,10 @@ export function createAuthRouter(): Router {
         const { email, password, device, deviceId }: LoginRequest = req.body;
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
         const userAgent = (req as any).get('User-Agent');
+        logger.info(
+          { email, deviceId, device, ipAddress },
+          'Login request payload'
+        );
 
         // Find user
         const user = await UserService.findByEmail(email);
@@ -234,6 +243,7 @@ export function createAuthRouter(): Router {
           deviceId,
           firebaseCustomToken,
         };
+        logger.debug({ userId: user.id, response }, 'Login response payload');
 
         res.json(response);
       } catch (error) {
@@ -255,6 +265,7 @@ export function createAuthRouter(): Router {
         const { refreshToken, sessionId, deviceId }: RefreshRequest = req.body;
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
         const userAgent = (req as any).get('User-Agent');
+        logger.info({ sessionId, deviceId, ipAddress }, 'Token refresh request payload');
 
         try {
           const result = await SessionService.verifyAndRotateRefreshToken(
@@ -287,6 +298,7 @@ export function createAuthRouter(): Router {
           });
 
           res.json(result.tokens);
+          logger.debug({ sessionId, tokens: result.tokens }, 'Token refresh response payload');
         } catch (error: any) {
           if (error.message === 'REUSE_DETECTED') {
             await auditService.logAuthEvent('reuse_detected', {
@@ -379,7 +391,9 @@ export function createAuthRouter(): Router {
           });
         }
 
-        res.json({ success });
+        const responsePayload = { success };
+        logger.debug({ sessionId, response: responsePayload }, 'Logout response payload');
+        res.json(responsePayload);
       } catch (error) {
         logger.error('Logout error:', error);
         res.status(500).json({ 
@@ -399,6 +413,7 @@ export function createAuthRouter(): Router {
       try {
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
         const userAgent = (req as any).get('User-Agent');
+        logger.info({ userId: authReq.user?.id, ipAddress, userAgent }, 'Logout all request payload');
 
         await SessionService.revokeAllUserSessions(authReq.user!.id);
 
@@ -409,7 +424,10 @@ export function createAuthRouter(): Router {
           success: true,
         });
 
-        res.json({ success: true });
+        const responsePayload = { success: true };
+        logger.debug({ userId: authReq.user!.id, response: responsePayload }, 'Logout all response payload');
+
+        res.json(responsePayload);
       } catch (error) {
         logger.error('Logout all error:', error);
         res.status(500).json({ 
@@ -426,6 +444,7 @@ export function createAuthRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logger.info({ userId: authReq.user?.id }, 'Get current user payload');
         const user = await UserService.findById(authReq.user!.id);
         if (!user) {
           return res.status(404).json({ 
@@ -434,7 +453,7 @@ export function createAuthRouter(): Router {
           });
         }
 
-        res.json({
+        const response = {
           id: user.id,
           email: user.email,
           name: user.name,
@@ -442,7 +461,9 @@ export function createAuthRouter(): Router {
           isEmailVerified: user.isEmailVerified,
           createdAt: user.createdAt,
           lastLoginAt: user.lastLoginAt,
-        });
+        };
+        logger.debug({ userId: user.id, response }, 'Get current user response payload');
+        res.json(response);
       } catch (error) {
         logger.error('Get user error:', error);
         res.status(500).json({ 

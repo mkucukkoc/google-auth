@@ -39,8 +39,9 @@ const sendBulkNotificationSchema = z.object({
 });
 
 // Save user push token
-router.post('/tokens', 
-    authenticateToken,
+router.post(
+  '/tokens',
+  authenticateToken,
   validate(saveTokenSchema),
   async (req: Request, res: Response) => {
     try {
@@ -54,6 +55,9 @@ router.post('/tokens',
         });
       }
 
+      const requestPayload = { expoPushToken, deviceId, platform };
+      logger.info({ userId, requestPayload }, 'Saving push notification token');
+
       await pushNotificationService.saveUserPushToken(
         userId,
         expoPushToken,
@@ -62,19 +66,21 @@ router.post('/tokens',
       );
 
       logger.info('Push token saved successfully', { userId, deviceId, platform });
-
-      res.json({
+      const responsePayload = {
         success: true,
         message: 'Push token saved successfully',
         data: { userId, deviceId, platform }
-      });
+      };
+      logger.debug({ userId, response: responsePayload }, 'Push token save response payload');
+
+      res.json(responsePayload);
     } catch (error) {
-      logger.error('Failed to save push token:', error);
+      logger.error({ err: error }, 'Failed to save push token');
       res.status(500).json({
         success: false,
-        error: { 
-          code: 'internal_error', 
-          message: 'Failed to save push token' 
+        error: {
+          code: 'internal_error',
+          message: 'Failed to save push token'
         }
       });
     }
@@ -82,8 +88,9 @@ router.post('/tokens',
 );
 
 // Deactivate user push token
-router.delete('/tokens/:deviceId',
-    authenticateToken,
+router.delete(
+  '/tokens/:deviceId',
+  authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { deviceId } = req.params;
@@ -96,22 +103,26 @@ router.delete('/tokens/:deviceId',
         });
       }
 
+      logger.info({ userId, deviceId }, 'Deactivating push notification token');
+
       await pushNotificationService.deactivateUserPushToken(userId, deviceId);
 
       logger.info('Push token deactivated successfully', { userId, deviceId });
-
-      res.json({
+      const responsePayload = {
         success: true,
         message: 'Push token deactivated successfully',
         data: { userId, deviceId }
-      });
+      };
+      logger.debug({ userId, response: responsePayload }, 'Push token deactivation response payload');
+
+      res.json(responsePayload);
     } catch (error) {
-      logger.error('Failed to deactivate push token:', error);
+      logger.error({ err: error }, 'Failed to deactivate push token');
       res.status(500).json({
         success: false,
-        error: { 
-          code: 'internal_error', 
-          message: 'Failed to deactivate push token' 
+        error: {
+          code: 'internal_error',
+          message: 'Failed to deactivate push token'
         }
       });
     }
@@ -119,8 +130,9 @@ router.delete('/tokens/:deviceId',
 );
 
 // Send notification to specific users
-router.post('/send',
-    authenticateToken,
+router.post(
+  '/send',
+  authenticateToken,
   validate(sendNotificationSchema),
   async (req: Request, res: Response) => {
     try {
@@ -134,38 +146,46 @@ router.post('/send',
         });
       }
 
+      logger.info(
+        { senderId, userIds: userIds?.length ?? 0, notification },
+        'Send push notification request payload'
+      );
+
       if (userIds && userIds.length > 0) {
         // Send to specific users
         await pushNotificationService.sendPushNotificationToUsers(userIds, notification);
-        logger.info('Push notification sent to specific users', { 
-          senderId, 
+        logger.info('Push notification sent to specific users', {
+          senderId,
           userIds: userIds.length,
-          title: notification.title 
+          title: notification.title
         });
       } else {
         // Send to all users
         await pushNotificationService.sendPushNotificationToAllUsers(notification);
-        logger.info('Push notification sent to all users', { 
-          senderId, 
-          title: notification.title 
+        logger.info('Push notification sent to all users', {
+          senderId,
+          title: notification.title
         });
       }
 
-      res.json({
+      const responsePayload = {
         success: true,
         message: 'Push notification sent successfully',
-        data: { 
+        data: {
           userIds: userIds || 'all',
-          title: notification.title 
+          title: notification.title
         }
-      });
+      };
+      logger.debug({ senderId, response: responsePayload }, 'Single notification response payload');
+
+      res.json(responsePayload);
     } catch (error) {
-      logger.error('Failed to send push notification:', error);
+      logger.error({ err: error }, 'Failed to send push notification');
       res.status(500).json({
         success: false,
-        error: { 
-          code: 'internal_error', 
-          message: 'Failed to send push notification' 
+        error: {
+          code: 'internal_error',
+          message: 'Failed to send push notification'
         }
       });
     }
@@ -173,8 +193,9 @@ router.post('/send',
 );
 
 // Send notification to specific push tokens
-router.post('/send/bulk',
-    authenticateToken,
+router.post(
+  '/send/bulk',
+  authenticateToken,
   validate(sendBulkNotificationSchema),
   async (req: Request, res: Response) => {
     try {
@@ -188,33 +209,41 @@ router.post('/send/bulk',
         });
       }
 
+      logger.info(
+        { senderId, tokenCount: expoPushTokens.length, notification },
+        'Bulk push notification request payload'
+      );
+
       const tickets = await pushNotificationService.sendBulkPushNotification(
         expoPushTokens,
         notification
       );
 
-      logger.info('Bulk push notification sent', { 
-        senderId, 
+      logger.info('Bulk push notification sent', {
+        senderId,
         tokenCount: expoPushTokens.length,
-        title: notification.title 
+        title: notification.title
       });
 
-      res.json({
+      const responsePayload = {
         success: true,
         message: 'Bulk push notification sent successfully',
-        data: { 
+        data: {
           tokenCount: expoPushTokens.length,
           tickets: tickets.length,
-          title: notification.title 
+          title: notification.title
         }
-      });
+      };
+      logger.debug({ senderId, response: responsePayload }, 'Bulk notification response payload');
+
+      res.json(responsePayload);
     } catch (error) {
-      logger.error('Failed to send bulk push notification:', error);
+      logger.error({ err: error }, 'Failed to send bulk push notification');
       res.status(500).json({
         success: false,
-        error: { 
-          code: 'internal_error', 
-          message: 'Failed to send bulk push notification' 
+        error: {
+          code: 'internal_error',
+          message: 'Failed to send bulk push notification'
         }
       });
     }
@@ -510,8 +539,9 @@ router.post('/system',
 );
 
 // Get push notification statistics
-router.get('/stats',
-    authenticateToken,
+router.get(
+  '/stats',
+  authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const senderId = (req as any).user?.id;
@@ -524,18 +554,22 @@ router.get('/stats',
       }
 
       const stats = await pushNotificationService.getPushNotificationStats();
+      logger.info({ senderId, stats }, 'Push notification stats fetched');
 
-      res.json({
+      const responsePayload = {
         success: true,
         data: stats
-      });
+      };
+      logger.debug({ senderId, response: responsePayload }, 'Notification stats response payload');
+
+      res.json(responsePayload);
     } catch (error) {
-      logger.error('Failed to get push notification stats:', error);
+      logger.error({ err: error }, 'Failed to get push notification stats');
       res.status(500).json({
         success: false,
-        error: { 
-          code: 'internal_error', 
-          message: 'Failed to get push notification stats' 
+        error: {
+          code: 'internal_error',
+          message: 'Failed to get push notification stats'
         }
       });
     }

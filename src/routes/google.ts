@@ -16,25 +16,28 @@ import { logger } from '../utils/logger';
 export function createGoogleAuthRouter(): Router {
   const r = Router();
 
-  r.post('/start', 
+  r.post(
+    '/start',
     authRateLimits.general,
     async (req, res) => {
       try {
-        logger.debug('[GoogleAuth] /start endpoint called:', {
-          body: req.body,
-          headers: req.headers
-        });
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const userAgent = (req as any).get('User-Agent');
+        logger.info(
+          { body: req.body, headers: req.headers, ipAddress, userAgent },
+          '[GoogleAuth] /start request payload'
+        );
         
         const { device_id } = req.body || {};
         if (!device_id) {
-          logger.debug('[GoogleAuth] Missing device_id');
+          logger.warn({ ipAddress, userAgent }, '[GoogleAuth] Missing device_id');
           return res.status(400).json({ error: 'invalid_request' });
         }
         
         const id = uuidv4();
         logger.debug('[GoogleAuth] Generated state ID:', id);
         
-        await setJson(`gls:${id}`, { device_id }, 600);
+        await setJson(`gls:${id}`, { device_id, ipAddress, userAgent }, 600);
         logger.debug('[GoogleAuth] Stored session in Redis');
         
         const params = new URLSearchParams({
@@ -46,9 +49,11 @@ export function createGoogleAuthRouter(): Router {
         });
         
         const authUrl = `https://accounts.google.com/o/oauth2/auth?${params}`;
-        logger.debug('[GoogleAuth] Generated auth URL:', authUrl);
+        logger.info({ id, deviceId: device_id }, '[GoogleAuth] Generated auth URL');
         
-        return res.json({ url: authUrl });
+        const responsePayload = { url: authUrl, id };
+        logger.debug({ response: responsePayload }, '[GoogleAuth] /start response payload');
+        return res.json(responsePayload);
       } catch (error) {
         logger.debug('[GoogleAuth] /start error:', error);
         logger.error({ error }, 'Google auth start error');
@@ -59,16 +64,20 @@ export function createGoogleAuthRouter(): Router {
 
   r.get('/status/:id', async (req, res) => {
     try {
-      logger.debug('[GoogleAuth] /status endpoint called for ID:', req.params.id);
+      const requestPayload = { id: req.params.id };
+      logger.info(requestPayload, '[GoogleAuth] /status request payload');
       const session = await getJson<any>(`gls:${req.params.id}`);
       logger.debug('[GoogleAuth] Retrieved session:', session);
-      
+
       if (!session || !session.ready) {
-        logger.debug('[GoogleAuth] Session not ready');
-        return res.json({ ready: false });
+        logger.warn({ ...requestPayload, session }, '[GoogleAuth] Session not ready');
+        const responsePayload = { ready: false };
+        logger.debug({ response: responsePayload }, '[GoogleAuth] /status response payload');
+        return res.json(responsePayload);
       }
-      
-      logger.debug('[GoogleAuth] Session ready, returning data');
+
+      logger.info({ ...requestPayload, ready: true }, '[GoogleAuth] Session ready');
+      logger.debug({ response: session }, '[GoogleAuth] /status response payload');
       return res.json(session);
     } catch (error) {
       logger.debug('[GoogleAuth] /status error:', error);
@@ -77,15 +86,26 @@ export function createGoogleAuthRouter(): Router {
     }
   });
 
-  r.get('/callback', 
+  r.get(
+    '/callback',
     authRateLimits.general,
     async (req, res) => {
       const { code, state } = req.query;
+      const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+      const userAgent = (req as any).get('User-Agent');
+      logger.info(
+        { code, state, ipAddress, userAgent },
+        '[GoogleAuth] /callback request payload'
+      );
+
       if (typeof code !== 'string' || typeof state !== 'string') {
+        logger.warn('[GoogleAuth] /callback received invalid query parameters');
         return res.status(400).send('Invalid request');
       }
+
       const session = await getJson<any>(`gls:${state}`);
       if (!session || !session.device_id) {
+        logger.warn({ state }, '[GoogleAuth] Invalid or missing state session');
         return res.status(400).send('Invalid state');
       }
       try {
@@ -205,7 +225,7 @@ export function createGoogleAuthRouter(): Router {
           });
         }
         
-        await setJson(`gls:${state}`, {
+        const readyPayload = {
           ready: true,
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
@@ -219,8 +239,11 @@ export function createGoogleAuthRouter(): Router {
           deviceId: session.device_id,
           firebaseCustomToken,
           firebase_token: firebaseCustomToken ?? null,
-        }, 600);
-        
+        };
+        await setJson(`gls:${state}`, readyPayload, 600);
+        logger.debug({ state, readyPayload }, '[GoogleAuth] /callback response payload');
+
+        logger.info({ userId: user.id, state }, '[GoogleAuth] /callback processed successfully');
         return res.send('<html><body>Login successful. You may close this window.</body></html>');
       } catch (error) {
         logger.error({ err: error, operation: 'googleAuth' }, 'Google auth error');

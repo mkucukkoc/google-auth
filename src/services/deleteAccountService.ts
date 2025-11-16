@@ -110,6 +110,16 @@ class DeleteAccountService {
     }
     await jobRef.set(jobRecordBase);
 
+    logger.info(
+      {
+        userId,
+        jobId,
+        body,
+        context: cleanContext,
+      },
+      'Delete account job started'
+    );
+
     const start = Date.now();
     let providersToUnlink: string[] = [];
     let restoreUntil: string | undefined;
@@ -119,6 +129,7 @@ class DeleteAccountService {
       providersToUnlink = this.extractProviders(authRecord);
 
       const preflight = await this.runPreflightChecks(userId, body, context);
+      logger.info({ userId, jobId, preflight }, 'Preflight checks completed');
       this.updatePhase(phases, 'preflight_checks', 'completed');
       await jobRef.update({ phases });
 
@@ -147,6 +158,15 @@ class DeleteAccountService {
         jobId,
         isAnonymous,
       });
+      logger.info(
+        {
+          userId,
+          jobId,
+          restoreUntil,
+          isAnonymous,
+        },
+        'Soft delete applied'
+      );
       this.updatePhase(phases, 'soft_delete', 'completed');
       await jobRef.update({ phases });
 
@@ -159,10 +179,12 @@ class DeleteAccountService {
       });
 
       await this.revokeSessionsAndTokens(userId);
+      logger.info({ userId, jobId }, 'Sessions and tokens revoked');
       this.updatePhase(phases, 'sessions_tokens', 'completed');
       await jobRef.update({ phases });
 
       const firestoreCount = await this.cleanupFirestoreData(userId);
+      logger.info({ userId, jobId, firestoreCount }, 'Firestore cleanup done');
       this.updatePhase(phases, 'firestore_cleanup', 'completed');
       await jobRef.update({
         phases,
@@ -170,6 +192,7 @@ class DeleteAccountService {
       });
 
       const storageCount = await this.cleanupStorageData(userId);
+      logger.info({ userId, jobId, storageCount }, 'Storage cleanup done');
       this.updatePhase(phases, 'storage_cleanup', 'completed');
       await jobRef.update({
         phases,
@@ -181,6 +204,7 @@ class DeleteAccountService {
         email: preflight.email || authRecord?.email,
         reason: body.deleteReason,
       });
+      logger.info({ userId, jobId }, 'Third-party cleanup triggered');
       this.updatePhase(phases, 'third_party_cleanup', 'completed');
       await jobRef.update({ phases });
 
@@ -193,6 +217,7 @@ class DeleteAccountService {
         context: cleanContext,
         anonymous: isAnonymous,
       });
+      logger.info({ userId, jobId }, 'Telemetry recorded');
       this.updatePhase(phases, 'telemetry', 'completed');
       await jobRef.update({ phases });
 
@@ -221,7 +246,7 @@ class DeleteAccountService {
         reason: body.deleteReason,
       });
 
-      return {
+      const response: DeleteAccountResult = {
         jobId,
         status: 'completed',
         providersToUnlink,
@@ -229,7 +254,10 @@ class DeleteAccountService {
         message:
           'Backend cleanup tamamlandı. Lütfen istemci tarafında Firebase Auth hesabını silmeyi unutmayın.',
       };
+      logger.info({ userId, jobId, response }, 'Delete account job completed');
+      return response;
     } catch (error) {
+      logger.error({ err: error, userId, jobId }, 'Delete account job failed');
       const deleteError = this.normalizeError(error);
       this.updatePhase(phases, 'telemetry', 'failed', deleteError.message);
       await jobRef.update({
@@ -253,75 +281,83 @@ class DeleteAccountService {
     userId: string,
     context: DeleteAccountContext = {}
   ): Promise<RestoreAccountResult> {
-  const registrySnap = await db.collection('deleted_users_subsc').doc(userId).get();
-    if (!registrySnap.exists) {
-      throw new DeleteAccountError('NOT_DELETED', 'Kullanıcı silinmiş değil', 404);
-    }
-
-    const registry = registrySnap.data() as DeletedUserRegistryRecord;
-    if (registry.legalHold) {
-      throw new DeleteAccountError('LEGAL_HOLD', 'Hesap hukuki sebeplerle kilitli', 423);
-    }
-
-    if (registry.canRestoreUntil) {
-      const deadline = new Date(registry.canRestoreUntil);
-      if (deadline.getTime() < Date.now()) {
-        throw new DeleteAccountError('RESTORE_WINDOW_PASSED', 'Geri alma süresi dolmuş', 410);
+    logger.info({ userId, context }, 'Restore account service called');
+    try {
+      const registrySnap = await db.collection('deleted_users_subsc').doc(userId).get();
+      if (!registrySnap.exists) {
+        throw new DeleteAccountError('NOT_DELETED', 'Kullanıcı silinmiş değil', 404);
       }
-    }
 
-    const batch = db.batch();
-    const usersRef = db.collection('users').doc(userId);
-    const subscRef = db.collection('subsc').doc(userId);
-    const premiumRef = db.collection('premiumusers').doc(userId);
-    const blacklistRef = db.collection('notification_blacklist').doc(userId);
+      const registry = registrySnap.data() as DeletedUserRegistryRecord;
+      if (registry.legalHold) {
+        throw new DeleteAccountError('LEGAL_HOLD', 'Hesap hukuki sebeplerle kilitli', 423);
+      }
 
-    batch.set(
-      usersRef,
-      {
-        isDeleted: false,
-        restoredAt: FieldValue.serverTimestamp(),
-        deletedAt: null,
-      },
-      { merge: true }
-    );
-    batch.set(
-      subscRef,
-      {
-        isDeleted: false,
-        premiumCancelledAt: null,
-      },
-      { merge: true }
-    );
-    batch.set(
-      premiumRef,
-      {
-        isDeleted: false,
-        blockedForWebhook: false,
-      },
-      { merge: true }
-    );
-    batch.delete(blacklistRef);
+      if (registry.canRestoreUntil) {
+        const deadline = new Date(registry.canRestoreUntil);
+        if (deadline.getTime() < Date.now()) {
+          throw new DeleteAccountError('RESTORE_WINDOW_PASSED', 'Geri alma süresi dolmuş', 410);
+        }
+      }
 
-    await batch.commit();
-    await db
-      .collection('deleted_users_subsc')
-      .doc(userId)
-      .update({
-        restoreCompletedAt: FieldValue.serverTimestamp(),
-        blockedForWebhook: false,
+      const batch = db.batch();
+      const usersRef = db.collection('users').doc(userId);
+      const subscRef = db.collection('subsc').doc(userId);
+      const premiumRef = db.collection('premiumusers').doc(userId);
+      const blacklistRef = db.collection('notification_blacklist').doc(userId);
+
+      batch.set(
+        usersRef,
+        {
+          isDeleted: false,
+          restoredAt: FieldValue.serverTimestamp(),
+          deletedAt: null,
+        },
+        { merge: true }
+      );
+      batch.set(
+        subscRef,
+        {
+          isDeleted: false,
+          premiumCancelledAt: null,
+        },
+        { merge: true }
+      );
+      batch.set(
+        premiumRef,
+        {
+          isDeleted: false,
+          blockedForWebhook: false,
+        },
+        { merge: true }
+      );
+      batch.delete(blacklistRef);
+
+      await batch.commit();
+      await db
+        .collection('deleted_users_subsc')
+        .doc(userId)
+        .update({
+          restoreCompletedAt: FieldValue.serverTimestamp(),
+          blockedForWebhook: false,
+        });
+
+      await auditService.logUserAction(userId, 'delete_account_restored', {
+        ip: context.ipAddress,
+        userAgent: context.userAgent,
       });
 
-    await auditService.logUserAction(userId, 'delete_account_restored', {
-      ip: context.ipAddress,
-      userAgent: context.userAgent,
-    });
-
-    return {
-      restored: true,
-      restoredAt: new Date().toISOString(),
-      message: 'Hesap başarıyla yeniden aktifleştirildi. Premium abonelikler otomatik olarak geri açılmaz.',
-    };
+      const result = {
+        restored: true,
+        restoredAt: new Date().toISOString(),
+        message: 'Hesap başarıyla yeniden aktifleştirildi. Premium abonelikler otomatik olarak geri açılmaz.',
+      };
+      logger.info({ userId, result }, 'Restore account service succeeded');
+      return result;
+    } catch (error) {
+      logger.error({ err: error, userId }, 'Restore account service failed');
+      throw error;
+    }
   }
 
   async getJob(jobId: string) {
