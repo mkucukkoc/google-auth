@@ -301,6 +301,20 @@ export const deleteAccountSchemas = {
   }),
 };
 
+export const premiumSchemas = {
+  customerInfo: z.object({
+    customerInfo: z.any(),
+    platform: z.string().max(50).optional(),
+    source: z.string().max(100).optional(),
+    requestId: z.string().max(100).optional(),
+  }),
+  restore: z.object({
+    appUserId: z.string().max(200).optional(),
+    requestId: z.string().max(100).optional(),
+    source: z.string().max(100).optional(),
+  }),
+};
+
 /**
  * Query parameter validation
  */
