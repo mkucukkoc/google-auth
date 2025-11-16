@@ -60,6 +60,10 @@ class PremiumService {
     const premiumState = this.extractFromCustomerInfo(payload.customerInfo);
 
     if (!premiumState) {
+      logger.info(
+        { userId, source: payload.source || 'client_customer_info' },
+        'Premium sync skipped: aktif entitlement bulunamadı'
+      );
       throw new PremiumServiceError('ENTITLEMENT_NOT_FOUND', 'Aktif premium entitlement bulunamadı', 404);
     }
 
@@ -85,6 +89,7 @@ class PremiumService {
     const premiumState = this.extractFromSubscriber(subscriberPayload);
 
     if (!premiumState) {
+      logger.info({ userId, appUserId }, 'Premium restore skipped: aktif abonelik bulunamadı');
       throw new PremiumServiceError('ENTITLEMENT_NOT_FOUND', 'Aktif premium abonelik bulunamadı', 404);
     }
 
