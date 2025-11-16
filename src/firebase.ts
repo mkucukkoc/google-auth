@@ -9,15 +9,18 @@ if (!firebaseAdmin.apps.length) {
       ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
       : null;
 
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || 'aveniaapp.firebasestorage.app';
+
     if (serviceAccount) {
       firebaseAdmin.initializeApp({
         credential: firebaseAdmin.credential.cert(serviceAccount),
-        databaseURL: process.env.FIREBASE_DATABASE_URL
+        databaseURL: process.env.FIREBASE_DATABASE_URL,
+        storageBucket,
       });
       logger.info('Firebase Admin SDK initialized with service account');
     } else {
       // Fallback to default credentials (for local development)
-      firebaseAdmin.initializeApp();
+      firebaseAdmin.initializeApp({ storageBucket });
       logger.info('Firebase Admin SDK initialized with default credentials');
     }
   } catch (error) {
