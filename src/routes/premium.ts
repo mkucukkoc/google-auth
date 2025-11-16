@@ -116,7 +116,12 @@ export function createPremiumRouter(): Router {
 
 function handlePremiumError(res: Response, error: any) {
   if (error instanceof PremiumServiceError) {
-    logger.warn({ err: error, code: error.code }, 'Premium service error');
+    const logPayload = { err: error, code: error.code };
+    if (error.code === 'ENTITLEMENT_NOT_FOUND') {
+      logger.info(logPayload, 'Premium service info: entitlement not found');
+    } else {
+      logger.warn(logPayload, 'Premium service error');
+    }
     return res.status(error.status).json(ResponseBuilder.error(error.code, error.message));
   }
 
