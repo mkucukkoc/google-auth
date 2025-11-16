@@ -94,7 +94,7 @@ export function createDeleteAccountRouter(): Router {
 
       try {
         const archive = await dataExportService.generateUserExport(authReq.user.id);
-        logger.info({ userId: authReq.user.id, archiveId: archive.id }, 'Data export succeeded');
+        logger.info({ userId: authReq.user.id, archiveFile: archive.fileName }, 'Data export succeeded');
         return res.json(ResponseBuilder.success(archive, 'Veri arşiviniz hazır'));
       } catch (error) {
         logger.error({ err: error, userId: authReq.user.id }, 'Data export failed');
