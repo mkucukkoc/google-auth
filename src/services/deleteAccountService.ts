@@ -12,8 +12,9 @@ import {
   DeletedUserRegistryRecord,
   RestoreAccountResult,
   DeletionJobStatus,
+  DeleteReason,
 } from '../types/deleteAccount';
-import { revenueCatService } from './revenueCatService';
+import { revenueCatService, type RevenueCatCheckResult } from './revenueCatService';
 import { SessionService } from './sessionService';
 import { cacheService } from './cacheService';
 import { auditService } from './auditService';
@@ -88,11 +89,13 @@ class DeleteAccountService {
       });
     }
 
+    const deleteReason: DeleteReason | 'user_request' = body.deleteReason ?? 'user_request';
+
     const jobRecordBase: any = {
       id: jobId,
       userId,
       status: 'pending' as DeletionJobStatus,
-      reason: body.deleteReason,
+      reason: deleteReason,
       skipDataExport: body.skipDataExport ?? false,
       anonymous: body.anonymous ?? false,
       initiatedFrom: body.initiatedFrom || 'user',
@@ -121,12 +124,12 @@ class DeleteAccountService {
     );
 
     const start = Date.now();
-    let providersToUnlink: string[] = [];
     let restoreUntil: string | undefined;
+    let hasActiveSubscription = false;
 
     try {
       const authRecord = await this.safeGetAuthUser(userId);
-      providersToUnlink = this.extractProviders(authRecord);
+      const providers = this.extractProviders(authRecord);
 
       const preflight = await this.runPreflightChecks(userId, body, context);
       logger.info({ userId, jobId, preflight }, 'Preflight checks completed');
@@ -138,12 +141,13 @@ class DeleteAccountService {
       }
 
       const appUserId = preflight.appUserId;
-      const isAnonymous = body.anonymous === true || providersToUnlink.length === 0;
+      const isAnonymous = body.anonymous === true || providers.length === 0;
 
       const notificationUser = this.buildNotificationUser(userId, preflight);
 
       if (!isAnonymous) {
-        await this.assertNoActiveSubscription(appUserId);
+        const subscriptionStatus = await this.fetchSubscriptionStatus(appUserId);
+        hasActiveSubscription = Boolean(subscriptionStatus?.hasActiveSubscription);
       }
 
       restoreUntil = this.calculateRestoreUntil(isAnonymous);
@@ -152,11 +156,12 @@ class DeleteAccountService {
         userId,
         email: preflight.email || authRecord?.email,
         provider: preflight.provider || authRecord?.providerData?.[0]?.providerId,
-        body,
+        deleteReason,
         context,
         restoreUntil,
         jobId,
         isAnonymous,
+        hasActiveSubscription,
       });
       logger.info(
         {
@@ -173,7 +178,7 @@ class DeleteAccountService {
       await notificationService.sendDeleteAccountStarted(notificationUser);
       await auditService.logUserAction(userId, 'delete_account_requested', {
         jobId,
-        reason: body.deleteReason,
+        reason: deleteReason,
         ipAddress: cleanContext.ipAddress,
         userAgent: cleanContext.userAgent,
       });
@@ -182,6 +187,8 @@ class DeleteAccountService {
       logger.info({ userId, jobId }, 'Sessions and tokens revoked');
       this.updatePhase(phases, 'sessions_tokens', 'completed');
       await jobRef.update({ phases });
+
+      await this.deleteFirebaseAuthAccount(userId, { hasActiveSubscription });
 
       const firestoreCount = await this.cleanupFirestoreData(userId);
       logger.info({ userId, jobId, firestoreCount }, 'Firestore cleanup done');
@@ -202,7 +209,7 @@ class DeleteAccountService {
       await this.cleanupThirdParties({
         userId,
         email: preflight.email || authRecord?.email,
-        reason: body.deleteReason,
+        reason: deleteReason,
       });
       logger.info({ userId, jobId }, 'Third-party cleanup triggered');
       this.updatePhase(phases, 'third_party_cleanup', 'completed');
@@ -211,7 +218,7 @@ class DeleteAccountService {
       await this.recordTelemetryEvent({
         userId,
         jobId,
-        deleteReason: body.deleteReason,
+        deleteReason,
         restoreUntil,
         durationMs: Date.now() - start,
         context: cleanContext,
@@ -236,23 +243,24 @@ class DeleteAccountService {
       });
 
       await this.appendDeletionLog(
-        `[${new Date().toISOString()}] DELETE_ACCOUNT_COMPLETED uid:${userId} job:${jobId} reason:${body.deleteReason}`
+        `[${new Date().toISOString()}] DELETE_ACCOUNT_COMPLETED uid:${userId} job:${jobId} reason:${deleteReason}`
       );
 
       await notificationService.sendDeleteAccountCompleted(notificationUser);
 
       await auditService.logUserAction(userId, 'delete_account_completed', {
         jobId,
-        reason: body.deleteReason,
+        reason: deleteReason,
       });
 
       const response: DeleteAccountResult = {
         jobId,
         status: 'completed',
-        providersToUnlink,
+        providersToUnlink: [],
         restoreUntil,
-        message:
-          'Backend cleanup tamamlandı. Lütfen istemci tarafında Firebase Auth hesabını silmeyi unutmayın.',
+        message: hasActiveSubscription
+          ? 'Aktif aboneliğiniz devam ediyor. Google Play aboneliğiniz iptal edildiğinde premium erişiminiz sonlandırılacaktır.'
+          : 'Backend cleanup tamamlandı ve hesabınız Firebase Auth üzerinden kapatıldı.',
       };
       logger.info({ userId, jobId, response }, 'Delete account job completed');
       return response;
@@ -293,8 +301,9 @@ class DeleteAccountService {
         throw new DeleteAccountError('LEGAL_HOLD', 'Hesap hukuki sebeplerle kilitli', 423);
       }
 
-      if (registry.canRestoreUntil) {
-        const deadline = new Date(registry.canRestoreUntil);
+      const restoreDeadline = registry.restoreExpiresAt || registry.canRestoreUntil;
+      if (restoreDeadline) {
+        const deadline = new Date(restoreDeadline);
         if (deadline.getTime() < Date.now()) {
           throw new DeleteAccountError('RESTORE_WINDOW_PASSED', 'Geri alma süresi dolmuş', 410);
         }
@@ -411,21 +420,13 @@ class DeleteAccountService {
     };
   }
 
-  private async assertNoActiveSubscription(appUserId: string) {
+  private async fetchSubscriptionStatus(appUserId: string): Promise<RevenueCatCheckResult | null> {
     try {
-      const status = await revenueCatService.checkActiveSubscription(appUserId);
-      if (status.hasActiveSubscription) {
-        throw new DeleteAccountError('ACTIVE_SUBSCRIPTION', 'Aktif abonelik bulundu', 409, {
-          entitlements: status.blockingEntitlements,
-          expirationDates: status.expirationDates,
-          gracePeriodActive: status.gracePeriodActive,
-          billingIssuesDetected: status.billingIssuesDetected,
-        });
+      if (!appUserId) {
+        return null;
       }
+      return await revenueCatService.checkActiveSubscription(appUserId);
     } catch (error) {
-      if (error instanceof DeleteAccountError) {
-        throw error;
-      }
       throw new DeleteAccountError(
         'REVENUECAT_UNAVAILABLE',
         'Abonelik durumu doğrulanamadı',
@@ -439,73 +440,49 @@ class DeleteAccountService {
     userId: string;
     email?: string;
     provider?: string;
-    body: DeleteAccountRequestBody;
+    deleteReason: DeleteReason | 'user_request';
     context: DeleteAccountContext;
     restoreUntil?: string;
     jobId: string;
     isAnonymous: boolean;
+    hasActiveSubscription: boolean;
   }) {
-    const { userId, email, provider, body, context, restoreUntil, jobId, isAnonymous } = params;
+    const { userId, email, provider, deleteReason, context, restoreUntil, jobId, isAnonymous, hasActiveSubscription } =
+      params;
     const batch = db.batch();
-
-    const softDeletePayload = {
-      isDeleted: true,
-      deletedAt: FieldValue.serverTimestamp(),
-      deleteReason: body.deleteReason || 'user_request',
-      deleteReasonNote: body.deleteReasonNote || null,
-      deletedBy: body.initiatedFrom === 'admin' ? 'admin' : 'self',
-      canRestoreUntil: restoreUntil ? new Date(restoreUntil) : null,
-    };
-
-    batch.set(db.collection('users').doc(userId), softDeletePayload, { merge: true });
 
     batch.set(
       db.collection('subsc').doc(userId),
       {
+        is_deleted: true,
         isDeleted: true,
+        deletedAt: FieldValue.serverTimestamp(),
         premiumCancelledAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    batch.set(
-      db.collection('premiumusers').doc(userId),
-      {
-        active: false,
-        isDeleted: true,
-        blockedForWebhook: true,
-        blockedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
 
     await batch.commit();
 
-      const registry: DeletedUserRegistryRecord = {
+    const registry: DeletedUserRegistryRecord = {
       uid: userId,
       email,
       provider,
       deletedAt: new Date().toISOString(),
-      deleteReason: body.deleteReason || 'user_request',
-        canRestoreUntil: restoreUntil ?? null,
+      deleteReason,
+      canRestoreUntil: restoreUntil ?? null,
+      restoreExpiresAt: restoreUntil ?? null,
+      restoreWindow: config.deleteAccount.restoreWindowDays,
       ip: context.ipAddress,
       userAgent: context.userAgent,
-      blockedForWebhook: true,
       legalHold: false,
       fraudSuspected: false,
+      anonymous: isAnonymous,
+      jobId,
+      activeSubscriptionDetected: hasActiveSubscription,
     };
 
-    await db
-      .collection('deleted_users_subsc')
-      .doc(userId)
-      .set(
-        {
-          ...registry,
-          anonymous: isAnonymous,
-          jobId,
-        },
-        { merge: true }
-      );
+    await db.collection('deleted_users_subsc').doc(userId).set(registry, { merge: true });
 
     await db
       .collection('notification_blacklist')
@@ -527,6 +504,25 @@ class DeleteAccountService {
     }
     await cacheService.invalidateAuthCache(userId);
     await cacheService.invalidateUserCache(userId);
+  }
+
+  private async deleteFirebaseAuthAccount(userId: string, options: { hasActiveSubscription: boolean }) {
+    if (options.hasActiveSubscription) {
+      logger.info({ userId }, 'Skipping Firebase Auth deletion due to active subscription');
+      return;
+    }
+
+    try {
+      await admin.auth().deleteUser(userId);
+      logger.info({ userId }, 'Firebase Auth user deleted');
+    } catch (error: any) {
+      if (error?.code === 'auth/user-not-found') {
+        logger.warn({ userId }, 'Firebase Auth user already deleted');
+        return;
+      }
+      logger.error({ err: error, userId }, 'Failed to delete Firebase Auth user');
+      throw new DeleteAccountError('AUTH_DELETE_FAILED', 'Firebase Auth hesabı silinemedi', 502, error);
+    }
   }
 
   private async cleanupFirestoreData(userId: string): Promise<number> {

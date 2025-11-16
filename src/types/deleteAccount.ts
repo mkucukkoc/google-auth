@@ -8,7 +8,7 @@ export type DeleteReason =
   | 'other';
 
 export interface DeleteAccountRequestBody {
-  deleteReason: DeleteReason;
+  deleteReason?: DeleteReason | 'user_request';
   deleteReasonNote?: string;
   confirmPermanentDeletion: boolean;
   gdprAcknowledged: boolean;
@@ -76,6 +76,8 @@ export interface DeletedUserRegistryRecord {
   deleteReason: DeleteReason | 'user_request';
   deleteReasonNote?: string;
   canRestoreUntil?: string | null;
+  restoreExpiresAt?: string | null;
+  restoreWindow?: number;
   ip?: string;
   userAgent?: string;
   restoreRequestedAt?: string;
@@ -85,6 +87,7 @@ export interface DeletedUserRegistryRecord {
   fraudSuspected?: boolean;
   jobId?: string;
   anonymous?: boolean;
+  activeSubscriptionDetected?: boolean;
 }
 
 export interface RestoreAccountRequestBody {

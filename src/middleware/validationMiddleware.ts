@@ -263,6 +263,7 @@ export const pdfSummarySchemas = {
 };
 
 const deleteReasonEnum = z.enum(['security', 'dissatisfied', 'not_using', 'switching_service', 'other']);
+const deleteReasonSchema = z.union([deleteReasonEnum, z.literal('user_request')]);
 const deviceInfoSchema = z.object({
   os: z.string().optional(),
   model: z.string().optional(),
@@ -272,7 +273,7 @@ const deviceInfoSchema = z.object({
 
 export const deleteAccountSchemas = {
   initiate: z.object({
-    deleteReason: deleteReasonEnum,
+    deleteReason: deleteReasonSchema.optional(),
     deleteReasonNote: z.string().max(1000, 'Açıklama en fazla 1000 karakter olabilir').optional(),
     confirmPermanentDeletion: z.boolean().refine(value => value === true, {
       message: 'Kalıcı silme onayı verilmelidir',
