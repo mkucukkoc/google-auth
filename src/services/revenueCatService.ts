@@ -15,7 +15,7 @@ export interface RevenueCatCheckResult {
 }
 
 class RevenueCatService {
-  private baseUrl = config.revenueCat.baseUrl;
+  private baseUrl = config.revenueCat.baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
 
   private get headers() {
     if (!config.revenueCat.apiKey) {
