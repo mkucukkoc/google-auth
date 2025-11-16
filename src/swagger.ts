@@ -186,6 +186,93 @@ export const swaggerSpec = {
           },
         },
       },
+      PremiumStatus: {
+        type: 'object',
+        properties: {
+          uid: {
+            type: 'string',
+            example: 'user_123',
+          },
+          premium: {
+            type: 'boolean',
+            example: true,
+          },
+          premiumStatus: {
+            type: 'string',
+            nullable: true,
+            enum: ['monthly', 'annual', null],
+            example: 'monthly',
+          },
+          premiumExpiresAt: {
+            type: 'string',
+            format: 'date-time',
+            example: '2025-01-01T00:00:00.000Z',
+          },
+          entitlementProductId: {
+            type: 'string',
+            example: 'com.avenia.premium.monthly',
+          },
+          entitlementEnvironment: {
+            type: 'string',
+            example: 'production',
+          },
+          entitlementIds: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          isSandboxOnly: {
+            type: 'boolean',
+            example: false,
+          },
+          updatedAt: {
+            type: 'string',
+            format: 'date-time',
+          },
+          lastSyncSource: {
+            type: 'string',
+            example: 'restore_endpoint',
+          },
+        },
+      },
+      PremiumCustomerInfoRequest: {
+        type: 'object',
+        properties: {
+          customerInfo: {
+            type: 'object',
+            description: 'RevenueCat customer info payload',
+          },
+          platform: {
+            type: 'string',
+            example: 'ios',
+          },
+          source: {
+            type: 'string',
+            example: 'purchase_flow',
+          },
+          requestId: {
+            type: 'string',
+            example: 'req_sync_123',
+          },
+        },
+        required: ['customerInfo'],
+      },
+      PremiumRestoreRequest: {
+        type: 'object',
+        properties: {
+          appUserId: {
+            type: 'string',
+            example: 'user_123',
+          },
+          requestId: {
+            type: 'string',
+            example: 'restore_btn_2024-11-16',
+          },
+          source: {
+            type: 'string',
+            example: 'settings_screen',
+          },
+        },
+      },
     },
   },
   paths: {
@@ -1249,6 +1336,160 @@ export const swaggerSpec = {
       }
     },
 
+    // ==================== PREMIUM ====================
+    '/api/v1/premium/customer-info': {
+      post: {
+        summary: 'Sync premium status with customer info',
+        description: 'RevenueCat customerInfo payloadını backend’e göndererek premiumusers kaydını günceller.',
+        tags: ['Premium'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/PremiumCustomerInfoRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Premium bilgileri güncellendi',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/PremiumStatus' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Geçersiz payload' },
+          401: { description: 'Authorization required' },
+          500: { description: 'Premium senkronizasyonu başarısız' },
+        },
+      },
+    },
+
+    '/api/v1/premium/restore': {
+      post: {
+        summary: 'Restore premium purchases',
+        description: 'RevenueCat üzerinden abonelik durumunu kontrol eder ve Firestore kaydını günceller.',
+        tags: ['Premium'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/PremiumRestoreRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Restore işlemi sonucu',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/PremiumStatus' },
+                        message: { type: 'string' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          401: { description: 'Authorization required' },
+          404: { description: 'Aktif abonelik bulunamadı' },
+          500: { description: 'Restore işlemi başarısız' },
+        },
+      },
+    },
+
+    '/api/v1/premium/sync': {
+      post: {
+        summary: 'Manual premium sync',
+        description: 'RevenueCat appUserId kullanarak manuel premium senkronizasyonu yapar.',
+        tags: ['Premium'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/PremiumRestoreRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Sync sonucu',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/PremiumStatus' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          401: { description: 'Authorization required' },
+          404: { description: 'Aktif abonelik bulunamadı' },
+          500: { description: 'Sync başarısız' },
+        },
+      },
+    },
+
+    '/api/v1/premium/status': {
+      get: {
+        summary: 'Get premium status',
+        description: 'Kullanıcının premiumusers kaydını döndürür.',
+        tags: ['Premium'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Premium durumu',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/PremiumStatus' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          401: { description: 'Authorization required' },
+          404: { description: 'Premium kaydı bulunamadı' },
+          500: { description: 'Premium durumu alınamadı' },
+        },
+      },
+    },
+
     // ==================== PRESENTATION ====================
   },
   tags: [
@@ -1260,6 +1501,7 @@ export const swaggerSpec = {
     { name: 'Password Reset', description: 'Password reset functionality' },
     { name: 'PDF Read', description: 'PDF processing and AI analysis' },
     { name: 'Notifications', description: 'Push notification management' },
-    { name: 'Delete Account', description: 'Account deletion and data export (GDPR/KVKK compliant)' }
+    { name: 'Delete Account', description: 'Account deletion and data export (GDPR/KVKK compliant)' },
+    { name: 'Premium', description: 'Premium abonelik yönetimi ve senkronizasyonu' }
   ]
 } as const;
