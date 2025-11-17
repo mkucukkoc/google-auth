@@ -87,6 +87,9 @@ export function createAuthRouter(): Router {
               reactivated: true,
             });
 
+            logger.info({ userId: userRecord.id }, 'Soft-deleted email/password user reactivated, cleaning artifacts');
+            await cleanupDeletedAccountArtifacts(userRecord.id);
+
             let firebaseCustomToken: string | undefined;
             try {
               firebaseCustomToken = await admin.auth().createCustomToken(reactivatedUser.id, {
@@ -881,6 +884,7 @@ export function createAuthRouter(): Router {
         });
 
         if (wasSoftDeleted) {
+          logger.info({ userId: ensuredUser.id }, 'Soft-deleted Google user reactivated, cleaning artifacts');
           await cleanupDeletedAccountArtifacts(ensuredUser.id);
         }
 
