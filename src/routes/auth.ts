@@ -995,6 +995,7 @@ async function cleanupDeletedAccountArtifacts(userId: string) {
   ];
 
   await Promise.all(cleanupJobs);
+  logger.info({ userId }, 'Deleted account artifacts cleanup finished');
 }
 
 async function deleteDocumentIfExists(collection: string, docId: string, logLabel: string) {
@@ -1021,6 +1022,7 @@ async function deleteDeletionJobsForUser(userId: string) {
       .get();
 
     if (snapshot.empty) {
+      logger.debug({ userId }, 'No deletion jobs found for cleanup');
       return;
     }
 
@@ -1047,6 +1049,7 @@ async function deleteTelemetryEventsForUser(userId: string) {
       .get();
 
     if (snapshot.empty) {
+      logger.debug({ userId }, 'No telemetry events found for cleanup');
       return;
     }
 
