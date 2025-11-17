@@ -5,7 +5,7 @@ import { auditService } from '../services/auditService';
 import { authenticateToken, AuthRequest } from '../middleware/authMiddleware';
 import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
-import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse } from '../types/auth';
+import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthResponse, User } from '../types/auth';
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { admin, db } from '../firebase';
 import { randomInt, createHash } from 'crypto';
@@ -42,31 +42,31 @@ export function createAuthRouter(): Router {
             : 'An account with this email already exists';
 
           if (!isGoogleAccount && ((userRecord as any).isDeleted || (userRecord as any).is_deleted)) {
-            const passwordMatches = await UserService.verifyPassword(userRecord, password);
-            if (!passwordMatches) {
-              await auditService.logAuthEvent('register', {
-                userId: userRecord.id,
-                ipAddress,
-                userAgent,
-                deviceInfo: device,
-                success: false,
-                errorMessage: 'Invalid password for reactivation attempt',
-              });
-              return res.status(401).json({
-                error: 'invalid_credentials',
-                message: 'Invalid email or password',
-              });
+            await restoreSoftDeletedUser(userRecord.id);
+
+            if (password) {
+              await UserService.updatePassword(userRecord.id, password);
             }
 
-            await UserService.resetFailedAttempts(userRecord.id);
-            await restoreSoftDeletedUser(userRecord.id);
-            existingUser = {
+            const profileUpdates: Partial<User> = {};
+            if (name && name !== userRecord.name) {
+              profileUpdates.name = name;
+            }
+            if (Object.keys(profileUpdates).length > 0) {
+              await UserService.updateUser(userRecord.id, profileUpdates);
+            }
+
+            const reactivatedUser = {
               ...userRecord,
+              ...profileUpdates,
               isDeleted: false,
               is_deleted: false,
               deletedAt: null,
               premiumCancelledAt: null,
             } as any;
+            existingUser = reactivatedUser;
+
+            await UserService.resetFailedAttempts(userRecord.id);
 
             const { session, tokens } = await SessionService.createSession(
               userRecord.id,
@@ -88,21 +88,21 @@ export function createAuthRouter(): Router {
 
             let firebaseCustomToken: string | undefined;
             try {
-              firebaseCustomToken = await admin.auth().createCustomToken(userRecord.id, {
-                email: userRecord.email,
-                provider: userRecord.provider ?? 'password',
+              firebaseCustomToken = await admin.auth().createCustomToken(reactivatedUser.id, {
+                email: reactivatedUser.email,
+                provider: reactivatedUser.provider ?? 'password',
               });
             } catch (error) {
-              logger.warn({ error, userId: userRecord.id, operation: 'register_reactivate' }, 'Failed to create Firebase custom token');
+              logger.warn({ error, userId: reactivatedUser.id, operation: 'register_reactivate' }, 'Failed to create Firebase custom token');
             }
 
             const response: AuthResponse = {
               ...tokens,
               user: {
-                id: userRecord.id,
-                email: userRecord.email,
-                name: userRecord.name,
-                avatar: userRecord.avatar,
+                id: reactivatedUser.id,
+                email: reactivatedUser.email,
+                name: reactivatedUser.name,
+                avatar: reactivatedUser.avatar,
               },
               deviceId,
               firebaseCustomToken,
@@ -216,14 +216,18 @@ export function createAuthRouter(): Router {
         let user = foundUser;
 
         if ((user as any).isDeleted || (user as any).is_deleted) {
-          await restoreSoftDeletedUser(user.id);
-          user = {
-            ...user,
-            isDeleted: false,
-            is_deleted: false,
-            deletedAt: null,
-            premiumCancelledAt: null,
-          } as any;
+          await auditService.logAuthEvent('login', {
+            userId: user.id,
+            ipAddress,
+            userAgent,
+            deviceInfo: device,
+            success: false,
+            errorMessage: 'Account deleted, registration required',
+          });
+          return res.status(404).json({
+            error: 'account_deleted',
+            message: 'Hesabınız silinmiş. Lütfen yeniden kayıt olun.',
+          });
         }
 
         const isGoogleAccount = user.provider === 'google' || (!user.provider && !user.passwordHash);
@@ -948,13 +952,19 @@ export function createAuthRouter(): Router {
 // Helper functions
 async function restoreSoftDeletedUser(userId: string) {
   try {
-    await db.collection('subsc').doc(userId).update({
-      isDeleted: false,
-      is_deleted: false,
-      deletedAt: null,
-      premiumCancelledAt: null,
-      restoredAt: new Date().toISOString(),
-    });
+    await db
+      .collection('subsc')
+      .doc(userId)
+      .set(
+        {
+          isDeleted: false,
+          is_deleted: false,
+          deletedAt: null,
+          premiumCancelledAt: null,
+          restoredAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     logger.info({ userId }, 'Soft-deleted user reactivated');
   } catch (error: unknown) {
     logger.warn({ error, userId }, 'Failed to clear soft delete flags during reactivation');
@@ -962,24 +972,21 @@ async function restoreSoftDeletedUser(userId: string) {
   }
 
   const cleanupJobs = [
-    db
-      .collection('deleted_users_subsc')
-      .doc(userId)
-      .delete()
-      .catch((error: unknown) =>
-        logger.warn({ error, userId }, 'Failed to delete deleted_users_subsc record during Google restore')
-      ),
-    db
-      .collection('notification_blacklist')
-      .doc(userId)
-      .delete()
-      .catch((error: unknown) =>
-        logger.warn({ error, userId }, 'Failed to delete notification blacklist record during Google restore')
-      ),
+    deleteDocumentIfExists('deleted_users_subsc', userId, 'deleted_users_subsc record'),
+    deleteDocumentIfExists('notification_blacklist', userId, 'notification blacklist record'),
     deleteDeletionJobsForUser(userId),
+    deleteTelemetryEventsForUser(userId),
   ];
 
   await Promise.all(cleanupJobs);
+}
+
+async function deleteDocumentIfExists(collection: string, docId: string, logLabel: string) {
+  try {
+    await db.collection(collection).doc(docId).delete();
+  } catch (error: unknown) {
+    logger.warn({ error, docId, collection }, `Failed to delete ${logLabel} during restore`);
+  }
 }
 
 async function deleteDeletionJobsForUser(userId: string) {
@@ -987,7 +994,7 @@ async function deleteDeletionJobsForUser(userId: string) {
     const snapshot = await db
       .collection('deletion_jobs')
       .where('userId', '==', userId)
-      .limit(25)
+      .limit(100)
       .get();
 
     if (snapshot.empty) {
@@ -997,9 +1004,39 @@ async function deleteDeletionJobsForUser(userId: string) {
     const batch = db.batch();
     snapshot.docs.forEach((doc: any) => batch.delete(doc.ref));
     await batch.commit();
-    logger.info({ userId, deletedJobs: snapshot.size }, 'Deletion job records cleaned up for Google restore');
+    logger.info({ userId, deletedJobs: snapshot.size }, 'Deletion job records cleaned up for user restore');
+
+    if (snapshot.size === 100) {
+      await deleteDeletionJobsForUser(userId);
+    }
   } catch (error: unknown) {
-    logger.warn({ error, userId }, 'Failed to cleanup deletion job records during Google restore');
+    logger.warn({ error, userId }, 'Failed to cleanup deletion job records during user restore');
+  }
+}
+
+async function deleteTelemetryEventsForUser(userId: string) {
+  try {
+    const snapshot = await db
+      .collection('telemetry_events')
+      .where('userId', '==', userId)
+      .where('event', '==', 'DELETE_ACCOUNT')
+      .limit(100)
+      .get();
+
+    if (snapshot.empty) {
+      return;
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc: any) => batch.delete(doc.ref));
+    await batch.commit();
+    logger.info({ userId, deletedEvents: snapshot.size }, 'Telemetry events cleaned up for user restore');
+
+    if (snapshot.size === 100) {
+      await deleteTelemetryEventsForUser(userId);
+    }
+  } catch (error: unknown) {
+    logger.warn({ error, userId }, 'Failed to cleanup telemetry events during user restore');
   }
 }
 

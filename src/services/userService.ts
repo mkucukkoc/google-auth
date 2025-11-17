@@ -319,6 +319,23 @@ export class UserService {
   }
 
   /**
+   * Update user password
+   */
+  static async updatePassword(userId: string, newPassword: string): Promise<void> {
+    if (!newPassword) {
+      return;
+    }
+    const passwordHash = await HashService.hashPassword(newPassword);
+    await db.collection('subsc').doc(userId).set(
+      {
+        passwordHash,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+  }
+
+  /**
    * Check if email is already registered
    */
   static async isEmailRegistered(email: string): Promise<boolean> {
