@@ -12,6 +12,7 @@ import { auditService } from '../services/auditService';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { admin } from '../firebase';
 import { logger } from '../utils/logger';
+import { cleanupDeletedAccountArtifacts, restoreSoftDeletedUser } from '../services/reactivationService';
 
 export function createGoogleAuthRouter(): Router {
   const r = Router();
@@ -134,6 +135,7 @@ export function createGoogleAuthRouter(): Router {
 
         // Check if user exists in our new auth system
         let user = await UserService.findByEmail(email);
+        let wasSoftDeleted = false;
         
         if (user && (user.provider === 'password' || (user.passwordHash && user.passwordHash.length > 0))) {
           const errorMessage = 'Bu e-posta şifreyle kayıtlı. Lütfen e-posta ve şifrenizle giriş yapın.';
@@ -168,22 +170,46 @@ export function createGoogleAuthRouter(): Router {
             operation: 'google_oauth_callback'
           });
         } else {
+          const existingUser = user;
+          if (!existingUser) {
+            throw new Error('Invariant: existing user expected');
+          }
+          if ((existingUser as any).isDeleted || (existingUser as any).is_deleted) {
+            wasSoftDeleted = true;
+            await restoreSoftDeletedUser(existingUser.id);
+            user = {
+              ...existingUser,
+              isDeleted: false,
+              is_deleted: false,
+              deletedAt: null,
+              premiumCancelledAt: null,
+            } as any;
+          } else {
+            user = existingUser;
+          }
+
           // Update last login for existing user
-          await UserService.updateUser(user.id, {
+          await UserService.updateUser(existingUser.id, {
             lastLoginAt: new Date(),
-            ...(user.provider !== 'google' ? { provider: 'google' } : {}),
+            ...(existingUser.provider !== 'google' ? { provider: 'google' } : {}),
           });
 
           // Also update Firebase Auth user if needed
           try {
-            await admin.auth().updateUser(user.id, {
-              displayName: payload?.name || payload?.given_name || user.name,
+            await admin.auth().updateUser(existingUser.id, {
+              displayName: payload?.name || payload?.given_name || existingUser.name,
               emailVerified: true,
             });
           } catch (error) {
-            logger.warn('Failed to update Firebase Auth user via callback', { error, userId: user.id });
+            logger.warn('Failed to update Firebase Auth user via callback', { error, userId: existingUser.id });
           }
         }
+
+        if (!user) {
+          throw new Error('Google auth failed: user record missing after creation');
+        }
+
+        const ensuredUser = user;
 
         // Create session using new session system
         const deviceInfo = {
@@ -194,7 +220,7 @@ export function createGoogleAuthRouter(): Router {
         };
 
         const { session: newSession, tokens } = await SessionService.createSession(
-          user.id,
+          ensuredUser.id,
           deviceInfo,
           session.device_id,
           ipAddress,
@@ -203,7 +229,7 @@ export function createGoogleAuthRouter(): Router {
 
         // Log successful Google auth
         await auditService.logAuthEvent('login', {
-          userId: user.id,
+          userId: ensuredUser.id,
           sessionId: newSession.id,
           ipAddress,
           userAgent,
@@ -211,16 +237,21 @@ export function createGoogleAuthRouter(): Router {
           success: true,
         });
 
+        if (wasSoftDeleted) {
+          logger.info({ userId: ensuredUser.id }, 'Soft-deleted Google user reactivated via callback, cleaning artifacts');
+          await cleanupDeletedAccountArtifacts(ensuredUser.id);
+        }
+
         let firebaseCustomToken: string | undefined;
         try {
-          firebaseCustomToken = await admin.auth().createCustomToken(user.id, {
-            email: user.email,
+          firebaseCustomToken = await admin.auth().createCustomToken(ensuredUser.id, {
+            email: ensuredUser.email,
             provider: 'google',
           });
         } catch (error) {
           logger.warn('Failed to create Firebase custom token for Google user', {
             error,
-            userId: user.id,
+            userId: ensuredUser.id,
             operation: 'google_custom_token',
           });
         }
@@ -231,10 +262,10 @@ export function createGoogleAuthRouter(): Router {
           refreshToken: tokens.refreshToken,
           sessionId: tokens.sessionId,
           user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            avatar: user.avatar,
+            id: ensuredUser.id,
+            email: ensuredUser.email,
+            name: ensuredUser.name,
+            avatar: ensuredUser.avatar,
           },
           deviceId: session.device_id,
           firebaseCustomToken,

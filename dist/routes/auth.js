@@ -15,6 +15,7 @@ const email_1 = require("../email");
 const redis_1 = require("../redis");
 const logger_1 = require("../utils/logger");
 const config_1 = require("../config");
+const reactivationService_1 = require("../services/reactivationService");
 function createAuthRouter() {
     const r = (0, express_1.Router)();
     // POST /auth/register
@@ -35,7 +36,7 @@ function createAuthRouter() {
                     : 'An account with this email already exists';
                 const wasSoftDeleted = !isGoogleAccount && (userRecord.isDeleted || userRecord.is_deleted);
                 if (wasSoftDeleted) {
-                    await restoreSoftDeletedUser(userRecord.id);
+                    await (0, reactivationService_1.restoreSoftDeletedUser)(userRecord.id);
                     if (password) {
                         await userService_1.UserService.updatePassword(userRecord.id, password);
                     }
@@ -67,7 +68,7 @@ function createAuthRouter() {
                         reactivated: true,
                     });
                     logger_1.logger.info({ userId: userRecord.id }, 'Soft-deleted email/password user reactivated, cleaning artifacts');
-                    await cleanupDeletedAccountArtifacts(userRecord.id);
+                    await (0, reactivationService_1.cleanupDeletedAccountArtifacts)(userRecord.id);
                     let firebaseCustomToken;
                     try {
                         firebaseCustomToken = await firebase_1.admin.auth().createCustomToken(reactivatedUser.id, {
@@ -89,7 +90,6 @@ function createAuthRouter() {
                         deviceId,
                         firebaseCustomToken,
                     };
-                    await cleanupDeletedAccountArtifacts(userRecord.id);
                     return res
                         .status(200)
                         .json(response_1.ResponseBuilder.success(response, 'Existing account restored and signed in'));
@@ -667,7 +667,7 @@ function createAuthRouter() {
                 const existingUser = user;
                 if (existingUser.isDeleted || existingUser.is_deleted) {
                     wasSoftDeleted = true;
-                    await restoreSoftDeletedUser(existingUser.id);
+                    await (0, reactivationService_1.restoreSoftDeletedUser)(existingUser.id);
                     user = {
                         ...existingUser,
                         isDeleted: false,
@@ -712,7 +712,7 @@ function createAuthRouter() {
             });
             if (wasSoftDeleted) {
                 logger_1.logger.info({ userId: ensuredUser.id }, 'Soft-deleted Google user reactivated, cleaning artifacts');
-                await cleanupDeletedAccountArtifacts(ensuredUser.id);
+                await (0, reactivationService_1.cleanupDeletedAccountArtifacts)(ensuredUser.id);
             }
             let firebaseCustomToken;
             try {
@@ -783,98 +783,6 @@ function createAuthRouter() {
     return r;
 }
 // Helper functions
-async function restoreSoftDeletedUser(userId) {
-    try {
-        await firebase_1.db
-            .collection('subsc')
-            .doc(userId)
-            .set({
-            isDeleted: false,
-            is_deleted: false,
-            deletedAt: null,
-            premiumCancelledAt: null,
-            restoredAt: new Date().toISOString(),
-        }, { merge: true });
-        logger_1.logger.info({ userId }, 'Soft-deleted user reactivated');
-    }
-    catch (error) {
-        logger_1.logger.warn({ error, userId }, 'Failed to clear soft delete flags during reactivation');
-        return;
-    }
-}
-async function cleanupDeletedAccountArtifacts(userId) {
-    logger_1.logger.info({ userId }, 'Cleaning up deleted account artifacts');
-    const cleanupJobs = [
-        deleteDocumentIfExists('deleted_users_subsc', userId, 'deleted_users_subsc record'),
-        deleteDocumentIfExists('notification_blacklist', userId, 'notification blacklist record'),
-        deleteDeletionJobsForUser(userId),
-        deleteTelemetryEventsForUser(userId),
-    ];
-    await Promise.all(cleanupJobs);
-    logger_1.logger.info({ userId }, 'Deleted account artifacts cleanup finished');
-}
-async function deleteDocumentIfExists(collection, docId, logLabel) {
-    try {
-        const ref = firebase_1.db.collection(collection).doc(docId);
-        const doc = await ref.get();
-        if (!doc.exists) {
-            logger_1.logger.debug({ docId, collection }, `No ${logLabel} found during restore`);
-            return;
-        }
-        await ref.delete();
-        logger_1.logger.info({ docId, collection }, `${logLabel} deleted during restore`);
-    }
-    catch (error) {
-        logger_1.logger.warn({ error, docId, collection }, `Failed to delete ${logLabel} during restore`);
-    }
-}
-async function deleteDeletionJobsForUser(userId) {
-    try {
-        const snapshot = await firebase_1.db
-            .collection('deletion_jobs')
-            .where('userId', '==', userId)
-            .limit(100)
-            .get();
-        if (snapshot.empty) {
-            logger_1.logger.debug({ userId }, 'No deletion jobs found for cleanup');
-            return;
-        }
-        const batch = firebase_1.db.batch();
-        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-        await batch.commit();
-        logger_1.logger.info({ userId, deletedJobs: snapshot.size }, 'Deletion job records cleaned up for user restore');
-        if (snapshot.size === 100) {
-            await deleteDeletionJobsForUser(userId);
-        }
-    }
-    catch (error) {
-        logger_1.logger.warn({ error, userId }, 'Failed to cleanup deletion job records during user restore');
-    }
-}
-async function deleteTelemetryEventsForUser(userId) {
-    try {
-        const snapshot = await firebase_1.db
-            .collection('telemetry_events')
-            .where('userId', '==', userId)
-            .where('event', '==', 'DELETE_ACCOUNT')
-            .limit(100)
-            .get();
-        if (snapshot.empty) {
-            logger_1.logger.debug({ userId }, 'No telemetry events found for cleanup');
-            return;
-        }
-        const batch = firebase_1.db.batch();
-        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-        await batch.commit();
-        logger_1.logger.info({ userId, deletedEvents: snapshot.size }, 'Telemetry events cleaned up for user restore');
-        if (snapshot.size === 100) {
-            await deleteTelemetryEventsForUser(userId);
-        }
-    }
-    catch (error) {
-        logger_1.logger.warn({ error, userId }, 'Failed to cleanup telemetry events during user restore');
-    }
-}
 function sha256(input) {
     return (0, crypto_1.createHash)('sha256').update(input).digest('hex');
 }
