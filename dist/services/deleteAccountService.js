@@ -424,7 +424,7 @@ class DeleteAccountService {
             this.deleteByField('pushTokens', 'userId', userId),
             this.deleteDocumentIfExists('deviceTokens', userId),
             this.deleteDocumentIfExists('pushTokens', userId),
-            this.deleteDocumentIfExists('users', userId),
+            this.recursiveDeletePath(`users/${userId}`),
             this.recursiveDeletePath(`messages/${userId}`),
             this.recursiveDeletePath(`uploads/${userId}`),
         ];
