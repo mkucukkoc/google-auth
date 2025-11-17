@@ -41,7 +41,8 @@ export function createAuthRouter(): Router {
             ? "This email is registered with a Google account. Please use 'Sign in with Google'."
             : 'An account with this email already exists';
 
-          if (!isGoogleAccount && ((userRecord as any).isDeleted || (userRecord as any).is_deleted)) {
+          const wasSoftDeleted = !isGoogleAccount && ((userRecord as any).isDeleted || (userRecord as any).is_deleted);
+          if (wasSoftDeleted) {
             await restoreSoftDeletedUser(userRecord.id);
 
             if (password) {
@@ -107,6 +108,8 @@ export function createAuthRouter(): Router {
               deviceId,
               firebaseCustomToken,
             };
+
+            await cleanupDeletedAccountArtifacts(userRecord.id);
 
             return res
               .status(200)
@@ -214,8 +217,8 @@ export function createAuthRouter(): Router {
         }
 
         let user = foundUser;
-
-        if ((user as any).isDeleted || (user as any).is_deleted) {
+        const isSoftDeleted = (user as any).isDeleted || (user as any).is_deleted;
+        if (isSoftDeleted) {
           await auditService.logAuthEvent('login', {
             userId: user.id,
             ipAddress,
@@ -807,6 +810,7 @@ export function createAuthRouter(): Router {
 
         // Check if user exists
         let user = await UserService.findByEmail(email);
+        let wasSoftDeleted = false;
         if (!user) {
           user = await UserService.createGoogleUser(
             email,
@@ -821,6 +825,7 @@ export function createAuthRouter(): Router {
         } else {
           const existingUser = user;
           if ((existingUser as any).isDeleted || (existingUser as any).is_deleted) {
+            wasSoftDeleted = true;
             await restoreSoftDeletedUser(existingUser.id);
             user = {
               ...existingUser,
@@ -874,6 +879,10 @@ export function createAuthRouter(): Router {
           deviceInfo,
           success: true,
         });
+
+        if (wasSoftDeleted) {
+          await cleanupDeletedAccountArtifacts(ensuredUser.id);
+        }
 
         let firebaseCustomToken: string | undefined;
         try {
@@ -970,7 +979,10 @@ async function restoreSoftDeletedUser(userId: string) {
     logger.warn({ error, userId }, 'Failed to clear soft delete flags during reactivation');
     return;
   }
+}
 
+async function cleanupDeletedAccountArtifacts(userId: string) {
+  logger.info({ userId }, 'Cleaning up deleted account artifacts');
   const cleanupJobs = [
     deleteDocumentIfExists('deleted_users_subsc', userId, 'deleted_users_subsc record'),
     deleteDocumentIfExists('notification_blacklist', userId, 'notification blacklist record'),
@@ -983,7 +995,14 @@ async function restoreSoftDeletedUser(userId: string) {
 
 async function deleteDocumentIfExists(collection: string, docId: string, logLabel: string) {
   try {
-    await db.collection(collection).doc(docId).delete();
+    const ref = db.collection(collection).doc(docId);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      logger.debug({ docId, collection }, `No ${logLabel} found during restore`);
+      return;
+    }
+    await ref.delete();
+    logger.info({ docId, collection }, `${logLabel} deleted during restore`);
   } catch (error: unknown) {
     logger.warn({ error, docId, collection }, `Failed to delete ${logLabel} during restore`);
   }
