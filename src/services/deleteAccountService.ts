@@ -162,6 +162,10 @@ class DeleteAccountService {
         jobId,
         isAnonymous,
         hasActiveSubscription,
+        appUserId,
+        platform: body.platform,
+        userProfile: preflight.userProfile,
+        deleteRequestPayload: body,
       });
       logger.info(
         {
@@ -446,9 +450,26 @@ class DeleteAccountService {
     jobId: string;
     isAnonymous: boolean;
     hasActiveSubscription: boolean;
+    appUserId?: string;
+    platform?: string;
+    userProfile?: Record<string, any>;
+    deleteRequestPayload?: DeleteAccountRequestBody;
   }) {
-    const { userId, email, provider, deleteReason, context, restoreUntil, jobId, isAnonymous, hasActiveSubscription } =
-      params;
+    const {
+      userId,
+      email,
+      provider,
+      deleteReason,
+      context,
+      restoreUntil,
+      jobId,
+      isAnonymous,
+      hasActiveSubscription,
+      appUserId,
+      platform,
+      userProfile,
+      deleteRequestPayload,
+    } = params;
     const batch = db.batch();
 
     batch.set(
@@ -464,11 +485,23 @@ class DeleteAccountService {
 
     await batch.commit();
 
+    const deleteDate = new Date().toISOString();
+    const subscriptionSource = provider?.includes('google')
+      ? 'google_play'
+      : provider?.includes('apple')
+      ? 'apple'
+      : platform || deleteRequestPayload?.platform || 'unknown';
+    const googlePlayPurchaseToken =
+      (deleteRequestPayload as any)?.googlePlayPurchaseToken ||
+      userProfile?.googlePlayPurchaseToken ||
+      userProfile?.lastPurchaseToken ||
+      null;
+
     const registry: DeletedUserRegistryRecord = {
       uid: userId,
       email,
       provider,
-      deletedAt: new Date().toISOString(),
+      deletedAt: deleteDate,
       deleteReason,
       canRestoreUntil: restoreUntil ?? null,
       restoreExpiresAt: restoreUntil ?? null,
@@ -480,6 +513,11 @@ class DeleteAccountService {
       anonymous: isAnonymous,
       jobId,
       activeSubscriptionDetected: hasActiveSubscription,
+      oldUid: userId,
+      oldAppUserId: appUserId || userId,
+      deleteDate,
+      subscriptionSource,
+      googlePlayPurchaseToken,
     };
 
     await db.collection('deleted_users_subsc').doc(userId).set(registry, { merge: true });

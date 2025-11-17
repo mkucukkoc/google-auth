@@ -312,6 +312,10 @@ export const premiumSchemas = {
     appUserId: z.string().max(200).optional(),
     requestId: z.string().max(100).optional(),
     source: z.string().max(100).optional(),
+    platform: z.string().max(50).optional(),
+    currentUid: z.string().max(200).optional(),
+    email: z.string().email('Geçerli bir e-posta giriniz').optional(),
+    oldAppUserId: z.string().max(200).optional(),
   }),
 };
 

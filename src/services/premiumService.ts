@@ -1,6 +1,7 @@
 import { db } from '../firebase';
 import { logger } from '../utils/logger';
 import { revenueCatService } from './revenueCatService';
+import { DeletedUserRegistryRecord } from '../types/deleteAccount';
 
 const PREMIUM_COLLECTION = 'premiumusers';
 const USERS_COLLECTION = 'users';
@@ -36,6 +37,8 @@ interface RevenueCatSubscriberPayload {
     subscriptions?: Record<string, any>;
   };
 }
+
+type DeletedSubscriptionRecord = DeletedUserRegistryRecord & { docId: string };
 
 export class PremiumServiceError extends Error {
   code: string;
@@ -102,6 +105,66 @@ class PremiumService {
     return result;
   }
 
+  async restoreTransferredSubscription(params: {
+    currentUid: string;
+    email: string;
+    oldAppUserId?: string;
+    requestId?: string;
+    platform?: string;
+  }): Promise<any> {
+    const { currentUid, email, oldAppUserId, requestId, platform } = params;
+    logger.info({ currentUid, email, oldAppUserId }, 'Premium restore transfer requested');
+
+    const deletedRecord = await this.findDeletedSubscriptionRecord(email, oldAppUserId);
+    if (!deletedRecord) {
+      throw new PremiumServiceError('RESTORE_SOURCE_NOT_FOUND', 'Geçmiş premium kaydı bulunamadı', 404);
+    }
+
+    const sourceAppUserId =
+      oldAppUserId || deletedRecord.oldAppUserId || deletedRecord.uid || deletedRecord.docId || currentUid;
+
+    if (!sourceAppUserId) {
+      throw new PremiumServiceError('RESTORE_SOURCE_INVALID', 'Eski abonelik ID belirlenemedi', 404);
+    }
+
+    if (sourceAppUserId !== currentUid) {
+      await revenueCatService.createAlias(sourceAppUserId, currentUid);
+      logger.info({ currentUid, sourceAppUserId }, 'RevenueCat alias created for transfer');
+    }
+
+    const subscriberPayload = (await revenueCatService.fetchSubscriber(currentUid)) as RevenueCatSubscriberPayload;
+    const premiumState = this.extractFromSubscriber(subscriberPayload);
+
+    if (!premiumState) {
+      throw new PremiumServiceError('ENTITLEMENT_NOT_FOUND', 'Aktif abonelik bulunamadı', 404);
+    }
+
+    const result = await this.writePremiumRecord(currentUid, premiumState, {
+      source: 'restore_transfer',
+      origin: 'revenuecat',
+      platform,
+      requestId,
+    });
+
+    await db
+      .collection('deleted_users_subsc')
+      .doc(deletedRecord.docId)
+      .set(
+        {
+          restoredToUid: currentUid,
+          restoreCompletedAt: new Date().toISOString(),
+          lastRestoreRequestId: requestId || null,
+          oldAppUserId: sourceAppUserId,
+        },
+        { merge: true }
+      );
+
+    return {
+      ...result,
+      transferredFromAppUserId: sourceAppUserId,
+    };
+  }
+
   async syncFromRevenueCat(
     userId: string,
     options: { appUserId?: string; requestId?: string; source?: string } = {}
@@ -115,6 +178,46 @@ class PremiumService {
       return null;
     }
     return doc.data();
+  }
+
+  private async findDeletedSubscriptionRecord(
+    email: string,
+    providedAppUserId?: string
+  ): Promise<DeletedSubscriptionRecord | null> {
+    try {
+      const snapshot = await db
+        .collection('deleted_users_subsc')
+        .where('email', '==', email)
+        .limit(25)
+        .get();
+      if (snapshot.empty) {
+        return null;
+      }
+      const candidates: DeletedSubscriptionRecord[] = snapshot.docs
+        .map((doc: any) => ({ docId: doc.id, ...(doc.data() as DeletedUserRegistryRecord) }))
+        .sort((a: DeletedSubscriptionRecord, b: DeletedSubscriptionRecord) => {
+          const aDate = a.deleteDate || a.deletedAt;
+          const bDate = b.deleteDate || b.deletedAt;
+          return (bDate || '').localeCompare(aDate || '');
+        });
+
+      if (providedAppUserId) {
+        const match = candidates.find(
+          doc =>
+            doc.oldAppUserId === providedAppUserId ||
+            doc.uid === providedAppUserId ||
+            doc.docId === providedAppUserId
+        );
+        if (match) {
+          return match;
+        }
+      }
+
+      return candidates[0];
+    } catch (error) {
+      logger.error({ err: error, email }, 'Failed to query deleted subscription record');
+      return null;
+    }
   }
 
   private extractFromCustomerInfo(customerInfo: any): PremiumState | null {

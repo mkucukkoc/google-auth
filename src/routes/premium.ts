@@ -49,10 +49,33 @@ export function createPremiumRouter(): Router {
 
       logger.info({ userId: authReq.user.id }, 'Premium restore request');
 
+      const { email, currentUid, oldAppUserId, platform, requestId, appUserId } = req.body || {};
+
       try {
+        if (email) {
+          const targetUid = currentUid || authReq.user.id;
+          const restoreResult = await premiumService.restoreTransferredSubscription({
+            currentUid: targetUid,
+            email,
+            oldAppUserId,
+            requestId,
+            platform,
+          });
+          logger.info(
+            { userId: authReq.user.id, targetUid, premium: restoreResult.premium },
+            'Premium transfer restore success'
+          );
+          return res.json(
+            ResponseBuilder.success(
+              restoreResult,
+              'Silinen aboneliğiniz yeni hesabınıza taşındı'
+            )
+          );
+        }
+
         const result = await premiumService.restoreFromRevenueCat(authReq.user.id, {
-          appUserId: req.body?.appUserId,
-          requestId: req.body?.requestId,
+          appUserId,
+          requestId,
         });
         logger.info({ userId: authReq.user.id, premium: result.premium }, 'Premium restore success');
         return res.json(

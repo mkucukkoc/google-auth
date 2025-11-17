@@ -50,6 +50,32 @@ class RevenueCatService {
     }
   }
 
+  async createAlias(sourceAppUserId: string, targetAppUserId: string): Promise<void> {
+    if (!config.revenueCat.apiKey) {
+      throw new Error('Missing RevenueCat API key');
+    }
+
+    if (!sourceAppUserId || !targetAppUserId || sourceAppUserId === targetAppUserId) {
+      return;
+    }
+
+    const url = `${this.baseUrl}/v1/subscribers/${encodeURIComponent(sourceAppUserId)}/alias`;
+    try {
+      await axios.post(
+        url,
+        { new_app_user_id: targetAppUserId },
+        {
+          headers: this.headers,
+          timeout: config.revenueCat.timeoutMs,
+        }
+      );
+      logger.info({ sourceAppUserId, targetAppUserId }, 'RevenueCat alias created successfully');
+    } catch (error) {
+      logger.error({ err: error, sourceAppUserId, targetAppUserId }, 'Failed to create RevenueCat alias');
+      throw error;
+    }
+  }
+
   async checkActiveSubscription(appUserId: string): Promise<RevenueCatCheckResult> {
     if (!config.revenueCat.apiKey) {
       logger.warn(

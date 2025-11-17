@@ -88,6 +88,13 @@ export interface DeletedUserRegistryRecord {
   jobId?: string;
   anonymous?: boolean;
   activeSubscriptionDetected?: boolean;
+  oldUid?: string;
+  oldAppUserId?: string;
+  deleteDate?: string;
+  subscriptionSource?: string;
+  googlePlayPurchaseToken?: string | null;
+  restoredToUid?: string;
+  lastRestoreRequestId?: string;
 }
 
 export interface RestoreAccountRequestBody {
