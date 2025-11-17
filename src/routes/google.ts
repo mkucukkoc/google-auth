@@ -12,7 +12,7 @@ import { auditService } from '../services/auditService';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { admin } from '../firebase';
 import { logger } from '../utils/logger';
-import { cleanupDeletedAccountArtifacts, restoreSoftDeletedUser } from '../services/reactivationService';
+import { cleanupDeletedAccountArtifacts, ensureFirebaseAuthUserProfile, restoreSoftDeletedUser } from '../services/reactivationService';
 
 export function createGoogleAuthRouter(): Router {
   const r = Router();
@@ -240,6 +240,10 @@ export function createGoogleAuthRouter(): Router {
         if (wasSoftDeleted) {
           logger.info({ userId: ensuredUser.id }, 'Soft-deleted Google user reactivated via callback, cleaning artifacts');
           await cleanupDeletedAccountArtifacts(ensuredUser.id);
+          await ensureFirebaseAuthUserProfile(ensuredUser.id, {
+            email: ensuredUser.email,
+            name: ensuredUser.name,
+          });
         }
 
         let firebaseCustomToken: string | undefined;

@@ -193,6 +193,10 @@ function createGoogleAuthRouter() {
             if (wasSoftDeleted) {
                 logger_1.logger.info({ userId: ensuredUser.id }, 'Soft-deleted Google user reactivated via callback, cleaning artifacts');
                 await (0, reactivationService_1.cleanupDeletedAccountArtifacts)(ensuredUser.id);
+                await (0, reactivationService_1.ensureFirebaseAuthUserProfile)(ensuredUser.id, {
+                    email: ensuredUser.email,
+                    name: ensuredUser.name,
+                });
             }
             let firebaseCustomToken;
             try {

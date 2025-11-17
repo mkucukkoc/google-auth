@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { admin, db } from '../firebase';
 import { logger } from '../utils/logger';
 
 export async function restoreSoftDeletedUser(userId: string) {
@@ -33,6 +33,40 @@ export async function cleanupDeletedAccountArtifacts(userId: string) {
 
   await Promise.all(cleanupJobs);
   logger.info({ userId }, 'Deleted account artifacts cleanup finished');
+}
+
+export async function ensureFirebaseAuthUserProfile(userId: string, profile: { email?: string; name?: string }) {
+  try {
+    const existing = await admin.auth().getUser(userId);
+    const updates: Record<string, unknown> = {};
+    if (profile.email && existing.email !== profile.email) {
+      updates.email = profile.email;
+      updates.emailVerified = true;
+    }
+    if (profile.name && existing.displayName !== profile.name) {
+      updates.displayName = profile.name;
+    }
+    if (Object.keys(updates).length > 0) {
+      await admin.auth().updateUser(userId, updates);
+      logger.info({ userId }, 'Firebase Auth user profile updated during reactivation');
+    }
+  } catch (error: any) {
+    if (error?.code === 'auth/user-not-found') {
+      if (!profile.email) {
+        logger.warn({ userId }, 'Cannot recreate Firebase Auth user without email');
+        return;
+      }
+      await admin.auth().createUser({
+        uid: userId,
+        email: profile.email,
+        displayName: profile.name,
+        emailVerified: true,
+      });
+      logger.info({ userId }, 'Firebase Auth user recreated during reactivation');
+      return;
+    }
+    logger.warn({ error, userId }, 'Failed to ensure Firebase Auth user profile');
+  }
 }
 
 async function deleteDocumentIfExists(collection: string, docId: string, logLabel: string) {

@@ -69,6 +69,10 @@ function createAuthRouter() {
                     });
                     logger_1.logger.info({ userId: userRecord.id }, 'Soft-deleted email/password user reactivated, cleaning artifacts');
                     await (0, reactivationService_1.cleanupDeletedAccountArtifacts)(userRecord.id);
+                    await (0, reactivationService_1.ensureFirebaseAuthUserProfile)(reactivatedUser.id, {
+                        email: reactivatedUser.email,
+                        name: reactivatedUser.name,
+                    });
                     let firebaseCustomToken;
                     try {
                         firebaseCustomToken = await firebase_1.admin.auth().createCustomToken(reactivatedUser.id, {

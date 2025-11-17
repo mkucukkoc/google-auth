@@ -13,7 +13,7 @@ import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
 import { logger } from '../utils/logger';
 import { config } from '../config';
-import { cleanupDeletedAccountArtifacts, restoreSoftDeletedUser } from '../services/reactivationService';
+import { cleanupDeletedAccountArtifacts, ensureFirebaseAuthUserProfile, restoreSoftDeletedUser } from '../services/reactivationService';
 
 export function createAuthRouter(): Router {
   const r = Router();
@@ -90,6 +90,10 @@ export function createAuthRouter(): Router {
 
             logger.info({ userId: userRecord.id }, 'Soft-deleted email/password user reactivated, cleaning artifacts');
             await cleanupDeletedAccountArtifacts(userRecord.id);
+            await ensureFirebaseAuthUserProfile(reactivatedUser.id, {
+              email: reactivatedUser.email,
+              name: reactivatedUser.name,
+            });
 
             let firebaseCustomToken: string | undefined;
             try {
