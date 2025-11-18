@@ -47,37 +47,54 @@ export function createPremiumRouter(): Router {
         return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
       }
 
-      logger.info({ userId: authReq.user.id }, 'Premium restore request');
+      const requestedEmail = (req.body?.email || authReq.user.email || '').toLowerCase();
+      const requestId = req.body?.requestId;
+      const platform = req.body?.platform;
+      const source = req.body?.source;
 
-      const { email, currentUid, oldAppUserId, platform, requestId, appUserId } = req.body || {};
+      if (!requestedEmail) {
+        return res
+          .status(400)
+          .json(ResponseBuilder.error('EMAIL_REQUIRED', 'Premium restore işlemi için e-posta gereklidir'));
+      }
+
+      logger.info(
+        { userId: authReq.user.id, appUserId: requestedEmail, platform },
+        'Premium restore request (email identity)'
+      );
 
       try {
-        if (email) {
-          const targetUid = currentUid || authReq.user.id;
+        if (req.body?.oldAppUserId) {
           const restoreResult = await premiumService.restoreTransferredSubscription({
-            currentUid: targetUid,
-            email,
-            oldAppUserId,
+            currentUid: authReq.user.id,
+            email: requestedEmail,
+            oldAppUserId: req.body.oldAppUserId,
             requestId,
             platform,
           });
           logger.info(
-            { userId: authReq.user.id, targetUid, premium: restoreResult.premium },
+            { userId: authReq.user.id, appUserId: requestedEmail, premium: restoreResult.premium },
             'Premium transfer restore success'
           );
           return res.json(
             ResponseBuilder.success(
               restoreResult,
-              'Silinen aboneliğiniz yeni hesabınıza taşındı'
+              restoreResult.premium
+                ? 'Satın almalarınız yeni hesabınıza taşındı'
+                : 'Aktif abonelik bulunamadı'
             )
           );
         }
 
         const result = await premiumService.restoreFromRevenueCat(authReq.user.id, {
-          appUserId,
+          appUserId: requestedEmail,
           requestId,
+          source: source || 'restore_endpoint',
         });
-        logger.info({ userId: authReq.user.id, premium: result.premium }, 'Premium restore success');
+        logger.info(
+          { userId: authReq.user.id, appUserId: requestedEmail, premium: result.premium },
+          'Premium restore success'
+        );
         return res.json(
           ResponseBuilder.success(
             result,
@@ -103,8 +120,10 @@ export function createPremiumRouter(): Router {
       logger.info({ userId: authReq.user.id }, 'Premium manual sync request');
 
       try {
+        const requestedEmail = (req.body?.appUserId || authReq.user.email || '').toLowerCase();
+
         const result = await premiumService.syncFromRevenueCat(authReq.user.id, {
-          appUserId: req.body?.appUserId,
+          appUserId: requestedEmail || undefined,
           requestId: req.body?.requestId,
           source: req.body?.source,
         });

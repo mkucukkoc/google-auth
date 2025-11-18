@@ -84,9 +84,14 @@ class PremiumService {
     userId: string,
     options: { appUserId?: string; requestId?: string; source?: string } = {}
   ) {
-    const appUserId = options.appUserId || (await this.resolveAppUserId(userId));
+    const resolvedAppUserId = options.appUserId || (await this.resolveAppUserId(userId));
+    const appUserId = resolvedAppUserId?.toLowerCase?.() ?? resolvedAppUserId;
 
-    logger.info({ userId, appUserId }, 'Restoring premium data from RevenueCat');
+    if (!appUserId) {
+      throw new PremiumServiceError('APP_USER_ID_MISSING', 'RevenueCat uygulama kimliği belirlenemedi', 400);
+    }
+
+    logger.info({ userId, appUserId }, 'Premium restore using email identity');
 
     const subscriberPayload = (await revenueCatService.fetchSubscriber(appUserId)) as RevenueCatSubscriberPayload;
     const premiumState = this.extractFromSubscriber(subscriberPayload);
@@ -113,56 +118,45 @@ class PremiumService {
     platform?: string;
   }): Promise<any> {
     const { currentUid, email, oldAppUserId, requestId, platform } = params;
-    logger.info({ currentUid, email, oldAppUserId }, 'Premium restore transfer requested');
+    logger.info({ currentUid, email, oldAppUserId, platform }, 'Premium restore transfer requested');
 
     const deletedRecord = await this.findDeletedSubscriptionRecord(email, oldAppUserId);
     if (!deletedRecord) {
-      throw new PremiumServiceError('RESTORE_SOURCE_NOT_FOUND', 'Geçmiş premium kaydı bulunamadı', 404);
+      if (!email) {
+        throw new PremiumServiceError('RESTORE_SOURCE_NOT_FOUND', 'Geçmiş premium kaydı bulunamadı', 404);
+      }
+      logger.info({ currentUid, email }, 'No deleted subscription record found, falling back to email restore');
+      return this.restoreFromRevenueCat(currentUid, {
+        appUserId: email.toLowerCase(),
+        requestId,
+        source: 'restore_fallback',
+      });
     }
-
-    const sourceAppUserId =
-      oldAppUserId || deletedRecord.oldAppUserId || deletedRecord.uid || deletedRecord.docId || currentUid;
-
-    if (!sourceAppUserId) {
-      throw new PremiumServiceError('RESTORE_SOURCE_INVALID', 'Eski abonelik ID belirlenemedi', 404);
-    }
-
-    if (sourceAppUserId !== currentUid) {
-      await revenueCatService.createAlias(sourceAppUserId, currentUid);
-      logger.info({ currentUid, sourceAppUserId }, 'RevenueCat alias created for transfer');
-    }
-
-    const subscriberPayload = (await revenueCatService.fetchSubscriber(currentUid)) as RevenueCatSubscriberPayload;
-    const premiumState = this.extractFromSubscriber(subscriberPayload);
-
-    if (!premiumState) {
-      throw new PremiumServiceError('ENTITLEMENT_NOT_FOUND', 'Aktif abonelik bulunamadı', 404);
-    }
-
-    const result = await this.writePremiumRecord(currentUid, premiumState, {
-      source: 'restore_transfer',
-      origin: 'revenuecat',
-      platform,
-      requestId,
-    });
 
     await db
       .collection('deleted_users_subsc')
       .doc(deletedRecord.docId)
       .set(
         {
-          restoredToUid: currentUid,
-          restoreCompletedAt: new Date().toISOString(),
+          restoreAttemptedAt: new Date().toISOString(),
           lastRestoreRequestId: requestId || null,
-          oldAppUserId: sourceAppUserId,
         },
         { merge: true }
+      )
+      .catch((error: unknown) =>
+        logger.warn({ err: error, docId: deletedRecord.docId }, 'Failed to log restore attempt')
       );
 
-    return {
-      ...result,
-      transferredFromAppUserId: sourceAppUserId,
-    };
+    const targetEmail = (deletedRecord.email || email || '').toLowerCase();
+    if (!targetEmail) {
+      throw new PremiumServiceError('RESTORE_SOURCE_INVALID', 'Geçerli bir e-posta bulunamadı', 400);
+    }
+
+    return this.restoreFromRevenueCat(currentUid, {
+      appUserId: targetEmail,
+      requestId,
+      source: 'restore_transfer',
+    });
   }
 
   async syncFromRevenueCat(
@@ -375,7 +369,7 @@ class PremiumService {
     };
 
     if (userProfile?.email) {
-      payload.email = userProfile.email;
+      payload.email = userProfile.email.toLowerCase();
     }
     if (userProfile?.name) {
       payload.name = userProfile.name;
@@ -416,18 +410,33 @@ class PremiumService {
   }
 
   private async resolveAppUserId(userId: string) {
+    const profile = await this.fetchUserProfile(userId);
+    if (profile?.email) {
+      return profile.email.toLowerCase();
+    }
+
+    const fallbackEmail = await this.fetchSubscEmail(userId);
+    if (fallbackEmail) {
+      return fallbackEmail.toLowerCase();
+    }
+
+    return userId;
+  }
+
+  private async fetchSubscEmail(userId: string): Promise<string | null> {
     try {
       const doc = await db.collection(SUBSC_COLLECTION).doc(userId).get();
-      if (doc.exists) {
-        const data = doc.data() || {};
-        if (data.revenueCatUserId) {
-          return data.revenueCatUserId;
-        }
+      if (!doc.exists) {
+        return null;
+      }
+      const data = doc.data() || {};
+      if (typeof data.email === 'string' && data.email.trim().length > 0) {
+        return data.email.trim();
       }
     } catch (error) {
-      logger.warn({ err: error, userId }, 'Failed to resolve appUserId from subsc collection');
+      logger.warn({ err: error, userId }, 'Failed to fetch subsc email for premium sync');
     }
-    return userId;
+    return null;
   }
 }
 

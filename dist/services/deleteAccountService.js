@@ -313,10 +313,12 @@ class DeleteAccountService {
         }
         const userData = userDoc.data() || {};
         const subscData = subscDoc.data() || {};
+        const rawEmail = subscData.email || userData.email || null;
+        const resolvedEmail = typeof rawEmail === 'string' ? rawEmail.toLowerCase() : null;
         return {
-            email: subscData.email || userData.email,
+            email: resolvedEmail || rawEmail,
             provider: subscData.provider || userData.provider,
-            appUserId: subscData.revenueCatUserId || userId,
+            appUserId: resolvedEmail || userId,
             userProfile: userData,
             isAlreadyDeleted: Boolean(userData.isDeleted),
             deletedRegistry: registry,
