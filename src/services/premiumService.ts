@@ -30,10 +30,7 @@ interface PremiumSyncContext {
 
 interface RevenueCatSubscriberPayload {
   subscriber?: {
-    entitlements?: {
-      active?: Record<string, any>;
-      [key: string]: any;
-    };
+    entitlements?: Record<string, any>;
     subscriptions?: Record<string, any>;
   };
 }
@@ -109,11 +106,8 @@ class PremiumService {
     }
 
     const hasSubscriber = !!subscriberPayload?.subscriber;
-    const hasEntitlements = !!subscriberPayload?.subscriber?.entitlements;
-    const activeEntitlements = subscriberPayload?.subscriber?.entitlements?.active || {};
-    const allEntitlements = subscriberPayload?.subscriber?.entitlements?.all || {};
-    const activeKeys = Object.keys(activeEntitlements);
-    const allKeys = Object.keys(allEntitlements);
+    const entitlementsContainer = subscriberPayload?.subscriber?.entitlements || {};
+    const entitlementKeys = Object.keys(entitlementsContainer);
     const subscriptions = subscriberPayload?.subscriber?.subscriptions || {};
     const subscriptionKeys = Object.keys(subscriptions);
 
@@ -122,9 +116,8 @@ class PremiumService {
         userId, 
         appUserId, 
         hasSubscriber,
-        hasEntitlements,
-        activeEntitlementKeys: activeKeys,
-        allEntitlementKeys: allKeys,
+        hasEntitlements: entitlementKeys.length > 0,
+        entitlementKeys,
         subscriptionKeys,
         lookingFor: REVENUECAT_ENTITLEMENT_ID
       }, 
@@ -135,13 +128,21 @@ class PremiumService {
 
     if (!premiumState) {
       logger.info(
+        {
+          userId,
+          appUserId,
+          entitlementPayload: entitlementsContainer,
+          subscriptionPayload: subscriptions,
+        },
+        'RevenueCat entitlements snapshot'
+      );
+      logger.info(
         { 
           userId, 
           appUserId, 
           hasSubscriber,
-          hasActiveEntitlements: activeKeys.length > 0,
-          activeEntitlementKeys: activeKeys,
-          allEntitlementKeys: allKeys,
+          hasEntitlements: entitlementKeys.length > 0,
+          entitlementKeys,
           subscriptionKeys,
           lookingFor: REVENUECAT_ENTITLEMENT_ID,
           rawPayload: JSON.stringify(subscriberPayload).substring(0, 500) // İlk 500 karakter
@@ -278,6 +279,7 @@ class PremiumService {
 
     const premiumExpiresAt =
       entitlement?.expirationDate ||
+      entitlement?.expirationAt ||
       entitlement?.expiresDate ||
       entitlement?.expiration_date ||
       entitlement?.expires_date ||
@@ -298,14 +300,8 @@ class PremiumService {
   }
 
   private extractFromSubscriber(payload: RevenueCatSubscriberPayload): PremiumState | null {
-    const activeEntitlements = payload?.subscriber?.entitlements?.active || {};
-    let entitlement = activeEntitlements[REVENUECAT_ENTITLEMENT_ID];
-
-    // Eğer active'de yoksa, all içinde bakalım (bazı durumlarda entitlement all'da olabilir)
-    if (!entitlement) {
-      const allEntitlements = payload?.subscriber?.entitlements?.all || {};
-      entitlement = allEntitlements[REVENUECAT_ENTITLEMENT_ID];
-    }
+    const entitlements = payload?.subscriber?.entitlements || {};
+    const entitlement = entitlements[REVENUECAT_ENTITLEMENT_ID];
 
     if (!entitlement) {
       return null;
@@ -316,7 +312,7 @@ class PremiumService {
     const premiumStatus = this.determinePremiumStatus(basePlanId);
 
     const expiresAt = entitlement?.expires_date || entitlement?.expiration_date || null;
-    const entitlementIds = Object.keys(activeEntitlements);
+    const entitlementIds = Object.keys(entitlements);
 
     const premiumActive = this.isEntitlementActive(expiresAt);
 
@@ -476,7 +472,7 @@ class PremiumService {
       return fallbackEmail.toLowerCase();
     }
 
-    return userId;
+    return null;
   }
 
   private async fetchSubscEmail(userId: string): Promise<string | null> {

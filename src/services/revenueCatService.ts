@@ -110,7 +110,7 @@ class RevenueCatService {
     Object.entries<any>(entitlements).forEach(([name, entitlement]) => {
       entitlementNames.push(name);
       const expiresDate = entitlement?.expires_date ? new Date(entitlement.expires_date).getTime() : null;
-      const isSandbox = entitlement?.environment === 'sandbox' || entitlement?.product_identifier?.includes('sandbox');
+      const isSandbox = entitlement?.environment === 'sandbox';
       if (!isSandbox) {
         sandboxOnly = false;
       }
