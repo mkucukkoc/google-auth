@@ -93,11 +93,42 @@ class PremiumService {
 
     logger.info({ userId, appUserId }, 'Premium restore using email identity');
 
-    const subscriberPayload = (await revenueCatService.fetchSubscriber(appUserId)) as RevenueCatSubscriberPayload;
+    let subscriberPayload: RevenueCatSubscriberPayload;
+    try {
+      subscriberPayload = (await revenueCatService.fetchSubscriber(appUserId)) as RevenueCatSubscriberPayload;
+    } catch (error: any) {
+      if (error?.response?.status === 404 || error?.message?.includes('not found') || error?.message?.includes('404')) {
+        logger.warn({ userId, appUserId, error: error.message }, 'RevenueCat subscriber not found - user may need to login via SDK first');
+        throw new PremiumServiceError(
+          'SUBSCRIBER_NOT_FOUND',
+          'RevenueCat\'te bu e-posta ile kullanıcı bulunamadı. Lütfen önce uygulamada giriş yapın.',
+          404
+        );
+      }
+      throw error;
+    }
+
+    logger.debug({ userId, appUserId, hasSubscriber: !!subscriberPayload?.subscriber, hasEntitlements: !!subscriberPayload?.subscriber?.entitlements }, 'RevenueCat subscriber payload received');
+
     const premiumState = this.extractFromSubscriber(subscriberPayload);
 
     if (!premiumState) {
-      logger.info({ userId, appUserId }, 'Premium restore skipped: aktif abonelik bulunamadı');
+      const hasSubscriber = !!subscriberPayload?.subscriber;
+      const hasActiveEntitlements = !!subscriberPayload?.subscriber?.entitlements?.active;
+      const activeEntitlements = subscriberPayload?.subscriber?.entitlements?.active;
+      const activeEntitlementKeys = activeEntitlements ? Object.keys(activeEntitlements) : [];
+      
+      logger.info(
+        { 
+          userId, 
+          appUserId, 
+          hasSubscriber,
+          hasActiveEntitlements,
+          activeEntitlementKeys,
+          lookingFor: REVENUECAT_ENTITLEMENT_ID
+        }, 
+        'Premium restore skipped: aktif abonelik bulunamadı'
+      );
       throw new PremiumServiceError('ENTITLEMENT_NOT_FOUND', 'Aktif premium abonelik bulunamadı', 404);
     }
 
