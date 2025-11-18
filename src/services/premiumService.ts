@@ -283,6 +283,8 @@ class PremiumService {
       entitlement?.expiresDate ||
       entitlement?.expiration_date ||
       entitlement?.expires_date ||
+      entitlement?.expiresAt ||
+      entitlement?.expiration_at ||
       null;
 
     const entitlementIds = Object.keys(activeEntitlements);
@@ -308,13 +310,44 @@ class PremiumService {
     }
 
     const subscriptions = payload?.subscriber?.subscriptions || {};
-    const basePlanId = this.getBasePlanIdFromSubscriptionEntries(subscriptions);
+    const basePlanId =
+      this.getBasePlanIdFromSubscriptionEntries(subscriptions) ??
+      this.deriveBasePlanIdFromIdentifier(
+        entitlement?.store_product_id ||
+          entitlement?.product_identifier ||
+          entitlement?.productIdentifier ||
+          entitlement?.storeProductId ||
+          null
+      );
     const premiumStatus = this.determinePremiumStatus(basePlanId);
 
-    const expiresAt = entitlement?.expires_date || entitlement?.expiration_date || null;
+    const expiresAt =
+      entitlement?.expires_date ||
+      entitlement?.expiration_date ||
+      entitlement?.expiresDate ||
+      entitlement?.expirationDate ||
+      entitlement?.expirationAt ||
+      entitlement?.expiresAt ||
+      entitlement?.expiration_at ||
+      null;
     const entitlementIds = Object.keys(entitlements);
 
-    const premiumActive = this.isEntitlementActive(expiresAt);
+    const graceExpiresRaw =
+      entitlement?.grace_period_expires_date ||
+      entitlement?.gracePeriodExpiresDate ||
+      entitlement?.grace_period_expires_at ||
+      entitlement?.gracePeriodExpiresAt ||
+      null;
+    const graceExpiresTs = graceExpiresRaw ? new Date(graceExpiresRaw).getTime() : null;
+    const graceActive = graceExpiresTs ? graceExpiresTs > Date.now() : false;
+
+    const premiumActive = this.isEntitlementActive(expiresAt) || graceActive;
+
+    const subscriptionEnvSandbox = Object.values(subscriptions).some(
+      (sub: any) => sub?.environment === 'sandbox'
+    );
+    const entitlementEnvSandbox = entitlement?.environment === 'sandbox';
+    const isSandbox = entitlementEnvSandbox || subscriptionEnvSandbox;
 
     return {
       premium: premiumActive,
@@ -322,7 +355,7 @@ class PremiumService {
       premiumExpiresAt: expiresAt,
       entitlementProductId: entitlement?.product_identifier || entitlement?.productIdentifier,
       environment: entitlement?.environment || null,
-      isSandboxOnly: entitlement?.environment === 'sandbox',
+      isSandboxOnly: isSandbox,
       entitlementIds,
       raw: payload,
     };
@@ -356,8 +389,7 @@ class PremiumService {
       return null;
     }
 
-    const [, basePlanId] = selected.split(':');
-    return (basePlanId ?? selected).toLowerCase();
+    return this.normalizeBasePlan(selected);
   }
 
   private getBasePlanIdFromSubscriptionEntries(subscriptions: Record<string, any>): string | null {
@@ -377,13 +409,12 @@ class PremiumService {
     });
 
     const [selectedId, selectedSubscription] = prioritized ?? entries[0];
-    if (!selectedId && !selectedSubscription?.product_identifier) {
-      return null;
-    }
+    const identifier =
+      selectedSubscription?.store_product_id ||
+      selectedSubscription?.product_identifier ||
+      selectedId;
 
-    const identifier = selectedSubscription?.product_identifier || selectedId;
-    const [, basePlanId] = identifier.split(':');
-    return (basePlanId ?? identifier).toLowerCase();
+    return this.normalizeBasePlan(identifier);
   }
 
   private determinePremiumStatus(basePlanId: string | null): PremiumStatus {
@@ -397,6 +428,24 @@ class PremiumService {
       return 'monthly';
     }
     return null;
+  }
+
+  private deriveBasePlanIdFromIdentifier(identifier: string | null | undefined): string | null {
+    if (!identifier) {
+      return null;
+    }
+    const parts = identifier.split(':');
+    const last = parts[parts.length - 1];
+    return last?.toLowerCase() || null;
+  }
+
+  private normalizeBasePlan(id: string | null | undefined): string | null {
+    if (!id) {
+      return null;
+    }
+    const parts = id.split(':');
+    const last = parts[parts.length - 1];
+    return last?.toLowerCase() || null;
   }
 
   private async writePremiumRecord(userId: string, state: PremiumState, context: PremiumSyncContext) {

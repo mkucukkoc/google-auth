@@ -2,6 +2,12 @@ import axios from 'axios';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
+type BillingRetryState = {
+  billingIssuesDetectedAt: string | null;
+  unsubscribeDetectedAt: string | null;
+  gracePeriodExpiresAt: string | null;
+};
+
 export interface RevenueCatCheckResult {
   hasActiveSubscription: boolean;
   entitlements: string[];
@@ -10,7 +16,7 @@ export interface RevenueCatCheckResult {
   isSandboxOnly: boolean;
   billingIssuesDetected?: boolean;
   gracePeriodActive?: boolean;
-  billingRetryStates?: Record<string, string | null>;
+  billingRetryStates?: Record<string, BillingRetryState>;
   raw?: any;
 }
 
@@ -105,26 +111,28 @@ class RevenueCatService {
     let sandboxOnly = true;
     let gracePeriodActive = false;
     let billingIssuesDetected = false;
-    const billingRetryStates: Record<string, string | null> = {};
+    const billingRetryStates: Record<string, BillingRetryState> = {};
 
     Object.entries<any>(entitlements).forEach(([name, entitlement]) => {
       entitlementNames.push(name);
-      const expiresDate = entitlement?.expires_date ? new Date(entitlement.expires_date).getTime() : null;
-      const isSandbox = entitlement?.environment === 'sandbox';
-      if (!isSandbox) {
+      const expiresDate = this.getExpiration(entitlement);
+      const graceExpires = this.getGraceExpiration(entitlement);
+      const isSandboxEnt = entitlement?.environment === 'sandbox';
+
+      if (!isSandboxEnt) {
         sandboxOnly = false;
       }
 
-      expirationDates[name] = entitlement?.expires_date || null;
+      expirationDates[name] = this.getExpirationValue(entitlement);
 
-      const graceExpires = entitlement?.grace_period_expires_date
-        ? new Date(entitlement.grace_period_expires_date).getTime()
-        : null;
       if (graceExpires && graceExpires > now) {
         gracePeriodActive = true;
       }
 
-      const isActive = Boolean(expiresDate && expiresDate > now);
+      const isActive =
+        (expiresDate && expiresDate > now) ||
+        (graceExpires && graceExpires > now) ||
+        entitlement?.is_active === true;
       if (isActive) {
         hasActive = true;
         blockingEntitlements.push(name);
@@ -132,12 +140,23 @@ class RevenueCatService {
     });
 
     Object.entries<any>(subscriptions).forEach(([productId, subscription]) => {
-      const billingIssues =
-        subscription?.billing_issues_detected_at || subscription?.unsubscribe_detected_at || null;
-      if (billingIssues) {
+      const isSandboxSub = subscription?.environment === 'sandbox';
+      if (!isSandboxSub) {
+        sandboxOnly = false;
+      }
+
+      const billingIssuesDetectedAt = subscription?.billing_issues_detected_at || null;
+      const unsubscribeDetectedAt = subscription?.unsubscribe_detected_at || subscription?.unsubscribed_at || null;
+      const graceExpiresAt = this.getGraceExpiration(subscription);
+      if (billingIssuesDetectedAt || unsubscribeDetectedAt) {
         billingIssuesDetected = true;
       }
-      billingRetryStates[productId] = billingIssues;
+
+      billingRetryStates[productId] = {
+        billingIssuesDetectedAt,
+        unsubscribeDetectedAt,
+        gracePeriodExpiresAt: graceExpiresAt ? new Date(graceExpiresAt).toISOString() : null,
+      };
     });
 
     if (config.revenueCat.enforceRealMode !== false && sandboxOnly && hasActive) {
@@ -157,6 +176,41 @@ class RevenueCatService {
       billingRetryStates,
       raw: payload,
     };
+  }
+
+  private getExpirationValue(entitlement: any): string | null {
+    return (
+      entitlement?.expires_date ||
+      entitlement?.expiration_date ||
+      entitlement?.expiresDate ||
+      entitlement?.expirationDate ||
+      entitlement?.expirationAt ||
+      entitlement?.expires_at ||
+      null
+    );
+  }
+
+  private getExpiration(entitlement: any): number | null {
+    const rawValue = this.getExpirationValue(entitlement);
+    if (!rawValue) {
+      return null;
+    }
+    const ts = new Date(rawValue).getTime();
+    return Number.isNaN(ts) ? null : ts;
+  }
+
+  private getGraceExpiration(source: any): number | null {
+    const rawValue =
+      source?.grace_period_expires_date ||
+      source?.gracePeriodExpiresDate ||
+      source?.grace_period_expires_at ||
+      source?.gracePeriodExpiresAt ||
+      null;
+    if (!rawValue) {
+      return null;
+    }
+    const ts = new Date(rawValue).getTime();
+    return Number.isNaN(ts) ? null : ts;
   }
 }
 

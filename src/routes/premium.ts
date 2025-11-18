@@ -5,6 +5,14 @@ import { ResponseBuilder } from '../types/response';
 import { premiumService, PremiumServiceError } from '../services/premiumService';
 import { logger } from '../utils/logger';
 
+const normalizeEmail = (val: any): string | null => {
+  if (!val || typeof val !== 'string') {
+    return null;
+  }
+  const trimmed = val.trim();
+  return trimmed.length > 0 ? trimmed.toLowerCase() : null;
+};
+
 export function createPremiumRouter(): Router {
   const router = Router();
 
@@ -47,7 +55,10 @@ export function createPremiumRouter(): Router {
         return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
       }
 
-      const requestedEmail = (req.body?.email || authReq.user.email || '').toLowerCase();
+      const requestedEmail =
+        normalizeEmail(req.body?.email) ||
+        normalizeEmail(authReq.user.email) ||
+        null;
       const requestId = req.body?.requestId;
       const platform = req.body?.platform;
       const source = req.body?.source;
@@ -120,7 +131,10 @@ export function createPremiumRouter(): Router {
       logger.info({ userId: authReq.user.id }, 'Premium manual sync request');
 
       try {
-        const requestedEmail = (req.body?.appUserId || authReq.user.email || '').toLowerCase();
+        const requestedEmail =
+          normalizeEmail(req.body?.appUserId) ||
+          normalizeEmail(authReq.user.email) ||
+          null;
 
         const result = await premiumService.syncFromRevenueCat(authReq.user.id, {
           appUserId: requestedEmail || undefined,
