@@ -108,24 +108,43 @@ class PremiumService {
       throw error;
     }
 
-    logger.debug({ userId, appUserId, hasSubscriber: !!subscriberPayload?.subscriber, hasEntitlements: !!subscriberPayload?.subscriber?.entitlements }, 'RevenueCat subscriber payload received');
+    const hasSubscriber = !!subscriberPayload?.subscriber;
+    const hasEntitlements = !!subscriberPayload?.subscriber?.entitlements;
+    const activeEntitlements = subscriberPayload?.subscriber?.entitlements?.active || {};
+    const allEntitlements = subscriberPayload?.subscriber?.entitlements?.all || {};
+    const activeKeys = Object.keys(activeEntitlements);
+    const allKeys = Object.keys(allEntitlements);
+    const subscriptions = subscriberPayload?.subscriber?.subscriptions || {};
+    const subscriptionKeys = Object.keys(subscriptions);
+
+    logger.debug(
+      { 
+        userId, 
+        appUserId, 
+        hasSubscriber,
+        hasEntitlements,
+        activeEntitlementKeys: activeKeys,
+        allEntitlementKeys: allKeys,
+        subscriptionKeys,
+        lookingFor: REVENUECAT_ENTITLEMENT_ID
+      }, 
+      'RevenueCat subscriber payload received'
+    );
 
     const premiumState = this.extractFromSubscriber(subscriberPayload);
 
     if (!premiumState) {
-      const hasSubscriber = !!subscriberPayload?.subscriber;
-      const hasActiveEntitlements = !!subscriberPayload?.subscriber?.entitlements?.active;
-      const activeEntitlements = subscriberPayload?.subscriber?.entitlements?.active;
-      const activeEntitlementKeys = activeEntitlements ? Object.keys(activeEntitlements) : [];
-      
       logger.info(
         { 
           userId, 
           appUserId, 
           hasSubscriber,
-          hasActiveEntitlements,
-          activeEntitlementKeys,
-          lookingFor: REVENUECAT_ENTITLEMENT_ID
+          hasActiveEntitlements: activeKeys.length > 0,
+          activeEntitlementKeys: activeKeys,
+          allEntitlementKeys: allKeys,
+          subscriptionKeys,
+          lookingFor: REVENUECAT_ENTITLEMENT_ID,
+          rawPayload: JSON.stringify(subscriberPayload).substring(0, 500) // İlk 500 karakter
         }, 
         'Premium restore skipped: aktif abonelik bulunamadı'
       );
@@ -280,7 +299,13 @@ class PremiumService {
 
   private extractFromSubscriber(payload: RevenueCatSubscriberPayload): PremiumState | null {
     const activeEntitlements = payload?.subscriber?.entitlements?.active || {};
-    const entitlement = activeEntitlements[REVENUECAT_ENTITLEMENT_ID];
+    let entitlement = activeEntitlements[REVENUECAT_ENTITLEMENT_ID];
+
+    // Eğer active'de yoksa, all içinde bakalım (bazı durumlarda entitlement all'da olabilir)
+    if (!entitlement) {
+      const allEntitlements = payload?.subscriber?.entitlements?.all || {};
+      entitlement = allEntitlements[REVENUECAT_ENTITLEMENT_ID];
+    }
 
     if (!entitlement) {
       return null;
