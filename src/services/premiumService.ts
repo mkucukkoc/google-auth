@@ -1,9 +1,12 @@
+import { createHash } from 'crypto';
 import { db } from '../firebase';
 import { logger } from '../utils/logger';
 import { revenueCatService } from './revenueCatService';
 import { DeletedUserRegistryRecord } from '../types/deleteAccount';
 
 const PREMIUM_COLLECTION = 'premiumusers';
+const CLIENT_SNAPSHOT_COLLECTION = 'premium_client_snapshots';
+const PREMIUM_DECISION_LOG_COLLECTION = 'premium_decision_logs';
 const USERS_COLLECTION = 'users';
 const SUBSC_COLLECTION = 'subsc';
 const REVENUECAT_ENTITLEMENT_ID = process.env.REVENUECAT_ENTITLEMENT_ID || 'premium';
@@ -26,6 +29,9 @@ interface PremiumSyncContext {
   origin: string;
   platform?: string;
   requestId?: string;
+  triggeredBy?: string;
+  decisionId?: string;
+  isWebhookEvent?: boolean;
 }
 
 interface RevenueCatSubscriberPayload {
@@ -57,24 +63,37 @@ class PremiumService {
       throw new PremiumServiceError('INVALID_PAYLOAD', 'customerInfo payload is required');
     }
 
-    const premiumState = this.extractFromCustomerInfo(payload.customerInfo);
+    const derivedState = this.extractFromCustomerInfo(payload.customerInfo);
 
-    if (!premiumState) {
+    await this.recordClientSnapshot(userId, payload, derivedState);
+
+    if (!derivedState) {
       logger.info(
         { userId, source: payload.source || 'client_customer_info' },
-        'Premium sync skipped: aktif entitlement bulunamadı'
+        'Premium client snapshot kaydedildi: aktif entitlement bulunamadı'
       );
-      throw new PremiumServiceError('ENTITLEMENT_NOT_FOUND', 'Aktif premium entitlement bulunamadı', 404);
+    } else {
+      logger.info(
+        {
+          userId,
+          premium: derivedState.premium,
+          premiumStatus: derivedState.premiumStatus,
+          expiresAt: derivedState.premiumExpiresAt,
+        },
+        'Premium client snapshot kaydedildi (okuma amaçlı)'
+      );
     }
 
-    const result = await this.writePremiumRecord(userId, premiumState, {
-      source: payload.source || 'client_customer_info',
-      origin: 'client',
-      platform: payload.platform,
-      requestId: payload.requestId,
-    });
-
-    return result;
+    const authoritativeState = await this.getStatus(userId);
+    return (
+      authoritativeState || {
+        premium: false,
+        premiumStatus: null,
+        premiumExpiresAt: null,
+        entitlementIds: derivedState?.entitlementIds || [],
+        raw: null,
+      }
+    );
   }
 
   async restoreFromRevenueCat(
@@ -453,6 +472,8 @@ class PremiumService {
     const docRef = db.collection(PREMIUM_COLLECTION).doc(userId);
     const userProfile = await this.fetchUserProfile(userId);
 
+    const decisionMetadata = this.buildDecisionMetadata(context, now);
+
     const payload: Record<string, any> = {
       uid: userId,
       premium: state.premium,
@@ -467,6 +488,7 @@ class PremiumService {
       lastSyncPlatform: context.platform || null,
       lastSyncRequestId: context.requestId || null,
       updatedAt: now,
+      ...decisionMetadata,
     };
 
     if (userProfile?.email) {
@@ -477,6 +499,7 @@ class PremiumService {
     }
 
     await docRef.set(payload, { merge: true });
+    await this.logPremiumDecision(userId, state, context, now);
 
     logger.info(
       {
@@ -491,6 +514,145 @@ class PremiumService {
     );
 
     return payload;
+  }
+
+  private buildSnapshotPreview(customerInfo: any) {
+    if (!customerInfo) {
+      return null;
+    }
+    const entitlementEntries = customerInfo?.entitlements?.active || {};
+    const entitlementKeys = Object.keys(entitlementEntries);
+    const activeSubscriptions: string[] = Array.isArray(customerInfo?.activeSubscriptions)
+      ? customerInfo.activeSubscriptions.slice(0, 10)
+      : [];
+
+    return {
+      entitlementKeys,
+      activeSubscriptions,
+      requestDate: customerInfo?.requestDate || null,
+      managementURL: customerInfo?.managementURL || null,
+    };
+  }
+
+  private safeSerializeCustomerInfo(customerInfo: any): string | null {
+    if (!customerInfo) {
+      return null;
+    }
+    try {
+      return JSON.stringify(customerInfo);
+    } catch (error) {
+      logger.warn({ err: error }, 'Failed to serialize customerInfo snapshot');
+      return null;
+    }
+  }
+
+  private async recordClientSnapshot(
+    userId: string,
+    payload: { customerInfo: any; platform?: string; source?: string; requestId?: string },
+    derivedState?: PremiumState | null
+  ) {
+    const now = new Date().toISOString();
+    const serialized = this.safeSerializeCustomerInfo(payload.customerInfo);
+    const checksum = serialized ? createHash('sha256').update(serialized).digest('hex') : null;
+    const source = payload.source || 'client_customer_info';
+    const platform = payload.platform || null;
+    const requestId = payload.requestId || null;
+    const snapshotId = `${userId}_${Date.now()}`;
+
+    const snapshotDoc = {
+      snapshotId,
+      userId,
+      capturedAt: now,
+      source,
+      platform,
+      requestId,
+      checksum,
+      derivedPremium: derivedState?.premium ?? null,
+      derivedPremiumStatus: derivedState?.premiumStatus ?? null,
+      derivedPremiumExpiresAt: derivedState?.premiumExpiresAt ?? null,
+      entitlementIds: derivedState?.entitlementIds ?? [],
+      snapshotPreview: this.buildSnapshotPreview(payload.customerInfo),
+      raw: serialized ? serialized.slice(0, 10000) : null,
+    };
+
+    await db.collection(CLIENT_SNAPSHOT_COLLECTION).doc(snapshotId).set(snapshotDoc, { merge: true });
+
+    await db
+      .collection(PREMIUM_COLLECTION)
+      .doc(userId)
+      .set(
+        {
+          lastClientSnapshotAt: now,
+          lastClientSnapshotSource: source,
+          lastClientSnapshotPlatform: platform,
+          lastClientSnapshotChecksum: checksum,
+          lastClientSnapshotId: snapshotId,
+        },
+        { merge: true }
+      );
+  }
+
+  private buildDecisionMetadata(context: PremiumSyncContext, timestamp: string) {
+    const metadata: Record<string, any> = {
+      lastPremiumDecisionAt: timestamp,
+      lastPremiumDecisionSource: context.source,
+      lastPremiumDecisionOrigin: context.origin,
+      lastPremiumDecisionPlatform: context.platform || null,
+      lastPremiumDecisionRequestId: context.requestId || null,
+      lastPremiumDecisionTriggeredBy: context.triggeredBy || null,
+      lastPremiumDecisionId: context.decisionId || null,
+    };
+
+    if (context.origin === 'revenuecat' || context.source.includes('sync')) {
+      metadata.lastPremiumVerifiedAt = timestamp;
+    }
+
+    if (context.isWebhookEvent || context.source === 'revenuecat_webhook') {
+      metadata.lastPremiumWebhookEventAt = timestamp;
+    }
+
+    return metadata;
+  }
+
+  private async logPremiumDecision(
+    userId: string,
+    state: PremiumState,
+    context: PremiumSyncContext,
+    timestamp: string
+  ) {
+    const logId = `${userId}_${Date.now()}`;
+    const logDoc = {
+      logId,
+      userId,
+      premium: state.premium,
+      premiumStatus: state.premiumStatus,
+      premiumExpiresAt: state.premiumExpiresAt,
+      entitlementIds: state.entitlementIds,
+      entitlementProductId: state.entitlementProductId ?? null,
+      environment: state.environment ?? null,
+      isSandboxOnly: state.isSandboxOnly ?? null,
+      source: context.source,
+      origin: context.origin,
+      platform: context.platform || null,
+      requestId: context.requestId || null,
+      triggeredBy: context.triggeredBy || null,
+      decisionId: context.decisionId || null,
+      isWebhookEvent: Boolean(context.isWebhookEvent),
+      loggedAt: timestamp,
+    };
+
+    await db.collection(PREMIUM_DECISION_LOG_COLLECTION).doc(logId).set(logDoc, { merge: true });
+    logger.info(
+      {
+        userId,
+        logId,
+        source: context.source,
+        origin: context.origin,
+        premium: state.premium,
+        premiumStatus: state.premiumStatus,
+      },
+      'Premium decision audit logged'
+    );
   }
 
   private async fetchUserProfile(userId: string) {
