@@ -9,6 +9,7 @@ import { RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest, AuthRespo
 import { StandardResponse, ResponseBuilder } from '../types/response';
 import { admin, db } from '../firebase';
 import { randomInt, createHash } from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
 import { logger } from '../utils/logger';
@@ -46,6 +47,7 @@ export function createAuthRouter(): Router {
 
           const wasSoftDeleted = !isGoogleAccount && ((userRecord as any).isDeleted || (userRecord as any).is_deleted);
           if (wasSoftDeleted) {
+            logger.info({ email, userId: userRecord.id }, 'Soft-deleted account matched during registration; restoring existing user');
             await restoreSoftDeletedUser(userRecord.id);
 
             if (password) {
@@ -71,6 +73,7 @@ export function createAuthRouter(): Router {
             existingUser = reactivatedUser;
 
             await UserService.resetFailedAttempts(userRecord.id);
+            logger.info({ email, userId: userRecord.id }, 'Soft-deleted account restored and ready for new session');
 
             const { session, tokens } = await SessionService.createSession(
               userRecord.id,
@@ -141,6 +144,8 @@ export function createAuthRouter(): Router {
 
         // Create user
         const user = await UserService.createUser({ email, password, device, deviceId, name });
+        logger.info({ userId: user.id, email }, 'New user registered via email verification flow');
+        logger.info({ userId: user.id, email }, 'New user registered via email/password');
 
         // Create session
         const { session, tokens } = await SessionService.createSession(
@@ -191,6 +196,246 @@ export function createAuthRouter(): Router {
           'internal_error',
           'Registration failed'
         ));
+      }
+    }
+  );
+
+  // POST /auth/password/reset/complete
+  r.post('/password/reset/complete',
+    authRateLimits.register,
+    async (req, res) => {
+      try {
+        const { email: rawEmail, token, password } = req.body || {};
+        const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+        if (!email || !token || !password) {
+          return res.status(400).json({
+            error: 'invalid_request',
+            message: 'Email, token, and password are required',
+          });
+        }
+
+        const tokenHash = sha256(token);
+        const tokenSnap = await db
+          .collection('passwordResetTokens')
+          .where('email', '==', email)
+          .where('tokenHash', '==', tokenHash)
+          .limit(1)
+          .get();
+
+        if (tokenSnap.empty) {
+          return res.status(400).json({
+            error: 'invalid_reset_token',
+            message: 'Invalid or expired reset token',
+          });
+        }
+
+        const tokenDoc = tokenSnap.docs[0];
+        const tokenData = tokenDoc.data() as any;
+        const tokenExpires: Date =
+          tokenData.expiresAt?.toDate?.() ?? tokenData.expiresAt ?? new Date(0);
+        if (tokenExpires.getTime() < Date.now()) {
+          await tokenDoc.ref.delete();
+          return res.status(400).json({
+            error: 'invalid_reset_token',
+            message: 'Reset token has expired',
+          });
+        }
+
+        const user = await UserService.findByEmail(email);
+        if (!user) {
+          await tokenDoc.ref.delete();
+          return res.status(404).json({
+            error: 'user_not_found',
+            message: 'User not found',
+          });
+        }
+
+        if (isSoftDeletedUser(user)) {
+          await tokenDoc.ref.delete();
+          return res.status(423).json({
+            error: 'account_deleted',
+            message: 'This account has been deleted. Please register again.',
+          });
+        }
+
+        await UserService.updatePassword(user.id, password);
+        await tokenDoc.ref.delete();
+
+        logger.info({ userId: user.id, email }, 'Password reset completed successfully');
+        res.json({
+          success: true,
+          message: 'Password reset successful',
+        });
+      } catch (error) {
+        logger.error('Password reset completion error:', error);
+        res.status(500).json({
+          error: 'internal_error',
+          message: 'Failed to reset password',
+        });
+      }
+    }
+  );
+
+  // POST /auth/password/reset/verify
+  r.post('/password/reset/verify',
+    authRateLimits.register,
+    async (req, res) => {
+      try {
+        const rawEmail = req.body?.email;
+        const otp = req.body?.otp;
+        const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+        if (!email || !otp) {
+          return res.status(400).json({
+            error: 'invalid_request',
+            message: 'Email and OTP are required',
+          });
+        }
+
+        const recordSnap = await db
+          .collection('passwordResetOtpCodes')
+          .where('email', '==', email)
+          .get();
+
+        if (recordSnap.empty) {
+          return res.status(400).json({
+            error: 'invalid_reset_code',
+            message: 'Invalid or expired verification code',
+          });
+        }
+
+        const sortedDocs = recordSnap.docs.sort((a: any, b: any) => {
+          const aTime = a.data().createdAt?.toDate
+            ? a.data().createdAt.toDate()
+            : a.data().createdAt || new Date(0);
+          const bTime = b.data().createdAt?.toDate
+            ? b.data().createdAt.toDate()
+            : b.data().createdAt || new Date(0);
+          return bTime.getTime() - aTime.getTime();
+        });
+
+        const doc = sortedDocs[0];
+        const record = doc.data() as any;
+        const expiresAt: Date =
+          record.expiresAt?.toDate?.() ?? record.expiresAt ?? new Date(0);
+        if (expiresAt.getTime() < Date.now()) {
+          await doc.ref.delete();
+          return res.status(400).json({
+            error: 'invalid_reset_code',
+            message: 'Verification code has expired',
+          });
+        }
+
+        const isMatch = record.codeHash === sha256(otp);
+        if (!isMatch) {
+          return res.status(400).json({
+            error: 'invalid_reset_code',
+            message: 'Invalid verification code',
+          });
+        }
+
+        await doc.ref.delete();
+
+        const resetToken = uuidv4();
+        const resetTokenHash = sha256(resetToken);
+        await db.collection('passwordResetTokens').add({
+          email,
+          userId: record.userId,
+          tokenHash: resetTokenHash,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        });
+
+        logger.info({ email, userId: record.userId }, 'Password reset token issued after code verification');
+        res.json({
+          success: true,
+          token: resetToken,
+        });
+      } catch (error) {
+        logger.error('Password reset verify error:', error);
+        res.status(500).json({
+          error: 'internal_error',
+          message: 'Failed to verify password reset code',
+        });
+      }
+    }
+  );
+
+  // POST /auth/password/reset/start
+  r.post('/password/reset/start',
+    authRateLimits.register,
+    async (req, res) => {
+      try {
+        const rawEmail = req.body?.email;
+        const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+        if (!email) {
+          return res.status(400).json({
+            error: 'invalid_request',
+            message: 'Email is required',
+          });
+        }
+
+        const user = await UserService.findByEmail(email);
+        if (!user) {
+          return res.status(404).json({
+            error: 'user_not_found',
+            message: 'User not found',
+          });
+        }
+
+        if (isSoftDeletedUser(user)) {
+          return res.status(423).json({
+            error: 'account_deleted',
+            message: 'This account has been deleted. Please register again.',
+          });
+        }
+
+        const isGoogleAccount =
+          user.provider === 'google' || (!user.provider && !user.passwordHash);
+        if (isGoogleAccount) {
+          return res.status(409).json({
+            error: 'google_account_exists',
+            message: "This email is registered with a Google account. Please use 'Sign in with Google'.",
+          });
+        }
+
+        const rlKey = `pwd_reset_otp:rl:${email}`;
+        const rl = (await getJson<{ count: number }>(rlKey)) || { count: 0 };
+        if (rl.count >= 5) {
+          return res.status(429).json({
+            error: 'rate_limited',
+            message: 'Too many password reset attempts. Please try again later.',
+          });
+        }
+        rl.count += 1;
+        await setJson(rlKey, rl, 600);
+
+        const code = (randomInt(0, 999999) + '').padStart(6, '0');
+        const codeHash = sha256(code);
+        await db.collection('passwordResetOtpCodes').add({
+          email,
+          codeHash,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          userId: user.id,
+        });
+
+        try {
+          await sendOtpEmail(email, code);
+        } catch (emailError) {
+          logger.error('Failed to send password reset email:', emailError);
+        }
+
+        logger.info({ email, userId: user.id }, 'Password reset code generated and sent');
+        res.json({
+          success: true,
+          message: 'Verification code sent to your email',
+        });
+      } catch (error) {
+        logger.error('Password reset start error:', error);
+        res.status(500).json({
+          error: 'internal_error',
+          message: 'Failed to send password reset code',
+        });
       }
     }
   );
@@ -706,20 +951,56 @@ export function createAuthRouter(): Router {
         // Check if email is still available (double-check)
         const existingUser = await UserService.findByEmail(email);
         const isSoftDeleted = isSoftDeletedUser(existingUser);
-        if (existingUser && !isSoftDeleted) {
-          const isGoogleAccount = existingUser.provider === 'google' || (!existingUser.provider && !existingUser.passwordHash);
-          const errorCode = isGoogleAccount ? 'google_account_exists' : 'email_already_registered';
-          const errorMessage = isGoogleAccount
-            ? "Bu e-posta Google hesabı ile kayıtlı, lütfen 'Google ile giriş yap' seçeneğini kullanın."
-            : 'An account with this email already exists';
-          return res.status(409).json({
-            error: errorCode,
-            message: errorMessage
-          });
-        }
+        let user: User;
 
-        // Create user
-        const user = await UserService.createUser({ email, password, device, deviceId, name });
+        if (existingUser) {
+          const isGoogleAccount =
+            existingUser.provider === 'google' || (!existingUser.provider && !existingUser.passwordHash);
+          if (isGoogleAccount) {
+            return res.status(409).json({
+              error: 'google_account_exists',
+              message: "Bu e-posta Google hesabı ile kayıtlı, lütfen 'Google ile giriş yap' seçeneğini kullanın.",
+            });
+          }
+
+          if (!isSoftDeleted) {
+            return res.status(409).json({
+              error: 'email_already_registered',
+              message: 'An account with this email already exists',
+            });
+          }
+
+          logger.info({ email, userId: existingUser.id }, 'Soft-deleted account matched during email verification; restoring existing user');
+          await restoreSoftDeletedUser(existingUser.id);
+
+          if (password) {
+            await UserService.updatePassword(existingUser.id, password);
+          }
+
+          const profileUpdates: Partial<User> = {};
+          if (name && name !== existingUser.name) {
+            profileUpdates.name = name;
+          }
+
+          if (Object.keys(profileUpdates).length > 0) {
+            await UserService.updateUser(existingUser.id, profileUpdates);
+          }
+
+          user = {
+            ...existingUser,
+            ...profileUpdates,
+            isDeleted: false,
+            is_deleted: false,
+            deletedAt: null,
+            premiumCancelledAt: null,
+          } as User;
+
+          await UserService.resetFailedAttempts(existingUser.id);
+          logger.info({ email, userId: existingUser.id }, 'Soft-deleted account restored via email verification flow');
+        } else {
+          user = await UserService.createUser({ email, password, device, deviceId, name });
+          logger.info({ userId: user.id, email }, 'New user registered via email verification flow');
+        }
 
         // Create session
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;

@@ -3,6 +3,8 @@ import { logger } from '../utils/logger';
 
 export async function restoreSoftDeletedUser(userId: string) {
   try {
+    const nowIso = new Date().toISOString();
+
     await db
       .collection('subsc')
       .doc(userId)
@@ -12,11 +14,24 @@ export async function restoreSoftDeletedUser(userId: string) {
           is_deleted: false,
           deletedAt: null,
           premiumCancelledAt: null,
-          restoredAt: new Date().toISOString(),
+          restoredAt: nowIso,
         },
         { merge: true }
       );
-    logger.info({ userId }, 'Soft-deleted user reactivated');
+    logger.info({ userId }, 'subsc document cleared from soft-delete state during reactivation');
+
+    try {
+      const blacklistRef = db.collection('notification_blacklist').doc(userId);
+      const blacklistDoc = await blacklistRef.get();
+      if (blacklistDoc.exists) {
+        await blacklistRef.delete();
+        logger.info({ userId }, 'notification_blacklist entry removed during reactivation');
+      } else {
+        logger.debug({ userId }, 'No notification_blacklist entry found during reactivation');
+      }
+    } catch (blacklistError: unknown) {
+      logger.warn({ blacklistError, userId }, 'Failed to remove notification blacklist entry during reactivation');
+    }
   } catch (error: unknown) {
     logger.warn({ error, userId }, 'Failed to clear soft delete flags during reactivation');
   }

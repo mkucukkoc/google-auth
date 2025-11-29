@@ -333,6 +333,13 @@ export class UserService {
       },
       { merge: true }
     );
+    logger.info({ userId }, 'Password hash updated in subsc collection');
+    try {
+      await admin.auth().updateUser(userId, { password: newPassword });
+      logger.info({ userId }, 'Firebase Auth password updated');
+    } catch (error) {
+      logger.warn({ error, userId, operation: 'firebasePasswordUpdate' }, 'Failed to update Firebase Auth password');
+    }
   }
 
   /**
