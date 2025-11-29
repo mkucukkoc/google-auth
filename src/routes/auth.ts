@@ -17,6 +17,8 @@ import { cleanupDeletedAccountArtifacts, ensureFirebaseAuthUserProfile, restoreS
 
 export function createAuthRouter(): Router {
   const r = Router();
+  const isSoftDeletedUser = (user: any) =>
+    Boolean(user && (user.isDeleted === true || user.is_deleted === true));
 
   // POST /auth/register
   r.post('/register', 
@@ -588,7 +590,8 @@ export function createAuthRouter(): Router {
 
         // Check if email is already registered
         const existingUserAfterOtp = await UserService.findByEmail(email);
-        if (existingUserAfterOtp) {
+        const isSoftDeleted = isSoftDeletedUser(existingUserAfterOtp);
+        if (existingUserAfterOtp && !isSoftDeleted) {
           const isGoogleAccount = existingUserAfterOtp.provider === 'google' || (!existingUserAfterOtp.provider && !existingUserAfterOtp.passwordHash);
           const errorCode = isGoogleAccount ? 'google_account_exists' : 'email_already_registered';
           const errorMessage = isGoogleAccount
@@ -702,7 +705,8 @@ export function createAuthRouter(): Router {
 
         // Check if email is still available (double-check)
         const existingUser = await UserService.findByEmail(email);
-        if (existingUser) {
+        const isSoftDeleted = isSoftDeletedUser(existingUser);
+        if (existingUser && !isSoftDeleted) {
           const isGoogleAccount = existingUser.provider === 'google' || (!existingUser.provider && !existingUser.passwordHash);
           const errorCode = isGoogleAccount ? 'google_account_exists' : 'email_already_registered';
           const errorMessage = isGoogleAccount
