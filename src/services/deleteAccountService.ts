@@ -126,6 +126,7 @@ class DeleteAccountService {
     const start = Date.now();
     let restoreUntil: string | undefined;
     let hasActiveSubscription = false;
+    let isAnonymous = false;
 
     try {
       const authRecord = await this.safeGetAuthUser(userId);
@@ -141,7 +142,7 @@ class DeleteAccountService {
       }
 
       const appUserId = preflight.appUserId;
-      const isAnonymous = body.anonymous === true || providers.length === 0;
+      isAnonymous = body.anonymous === true || providers.length === 0;
 
       const notificationUser = this.buildNotificationUser(userId, preflight);
 
@@ -238,9 +239,10 @@ class DeleteAccountService {
         durationMs: Date.now() - start,
       };
 
+      const completedAt = new Date().toISOString();
       await jobRef.update({
         status: 'completed',
-        updatedAt: new Date().toISOString(),
+        updatedAt: completedAt,
         restoreUntil: restoreUntil || null,
         phases,
         metrics,
@@ -266,6 +268,22 @@ class DeleteAccountService {
           ? 'Aktif aboneliğiniz devam ediyor. Google Play aboneliğiniz iptal edildiğinde premium erişiminiz sonlandırılacaktır.'
           : 'Backend cleanup tamamlandı ve hesabınız Firebase Auth üzerinden kapatıldı.',
       };
+      const jobSummary = {
+        jobId,
+        userId,
+        anonymous: isAnonymous,
+        context: cleanContext,
+        reason: deleteReason,
+        initiatedFrom: body.initiatedFrom || 'user',
+        skipDataExport: body.skipDataExport ?? false,
+        status: 'completed',
+        createdAt: jobRecordBase.createdAt,
+        updatedAt: completedAt,
+        restoreUntil: restoreUntil || null,
+        metrics,
+        phases,
+      };
+      logger.info(jobSummary, 'Delete account job summary');
       logger.info({ userId, jobId, response }, 'Delete account job completed');
       return response;
     } catch (error) {

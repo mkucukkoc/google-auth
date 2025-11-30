@@ -20,6 +20,22 @@ export function createAuthRouter(): Router {
   const r = Router();
   const isSoftDeletedUser = (user: any) =>
     Boolean(user && (user.isDeleted === true || user.is_deleted === true));
+  const normalizeEmailInput = (value: any): string =>
+    typeof value === 'string' ? value.trim().toLowerCase() : '';
+  const sanitizeDocId = (value: string): string => value.replace(/\//g, '_');
+  const getRegisterOtpRef = (email: string) =>
+    db.collection('registerOtpCodes').doc(sanitizeDocId(normalizeEmailInput(email)));
+  const getPasswordResetOtpRef = (userId: string) =>
+    db.collection('passwordResetOtpCodes').doc(userId);
+  const toDateSafe = (input: any): Date => {
+    if (!input) {
+      return new Date(0);
+    }
+    if (typeof input.toDate === 'function') {
+      return input.toDate();
+    }
+    return input instanceof Date ? input : new Date(input);
+  };
 
   // POST /auth/register
   r.post('/register', 
@@ -291,34 +307,26 @@ export function createAuthRouter(): Router {
           });
         }
 
-        const recordSnap = await db
-          .collection('passwordResetOtpCodes')
-          .where('email', '==', email)
-          .get();
-
-        if (recordSnap.empty) {
+        const user = await UserService.findByEmail(email);
+        if (!user) {
           return res.status(400).json({
             error: 'invalid_reset_code',
             message: 'Invalid or expired verification code',
           });
         }
 
-        const sortedDocs = recordSnap.docs.sort((a: any, b: any) => {
-          const aTime = a.data().createdAt?.toDate
-            ? a.data().createdAt.toDate()
-            : a.data().createdAt || new Date(0);
-          const bTime = b.data().createdAt?.toDate
-            ? b.data().createdAt.toDate()
-            : b.data().createdAt || new Date(0);
-          return bTime.getTime() - aTime.getTime();
-        });
+        const otpDoc = await getPasswordResetOtpRef(user.id).get();
+        if (!otpDoc.exists) {
+          return res.status(400).json({
+            error: 'invalid_reset_code',
+            message: 'Invalid or expired verification code',
+          });
+        }
 
-        const doc = sortedDocs[0];
-        const record = doc.data() as any;
-        const expiresAt: Date =
-          record.expiresAt?.toDate?.() ?? record.expiresAt ?? new Date(0);
+        const record = otpDoc.data() as any;
+        const expiresAt = toDateSafe(record.expiresAt);
         if (expiresAt.getTime() < Date.now()) {
-          await doc.ref.delete();
+          await otpDoc.ref.delete();
           return res.status(400).json({
             error: 'invalid_reset_code',
             message: 'Verification code has expired',
@@ -333,19 +341,19 @@ export function createAuthRouter(): Router {
           });
         }
 
-        await doc.ref.delete();
+        await otpDoc.ref.delete();
 
         const resetToken = uuidv4();
         const resetTokenHash = sha256(resetToken);
         await db.collection('passwordResetTokens').add({
           email,
-          userId: record.userId,
+          userId: user.id,
           tokenHash: resetTokenHash,
           createdAt: new Date(),
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
         });
 
-        logger.info({ email, userId: record.userId }, 'Password reset token issued after code verification');
+        logger.info({ email, userId: user.id }, 'Password reset token issued after code verification');
         res.json({
           success: true,
           token: resetToken,
@@ -411,13 +419,16 @@ export function createAuthRouter(): Router {
 
         const code = (randomInt(0, 999999) + '').padStart(6, '0');
         const codeHash = sha256(code);
-        await db.collection('passwordResetOtpCodes').add({
-          email,
-          codeHash,
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-          userId: user.id,
-        });
+        await getPasswordResetOtpRef(user.id).set(
+          {
+            email,
+            codeHash,
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+            userId: user.id,
+          },
+          { merge: true }
+        );
 
         try {
           await sendOtpEmail(email, code);
@@ -825,7 +836,7 @@ export function createAuthRouter(): Router {
     authRateLimits.register,
     async (req, res) => {
       try {
-        const { email } = req.body;
+        const email = normalizeEmailInput(req.body?.email);
         if (!email) {
           return res.status(400).json({ 
             error: 'invalid_request',
@@ -863,12 +874,15 @@ export function createAuthRouter(): Router {
         // Generate and store OTP
         const code = (randomInt(0, 999999) + '').padStart(6, '0');
         const codeHash = sha256(code);
-        await db.collection('registerOtpCodes').add({ 
-          email, 
-          codeHash, 
-          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-          createdAt: new Date() 
-        });
+        await getRegisterOtpRef(email).set(
+          { 
+            email, 
+            codeHash, 
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+            createdAt: new Date() 
+          },
+          { merge: true }
+        );
 
         // Send email
         try {
@@ -897,7 +911,12 @@ export function createAuthRouter(): Router {
     authRateLimits.register,
     async (req, res) => {
       try {
-        const { email, otp, password, name, device, deviceId } = req.body;
+        const email = normalizeEmailInput(req.body?.email);
+        const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+        const password = req.body?.password;
+        const name = req.body?.name;
+        const device = req.body?.device;
+        const deviceId = req.body?.deviceId;
         
         if (!email || !otp || !password || !device || !deviceId) {
           return res.status(400).json({ 
@@ -907,30 +926,19 @@ export function createAuthRouter(): Router {
         }
 
         // Verify OTP - Get all records for email and sort in memory
-        const recordSnap = await db
-          .collection('registerOtpCodes')
-          .where('email', '==', email)
-          .get();
+        const otpDoc = await getRegisterOtpRef(email).get();
 
-        if (recordSnap.empty) {
+        if (!otpDoc.exists) {
           return res.status(400).json({ 
             error: 'invalid_otp',
             message: 'Invalid or expired verification code' 
           });
         }
 
-        // Sort by createdAt in memory and get the most recent
-        const sortedDocs = recordSnap.docs.sort((a: any, b: any) => {
-          const aTime = a.data().createdAt?.toDate ? a.data().createdAt.toDate() : (a.data().createdAt || new Date(0));
-          const bTime = b.data().createdAt?.toDate ? b.data().createdAt.toDate() : (b.data().createdAt || new Date(0));
-          return bTime.getTime() - aTime.getTime();
-        });
-
-        const doc = sortedDocs[0];
-        const record = doc.data() as any;
+        const record = otpDoc.data() as any;
         
-        if (record.expiresAt.toDate() < new Date()) {
-          await doc.ref.delete(); // Clean up expired code
+        if (toDateSafe(record.expiresAt).getTime() < Date.now()) {
+          await otpDoc.ref.delete(); // Clean up expired code
           return res.status(400).json({ 
             error: 'invalid_otp',
             message: 'Verification code has expired' 
@@ -946,7 +954,7 @@ export function createAuthRouter(): Router {
         }
 
         // Clean up the OTP code
-        await doc.ref.delete();
+        await otpDoc.ref.delete();
 
         // Check if email is still available (double-check)
         const existingUser = await UserService.findByEmail(email);
