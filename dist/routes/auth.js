@@ -11,6 +11,7 @@ const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const response_1 = require("../types/response");
 const firebase_1 = require("../firebase");
 const crypto_1 = require("crypto");
+const uuid_1 = require("uuid");
 const email_1 = require("../email");
 const redis_1 = require("../redis");
 const logger_1 = require("../utils/logger");
@@ -18,6 +19,20 @@ const config_1 = require("../config");
 const reactivationService_1 = require("../services/reactivationService");
 function createAuthRouter() {
     const r = (0, express_1.Router)();
+    const isSoftDeletedUser = (user) => Boolean(user && (user.isDeleted === true || user.is_deleted === true));
+    const normalizeEmailInput = (value) => typeof value === 'string' ? value.trim().toLowerCase() : '';
+    const sanitizeDocId = (value) => value.replace(/\//g, '_');
+    const getRegisterOtpRef = (email) => firebase_1.db.collection('registerOtpCodes').doc(sanitizeDocId(normalizeEmailInput(email)));
+    const getPasswordResetOtpRef = (userId) => firebase_1.db.collection('passwordResetOtpCodes').doc(userId);
+    const toDateSafe = (input) => {
+        if (!input) {
+            return new Date(0);
+        }
+        if (typeof input.toDate === 'function') {
+            return input.toDate();
+        }
+        return input instanceof Date ? input : new Date(input);
+    };
     // POST /auth/register
     r.post('/register', rateLimitMiddleware_1.authRateLimits.register, (0, validationMiddleware_1.validate)(validationMiddleware_1.authSchemas.register), async (req, res) => {
         try {
@@ -36,6 +51,7 @@ function createAuthRouter() {
                     : 'An account with this email already exists';
                 const wasSoftDeleted = !isGoogleAccount && (userRecord.isDeleted || userRecord.is_deleted);
                 if (wasSoftDeleted) {
+                    logger_1.logger.info({ email, userId: userRecord.id }, 'Soft-deleted account matched during registration; restoring existing user');
                     await (0, reactivationService_1.restoreSoftDeletedUser)(userRecord.id);
                     if (password) {
                         await userService_1.UserService.updatePassword(userRecord.id, password);
@@ -57,6 +73,7 @@ function createAuthRouter() {
                     };
                     existingUser = reactivatedUser;
                     await userService_1.UserService.resetFailedAttempts(userRecord.id);
+                    logger_1.logger.info({ email, userId: userRecord.id }, 'Soft-deleted account restored and ready for new session');
                     const { session, tokens } = await sessionService_1.SessionService.createSession(userRecord.id, device, deviceId, ipAddress, userAgent);
                     await auditService_1.auditService.logAuthEvent('register', {
                         userId: userRecord.id,
@@ -112,6 +129,8 @@ function createAuthRouter() {
             }
             // Create user
             const user = await userService_1.UserService.createUser({ email, password, device, deviceId, name });
+            logger_1.logger.info({ userId: user.id, email }, 'New user registered via email verification flow');
+            logger_1.logger.info({ userId: user.id, email }, 'New user registered via email/password');
             // Create session
             const { session, tokens } = await sessionService_1.SessionService.createSession(user.id, device, deviceId, ipAddress, userAgent);
             // Log successful registration
@@ -150,6 +169,207 @@ function createAuthRouter() {
         catch (error) {
             logger_1.logger.error({ err: error, email: req.body.email, operation: 'register' }, 'Registration error');
             res.status(500).json(response_1.ResponseBuilder.error('internal_error', 'Registration failed'));
+        }
+    });
+    // POST /auth/password/reset/complete
+    r.post('/password/reset/complete', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
+        try {
+            const { email: rawEmail, token, password } = req.body || {};
+            const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+            if (!email || !token || !password) {
+                return res.status(400).json({
+                    error: 'invalid_request',
+                    message: 'Email, token, and password are required',
+                });
+            }
+            const tokenHash = sha256(token);
+            const tokenSnap = await firebase_1.db
+                .collection('passwordResetTokens')
+                .where('email', '==', email)
+                .where('tokenHash', '==', tokenHash)
+                .limit(1)
+                .get();
+            if (tokenSnap.empty) {
+                return res.status(400).json({
+                    error: 'invalid_reset_token',
+                    message: 'Invalid or expired reset token',
+                });
+            }
+            const tokenDoc = tokenSnap.docs[0];
+            const tokenData = tokenDoc.data();
+            const tokenExpires = tokenData.expiresAt?.toDate?.() ?? tokenData.expiresAt ?? new Date(0);
+            if (tokenExpires.getTime() < Date.now()) {
+                await tokenDoc.ref.delete();
+                return res.status(400).json({
+                    error: 'invalid_reset_token',
+                    message: 'Reset token has expired',
+                });
+            }
+            const user = await userService_1.UserService.findByEmail(email);
+            if (!user) {
+                await tokenDoc.ref.delete();
+                return res.status(404).json({
+                    error: 'user_not_found',
+                    message: 'User not found',
+                });
+            }
+            if (isSoftDeletedUser(user)) {
+                await tokenDoc.ref.delete();
+                return res.status(423).json({
+                    error: 'account_deleted',
+                    message: 'This account has been deleted. Please register again.',
+                });
+            }
+            await userService_1.UserService.updatePassword(user.id, password);
+            await tokenDoc.ref.delete();
+            logger_1.logger.info({ userId: user.id, email }, 'Password reset completed successfully');
+            res.json({
+                success: true,
+                message: 'Password reset successful',
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Password reset completion error:', error);
+            res.status(500).json({
+                error: 'internal_error',
+                message: 'Failed to reset password',
+            });
+        }
+    });
+    // POST /auth/password/reset/verify
+    r.post('/password/reset/verify', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
+        try {
+            const rawEmail = req.body?.email;
+            const otp = req.body?.otp;
+            const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+            if (!email || !otp) {
+                return res.status(400).json({
+                    error: 'invalid_request',
+                    message: 'Email and OTP are required',
+                });
+            }
+            const user = await userService_1.UserService.findByEmail(email);
+            if (!user) {
+                return res.status(400).json({
+                    error: 'invalid_reset_code',
+                    message: 'Invalid or expired verification code',
+                });
+            }
+            const otpDoc = await getPasswordResetOtpRef(user.id).get();
+            if (!otpDoc.exists) {
+                return res.status(400).json({
+                    error: 'invalid_reset_code',
+                    message: 'Invalid or expired verification code',
+                });
+            }
+            const record = otpDoc.data();
+            const expiresAt = toDateSafe(record.expiresAt);
+            if (expiresAt.getTime() < Date.now()) {
+                await otpDoc.ref.delete();
+                return res.status(400).json({
+                    error: 'invalid_reset_code',
+                    message: 'Verification code has expired',
+                });
+            }
+            const isMatch = record.codeHash === sha256(otp);
+            if (!isMatch) {
+                return res.status(400).json({
+                    error: 'invalid_reset_code',
+                    message: 'Invalid verification code',
+                });
+            }
+            await otpDoc.ref.delete();
+            const resetToken = (0, uuid_1.v4)();
+            const resetTokenHash = sha256(resetToken);
+            await firebase_1.db.collection('passwordResetTokens').add({
+                email,
+                userId: user.id,
+                tokenHash: resetTokenHash,
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            });
+            logger_1.logger.info({ email, userId: user.id }, 'Password reset token issued after code verification');
+            res.json({
+                success: true,
+                token: resetToken,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Password reset verify error:', error);
+            res.status(500).json({
+                error: 'internal_error',
+                message: 'Failed to verify password reset code',
+            });
+        }
+    });
+    // POST /auth/password/reset/start
+    r.post('/password/reset/start', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
+        try {
+            const rawEmail = req.body?.email;
+            const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+            if (!email) {
+                return res.status(400).json({
+                    error: 'invalid_request',
+                    message: 'Email is required',
+                });
+            }
+            const user = await userService_1.UserService.findByEmail(email);
+            if (!user) {
+                return res.status(404).json({
+                    error: 'user_not_found',
+                    message: 'User not found',
+                });
+            }
+            if (isSoftDeletedUser(user)) {
+                return res.status(423).json({
+                    error: 'account_deleted',
+                    message: 'This account has been deleted. Please register again.',
+                });
+            }
+            const isGoogleAccount = user.provider === 'google' || (!user.provider && !user.passwordHash);
+            if (isGoogleAccount) {
+                return res.status(409).json({
+                    error: 'google_account_exists',
+                    message: "This email is registered with a Google account. Please use 'Sign in with Google'.",
+                });
+            }
+            const rlKey = `pwd_reset_otp:rl:${email}`;
+            const rl = (await (0, redis_1.getJson)(rlKey)) || { count: 0 };
+            if (rl.count >= 5) {
+                return res.status(429).json({
+                    error: 'rate_limited',
+                    message: 'Too many password reset attempts. Please try again later.',
+                });
+            }
+            rl.count += 1;
+            await (0, redis_1.setJson)(rlKey, rl, 600);
+            const code = ((0, crypto_1.randomInt)(0, 999999) + '').padStart(6, '0');
+            const codeHash = sha256(code);
+            await getPasswordResetOtpRef(user.id).set({
+                email,
+                codeHash,
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+                userId: user.id,
+            }, { merge: true });
+            try {
+                await (0, email_1.sendOtpEmail)(email, code);
+            }
+            catch (emailError) {
+                logger_1.logger.error('Failed to send password reset email:', emailError);
+            }
+            logger_1.logger.info({ email, userId: user.id }, 'Password reset code generated and sent');
+            res.json({
+                success: true,
+                message: 'Verification code sent to your email',
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Password reset start error:', error);
+            res.status(500).json({
+                error: 'internal_error',
+                message: 'Failed to send password reset code',
+            });
         }
     });
     // POST /auth/login
@@ -455,7 +675,7 @@ function createAuthRouter() {
     // POST /auth/register/email/start - Send verification code for registration
     r.post('/register/email/start', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
         try {
-            const { email } = req.body;
+            const email = normalizeEmailInput(req.body?.email);
             if (!email) {
                 return res.status(400).json({
                     error: 'invalid_request',
@@ -464,7 +684,8 @@ function createAuthRouter() {
             }
             // Check if email is already registered
             const existingUserAfterOtp = await userService_1.UserService.findByEmail(email);
-            if (existingUserAfterOtp) {
+            const isSoftDeleted = isSoftDeletedUser(existingUserAfterOtp);
+            if (existingUserAfterOtp && !isSoftDeleted) {
                 const isGoogleAccount = existingUserAfterOtp.provider === 'google' || (!existingUserAfterOtp.provider && !existingUserAfterOtp.passwordHash);
                 const errorCode = isGoogleAccount ? 'google_account_exists' : 'email_already_registered';
                 const errorMessage = isGoogleAccount
@@ -489,12 +710,12 @@ function createAuthRouter() {
             // Generate and store OTP
             const code = ((0, crypto_1.randomInt)(0, 999999) + '').padStart(6, '0');
             const codeHash = sha256(code);
-            await firebase_1.db.collection('registerOtpCodes').add({
+            await getRegisterOtpRef(email).set({
                 email,
                 codeHash,
                 expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
                 createdAt: new Date()
-            });
+            }, { merge: true });
             // Send email
             try {
                 await (0, email_1.sendOtpEmail)(email, code);
@@ -519,7 +740,12 @@ function createAuthRouter() {
     // POST /auth/register/email/verify - Verify code and complete registration
     r.post('/register/email/verify', rateLimitMiddleware_1.authRateLimits.register, async (req, res) => {
         try {
-            const { email, otp, password, name, device, deviceId } = req.body;
+            const email = normalizeEmailInput(req.body?.email);
+            const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : '';
+            const password = req.body?.password;
+            const name = req.body?.name;
+            const device = req.body?.device;
+            const deviceId = req.body?.deviceId;
             if (!email || !otp || !password || !device || !deviceId) {
                 return res.status(400).json({
                     error: 'invalid_request',
@@ -527,26 +753,16 @@ function createAuthRouter() {
                 });
             }
             // Verify OTP - Get all records for email and sort in memory
-            const recordSnap = await firebase_1.db
-                .collection('registerOtpCodes')
-                .where('email', '==', email)
-                .get();
-            if (recordSnap.empty) {
+            const otpDoc = await getRegisterOtpRef(email).get();
+            if (!otpDoc.exists) {
                 return res.status(400).json({
                     error: 'invalid_otp',
                     message: 'Invalid or expired verification code'
                 });
             }
-            // Sort by createdAt in memory and get the most recent
-            const sortedDocs = recordSnap.docs.sort((a, b) => {
-                const aTime = a.data().createdAt?.toDate ? a.data().createdAt.toDate() : (a.data().createdAt || new Date(0));
-                const bTime = b.data().createdAt?.toDate ? b.data().createdAt.toDate() : (b.data().createdAt || new Date(0));
-                return bTime.getTime() - aTime.getTime();
-            });
-            const doc = sortedDocs[0];
-            const record = doc.data();
-            if (record.expiresAt.toDate() < new Date()) {
-                await doc.ref.delete(); // Clean up expired code
+            const record = otpDoc.data();
+            if (toDateSafe(record.expiresAt).getTime() < Date.now()) {
+                await otpDoc.ref.delete(); // Clean up expired code
                 return res.status(400).json({
                     error: 'invalid_otp',
                     message: 'Verification code has expired'
@@ -560,22 +776,52 @@ function createAuthRouter() {
                 });
             }
             // Clean up the OTP code
-            await doc.ref.delete();
+            await otpDoc.ref.delete();
             // Check if email is still available (double-check)
             const existingUser = await userService_1.UserService.findByEmail(email);
+            const isSoftDeleted = isSoftDeletedUser(existingUser);
+            let user;
             if (existingUser) {
                 const isGoogleAccount = existingUser.provider === 'google' || (!existingUser.provider && !existingUser.passwordHash);
-                const errorCode = isGoogleAccount ? 'google_account_exists' : 'email_already_registered';
-                const errorMessage = isGoogleAccount
-                    ? "Bu e-posta Google hesabı ile kayıtlı, lütfen 'Google ile giriş yap' seçeneğini kullanın."
-                    : 'An account with this email already exists';
-                return res.status(409).json({
-                    error: errorCode,
-                    message: errorMessage
-                });
+                if (isGoogleAccount) {
+                    return res.status(409).json({
+                        error: 'google_account_exists',
+                        message: "Bu e-posta Google hesabı ile kayıtlı, lütfen 'Google ile giriş yap' seçeneğini kullanın.",
+                    });
+                }
+                if (!isSoftDeleted) {
+                    return res.status(409).json({
+                        error: 'email_already_registered',
+                        message: 'An account with this email already exists',
+                    });
+                }
+                logger_1.logger.info({ email, userId: existingUser.id }, 'Soft-deleted account matched during email verification; restoring existing user');
+                await (0, reactivationService_1.restoreSoftDeletedUser)(existingUser.id);
+                if (password) {
+                    await userService_1.UserService.updatePassword(existingUser.id, password);
+                }
+                const profileUpdates = {};
+                if (name && name !== existingUser.name) {
+                    profileUpdates.name = name;
+                }
+                if (Object.keys(profileUpdates).length > 0) {
+                    await userService_1.UserService.updateUser(existingUser.id, profileUpdates);
+                }
+                user = {
+                    ...existingUser,
+                    ...profileUpdates,
+                    isDeleted: false,
+                    is_deleted: false,
+                    deletedAt: null,
+                    premiumCancelledAt: null,
+                };
+                await userService_1.UserService.resetFailedAttempts(existingUser.id);
+                logger_1.logger.info({ email, userId: existingUser.id }, 'Soft-deleted account restored via email verification flow');
             }
-            // Create user
-            const user = await userService_1.UserService.createUser({ email, password, device, deviceId, name });
+            else {
+                user = await userService_1.UserService.createUser({ email, password, device, deviceId, name });
+                logger_1.logger.info({ userId: user.id, email }, 'New user registered via email verification flow');
+            }
             // Create session
             const ipAddress = req.ip || req.connection?.remoteAddress;
             const userAgent = req.get('User-Agent');

@@ -7,6 +7,7 @@ const firebase_1 = require("../firebase");
 const logger_1 = require("../utils/logger");
 async function restoreSoftDeletedUser(userId) {
     try {
+        const nowIso = new Date().toISOString();
         await firebase_1.db
             .collection('subsc')
             .doc(userId)
@@ -15,9 +16,23 @@ async function restoreSoftDeletedUser(userId) {
             is_deleted: false,
             deletedAt: null,
             premiumCancelledAt: null,
-            restoredAt: new Date().toISOString(),
+            restoredAt: nowIso,
         }, { merge: true });
-        logger_1.logger.info({ userId }, 'Soft-deleted user reactivated');
+        logger_1.logger.info({ userId }, 'subsc document cleared from soft-delete state during reactivation');
+        try {
+            const blacklistRef = firebase_1.db.collection('notification_blacklist').doc(userId);
+            const blacklistDoc = await blacklistRef.get();
+            if (blacklistDoc.exists) {
+                await blacklistRef.delete();
+                logger_1.logger.info({ userId }, 'notification_blacklist entry removed during reactivation');
+            }
+            else {
+                logger_1.logger.debug({ userId }, 'No notification_blacklist entry found during reactivation');
+            }
+        }
+        catch (blacklistError) {
+            logger_1.logger.warn({ blacklistError, userId }, 'Failed to remove notification blacklist entry during reactivation');
+        }
     }
     catch (error) {
         logger_1.logger.warn({ error, userId }, 'Failed to clear soft delete flags during reactivation');
