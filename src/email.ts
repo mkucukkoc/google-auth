@@ -22,22 +22,22 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
     const mailOptions = {
       from,
       to,
-      subject: 'Avenia - Email Doğrulama Kodu',
+      subject: 'Avenia - Email Verification Code',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #00c896;">Avenia Email Doğrulama</h2>
-          <p>Merhaba,</p>
-          <p>Hesabınızı doğrulamak için aşağıdaki kodu kullanın:</p>
+          <h2 style="color: #00c896;">Avenia Email Verification</h2>
+          <p>Hello,</p>
+          <p>Please use the code below to verify your account:</p>
           <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
             <h1 style="color: #00c896; font-size: 32px; margin: 0; letter-spacing: 5px;">${code}</h1>
           </div>
-          <p>Bu kod 10 dakika geçerlidir.</p>
-          <p>Eğer bu işlemi siz yapmadıysanız, bu emaili görmezden gelebilirsiniz.</p>
+          <p>This code is valid for 10 minutes.</p>
+          <p>If you did not request this, you can safely ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">Bu email Avenia uygulaması tarafından gönderilmiştir.</p>
+          <p style="color: #666; font-size: 12px;">This email was sent by the Avenia app.</p>
         </div>
       `,
-      text: `Avenia Email Doğrulama Kodu: ${code}\n\nBu kod 10 dakika geçerlidir.`
+      text: `Avenia Email Verification Code: ${code}\n\nThis code is valid for 10 minutes.`
     };
 
     await transporter.sendMail(mailOptions);

@@ -99,6 +99,7 @@ export const config = {
     rateLimitWindowSeconds: Number(process.env.DELETE_RATE_WINDOW_SECONDS || 600),
     rateLimitMaxRequests: Number(process.env.DELETE_RATE_MAX_REQUESTS || 2),
     telemetryEnabled: process.env.DELETE_TELEMETRY_ENABLED !== 'false',
+    completionEmailDelayMs: Number(process.env.DELETE_COMPLETION_EMAIL_DELAY_MS || 5 * 60 * 1000),
     dataExportEnabled: (() => {
       const envValue = process.env.DELETE_DATA_EXPORT_ENABLED;
       // Default: enabled (true) if not set

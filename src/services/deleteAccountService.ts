@@ -252,7 +252,7 @@ class DeleteAccountService {
         `[${new Date().toISOString()}] DELETE_ACCOUNT_COMPLETED uid:${userId} job:${jobId} reason:${deleteReason}`
       );
 
-      await notificationService.sendDeleteAccountCompleted(notificationUser);
+      this.scheduleCompletionNotification(notificationUser);
 
       await auditService.logUserAction(userId, 'delete_account_completed', {
         jobId,
@@ -884,6 +884,21 @@ class DeleteAccountService {
     } catch (error) {
       logger.warn({ err: error, userId }, 'Failed to fetch Firebase auth user');
       return null;
+    }
+  }
+  private scheduleCompletionNotification(user: DeleteNotificationUser) {
+    const delayMs = config.deleteAccount.completionEmailDelayMs || 300000;
+    logger.info({ userId: user.id, delayMs }, 'Scheduling delete account completion notification');
+    const timer = setTimeout(async () => {
+      try {
+        await notificationService.sendDeleteAccountCompleted(user);
+        logger.info({ userId: user.id }, 'Delayed delete account completion notification sent');
+      } catch (error) {
+        logger.error({ err: error, userId: user.id }, 'Failed to send delayed delete account completion notification');
+      }
+    }, delayMs);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
     }
   }
 }
