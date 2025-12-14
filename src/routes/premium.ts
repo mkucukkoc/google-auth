@@ -18,6 +18,10 @@ export function createPremiumRouter(): Router {
   const router = Router();
   attachRouteLogger(router, 'premium');
 
+  const logStep = (step: string, data: Record<string, unknown>) => {
+    logger.info({ step, ...data }, '[PremiumRoute]');
+  };
+
   router.post(
     '/customer-info',
     authenticateToken,
@@ -25,23 +29,31 @@ export function createPremiumRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as AuthRequest;
       if (!authReq.user) {
+        logStep('customer_info_unauthorized', { path: '/customer-info' });
         return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
       }
 
-      logger.info(
-        {
-          userId: authReq.user.id,
-          source: req.body?.source,
-          platform: req.body?.platform,
-        },
-        'Premium customer-info sync request'
-      );
+      logStep('customer_info_request', {
+        userId: authReq.user.id,
+        payloadSource: req.body?.source,
+        payloadPlatform: req.body?.platform,
+      });
 
       try {
         const result = await premiumService.syncFromCustomerInfo(authReq.user.id, req.body);
-        logger.info({ userId: authReq.user.id, premium: result.premium }, 'Premium customer-info sync success');
-        return res.json(ResponseBuilder.success(result, 'Premium bilgileri güncellendi'));
+        logStep('customer_info_success', {
+          userId: authReq.user.id,
+          premium: result.premium,
+          payloadKeys: Object.keys(req.body ?? {}),
+        });
+        const responsePayload = ResponseBuilder.success(result, 'Premium bilgileri güncellendi');
+        logStep('customer_info_response', { userId: authReq.user.id, response: responsePayload });
+        return res.json(responsePayload);
       } catch (error) {
+        logStep('customer_info_error', {
+          userId: authReq.user.id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
         return handlePremiumError(res, error);
       }
     }
@@ -54,6 +66,7 @@ export function createPremiumRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as AuthRequest;
       if (!authReq.user) {
+        logStep('restore_unauthorized', { path: '/restore' });
         return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
       }
 
@@ -66,15 +79,21 @@ export function createPremiumRouter(): Router {
       const source = req.body?.source;
 
       if (!requestedEmail) {
+        logStep('restore_missing_email', {
+          userId: authReq.user.id,
+          bodyKeys: Object.keys(req.body ?? {}),
+        });
         return res
           .status(400)
           .json(ResponseBuilder.error('EMAIL_REQUIRED', 'Premium restore işlemi için e-posta gereklidir'));
       }
-
-      logger.info(
-        { userId: authReq.user.id, appUserId: requestedEmail, platform },
-        'Premium restore request (email identity)'
-      );
+      logStep('restore_request', {
+        userId: authReq.user.id,
+        requestedEmail,
+        platform,
+        source,
+        hasOldAppUserId: Boolean(req.body?.oldAppUserId),
+      });
 
       try {
         if (req.body?.oldAppUserId) {
@@ -85,18 +104,22 @@ export function createPremiumRouter(): Router {
             requestId,
             platform,
           });
-          logger.info(
-            { userId: authReq.user.id, appUserId: requestedEmail, premium: restoreResult.premium },
-            'Premium transfer restore success'
+          logStep('restore_transfer_success', {
+            userId: authReq.user.id,
+            requestedEmail,
+            premium: restoreResult.premium,
+          });
+          const responsePayload = ResponseBuilder.success(
+            restoreResult,
+            restoreResult.premium
+              ? 'Satın almalarınız yeni hesabınıza taşındı'
+              : 'Aktif abonelik bulunamadı'
           );
-          return res.json(
-            ResponseBuilder.success(
-              restoreResult,
-              restoreResult.premium
-                ? 'Satın almalarınız yeni hesabınıza taşındı'
-                : 'Aktif abonelik bulunamadı'
-            )
-          );
+          logStep('restore_response', {
+            userId: authReq.user.id,
+            responseStatus: restoreResult.premium ? 'premium_restored' : 'premium_not_found',
+          });
+          return res.json(responsePayload);
         }
 
         const result = await premiumService.restoreFromRevenueCat(authReq.user.id, {
@@ -104,17 +127,26 @@ export function createPremiumRouter(): Router {
           requestId,
           source: source || 'restore_endpoint',
         });
-        logger.info(
-          { userId: authReq.user.id, appUserId: requestedEmail, premium: result.premium },
-          'Premium restore success'
+        logStep('restore_revenuecat_success', {
+          userId: authReq.user.id,
+          requestedEmail,
+          premium: result.premium,
+        });
+        const responsePayload = ResponseBuilder.success(
+          result,
+          result.premium ? 'Satın almalarınız geri yüklendi' : 'Aktif abonelik bulunamadı'
         );
-        return res.json(
-          ResponseBuilder.success(
-            result,
-            result.premium ? 'Satın almalarınız geri yüklendi' : 'Aktif abonelik bulunamadı'
-          )
-        );
+        logStep('restore_response', {
+          userId: authReq.user.id,
+          responseStatus: result.premium ? 'premium_restored' : 'premium_not_found',
+        });
+        return res.json(responsePayload);
       } catch (error) {
+        logStep('restore_error', {
+          userId: authReq.user.id,
+          requestedEmail,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
         return handlePremiumError(res, error);
       }
     }
@@ -127,10 +159,14 @@ export function createPremiumRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as AuthRequest;
       if (!authReq.user) {
+        logStep('sync_unauthorized', { path: '/sync' });
         return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
       }
 
-      logger.info({ userId: authReq.user.id }, 'Premium manual sync request');
+      logStep('sync_request', {
+        userId: authReq.user.id,
+        payloadKeys: Object.keys(req.body ?? {}),
+      });
 
       try {
         const requestedEmail =
@@ -143,9 +179,22 @@ export function createPremiumRouter(): Router {
           requestId: req.body?.requestId,
           source: req.body?.source,
         });
-        logger.info({ userId: authReq.user.id, premium: result.premium }, 'Premium manual sync success');
-        return res.json(ResponseBuilder.success(result, 'Premium bilgileri RevenueCat ile senkronize edildi'));
+        logStep('sync_success', {
+          userId: authReq.user.id,
+          premium: result.premium,
+          requestedEmail,
+        });
+        const responsePayload = ResponseBuilder.success(
+          result,
+          'Premium bilgileri RevenueCat ile senkronize edildi'
+        );
+        logStep('sync_response', { userId: authReq.user.id });
+        return res.json(responsePayload);
       } catch (error) {
+        logStep('sync_error', {
+          userId: authReq.user.id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
         return handlePremiumError(res, error);
       }
     }
@@ -154,17 +203,29 @@ export function createPremiumRouter(): Router {
   router.get('/status', authenticateToken, async (req: Request, res: Response) => {
     const authReq = req as AuthRequest;
     if (!authReq.user) {
+      logStep('status_unauthorized', { path: '/status' });
       return res.status(401).json(ResponseBuilder.error('unauthorized', 'Authentication required'));
     }
 
     try {
       const status = await premiumService.getStatus(authReq.user.id);
       if (!status) {
+        logStep('status_not_found', { userId: authReq.user.id });
         return res.status(404).json(ResponseBuilder.error('NOT_FOUND', 'Premium kaydı bulunamadı'));
       }
-      return res.json(ResponseBuilder.success(status));
+      logStep('status_success', {
+        userId: authReq.user.id,
+        premium: status?.premium,
+        expiresAt: status?.premiumExpiresAt,
+      });
+      const responsePayload = ResponseBuilder.success(status);
+      logStep('status_response', { userId: authReq.user.id });
+      return res.json(responsePayload);
     } catch (error) {
-      logger.error({ err: error, userId: authReq.user.id }, 'Failed to fetch premium status');
+      logStep('status_error', {
+        userId: authReq.user.id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       return res.status(500).json(ResponseBuilder.error('PREMIUM_STATUS_FAILED', 'Premium durumu alınamadı'));
     }
   });
