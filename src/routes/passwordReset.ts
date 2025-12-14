@@ -4,9 +4,11 @@ import { validate, authSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 export function createPasswordResetRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'passwordReset');
 
   // POST /auth/password-reset/request
   r.post('/request',
@@ -17,18 +19,22 @@ export function createPasswordResetRouter(): Router {
         const { email } = req.body;
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
         const userAgent = (req as any).get('User-Agent');
+        logger.info('[PasswordReset] request received', { email, ipAddress, hasUserAgent: !!userAgent });
 
         const result = await PasswordResetService.generateResetToken(
           email,
           ipAddress,
           userAgent
         );
+        logger.debug('[PasswordReset] token generation result', { email, resultExists: !!result });
 
         // Always return success to prevent email enumeration
-        res.json({
+        const responsePayload = {
           message: 'If the email exists, a password reset link has been sent',
           expiresIn: result ? result.expiresAt.toISOString() : null,
-        });
+        };
+        logger.info('[PasswordReset] response sent', responsePayload);
+        res.json(responsePayload);
 
         // TODO: Send email with reset link
         // if (result) {
@@ -53,6 +59,7 @@ export function createPasswordResetRouter(): Router {
         const { token, password } = req.body;
         const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
         const userAgent = (req as any).get('User-Agent');
+        logger.info('[PasswordReset] confirm invoked', { tokenPresent: !!token, ipAddress, hasUserAgent: !!userAgent });
 
         const success = await PasswordResetService.verifyAndConsumeToken(
           token,
@@ -60,6 +67,7 @@ export function createPasswordResetRouter(): Router {
           ipAddress,
           userAgent
         );
+        logger.debug('[PasswordReset] verify result', { success });
 
         if (!success) {
           await auditService.logAuthEvent('password_reset_confirm', {
@@ -75,9 +83,11 @@ export function createPasswordResetRouter(): Router {
           });
         }
 
-        res.json({
+        const responsePayload = {
           message: 'Password has been reset successfully. Please log in with your new password.',
-        });
+        };
+        logger.info('[PasswordReset] confirm success response sent', responsePayload);
+        res.json(responsePayload);
       } catch (error) {
         logger.error({ err: error, operation: 'passwordResetConfirm' }, 'Password reset confirm error');
         res.status(500).json({

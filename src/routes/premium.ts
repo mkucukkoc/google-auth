@@ -4,6 +4,7 @@ import { validate, premiumSchemas } from '../middleware/validationMiddleware';
 import { ResponseBuilder } from '../types/response';
 import { premiumService, PremiumServiceError } from '../services/premiumService';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 const normalizeEmail = (val: any): string | null => {
   if (!val || typeof val !== 'string') {
@@ -15,6 +16,7 @@ const normalizeEmail = (val: any): string | null => {
 
 export function createPremiumRouter(): Router {
   const router = Router();
+  attachRouteLogger(router, 'premium');
 
   router.post(
     '/customer-info',

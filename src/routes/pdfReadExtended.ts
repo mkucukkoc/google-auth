@@ -7,6 +7,7 @@ import { validate, pdfReadSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 // Multer configuration for file uploads
 const upload = multer({
@@ -37,6 +38,7 @@ const upload = multer({
 
 export function createPDFReadExtendedRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'pdfReadExtended');
 
   // POST /pdfread/generate/doc
   r.post('/generate/doc',

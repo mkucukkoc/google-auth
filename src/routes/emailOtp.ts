@@ -5,44 +5,81 @@ import { getJson, setJson } from '../redis';
 import { config } from '../config';
 import { TokenService } from '../services/tokenService';
 import { db } from '../firebase';
+import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 export function createEmailOtpRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'emailOtp');
 
   r.post('/start', async (req, res) => {
     const { email } = req.body || {};
-    if (!email) return res.status(400).json({ error: 'invalid_request' });
+    logEmailOtp('start_request_received', { route: '/start', emailPresent: !!email });
+    if (!email) {
+      logEmailOtp('start_missing_email');
+      return res.status(400).json({ error: 'invalid_request' });
+    }
     const key = `otp:rl:${email}`;
     const rl = (await getJson<{ count: number }>(key)) || { count: 0 };
-    if (rl.count >= 5) return res.status(429).json({ error: 'rate_limited' });
+    logEmailOtp('start_rate_limit_status', { count: rl.count });
+    if (rl.count >= 5) {
+      logEmailOtp('start_rate_limited', { email });
+      return res.status(429).json({ error: 'rate_limited' });
+    }
     rl.count += 1;
     await setJson(key, rl, 600);
+    logEmailOtp('start_rate_limit_incremented', { count: rl.count });
 
     const code = (randomInt(0, 999999) + '').padStart(6, '0');
     const codeHash = sha256(code);
+    logEmailOtp('start_code_generated', { email });
     await db.collection('otpCodes').add({ email, codeHash, expiresAt: new Date(Date.now() + 10 * 60 * 1000), createdAt: new Date() });
+    logEmailOtp('start_code_persisted', { email });
     try {
       await sendOtpEmail(email, code);
-    } catch {}
+      logEmailOtp('start_email_sent', { email });
+    } catch (error) {
+      logEmailOtp('start_email_failed', { email, error: (error as Error)?.message });
+    }
+    logEmailOtp('start_response_ready', { email });
     return res.json({ ok: true });
   });
 
   r.post('/verify', async (req, res) => {
     const { email, otp, device_id, device_name } = req.body || {};
-    if (!email || !otp || !device_id) return res.status(400).json({ error: 'invalid_request' });
+    logEmailOtp('verify_request_received', {
+      emailPresent: !!email,
+      otpPresent: !!otp,
+      deviceIdPresent: !!device_id,
+    });
+    if (!email || !otp || !device_id) {
+      logEmailOtp('verify_missing_fields');
+      return res.status(400).json({ error: 'invalid_request' });
+    }
     const recordSnap = await db
       .collection('otpCodes')
       .where('email', '==', email)
       .orderBy('createdAt', 'desc')
       .limit(1)
       .get();
-    if (recordSnap.empty) return res.status(400).json({ error: 'invalid_otp' });
+    logEmailOtp('verify_code_lookup_complete', { found: !recordSnap.empty });
+    if (recordSnap.empty) {
+      logEmailOtp('verify_code_not_found', { email });
+      return res.status(400).json({ error: 'invalid_otp' });
+    }
     const doc = recordSnap.docs[0];
     const record = doc.data() as any;
-    if (record.expiresAt.toDate() < new Date()) return res.status(400).json({ error: 'invalid_otp' });
+    if (record.expiresAt.toDate() < new Date()) {
+      logEmailOtp('verify_code_expired', { email });
+      return res.status(400).json({ error: 'invalid_otp' });
+    }
     const isMatch = record.codeHash === sha256(otp);
-    if (!isMatch) return res.status(400).json({ error: 'invalid_otp' });
+    if (!isMatch) {
+      logEmailOtp('verify_code_mismatch', { email });
+      return res.status(400).json({ error: 'invalid_otp' });
+    }
     await doc.ref.delete();
+    logEmailOtp('verify_code_consumed', { email });
 
     // upsert user
     let userId: string;
@@ -51,8 +88,10 @@ export function createEmailOtpRouter(): Router {
       const userRef = db.collection('users').doc();
       await userRef.set({ email, isEmailVerified: true, createdAt: new Date() });
       userId = userRef.id;
+      logEmailOtp('verify_user_created', { userId, email });
     } else {
       userId = userSnap.docs[0].id;
+      logEmailOtp('verify_user_found', { userId, email });
     }
 
     // upsert device
@@ -67,8 +106,10 @@ export function createEmailOtpRouter(): Router {
       const deviceRef = db.collection('devices').doc();
       await deviceRef.set({ userId, deviceId: device_id, deviceName: device_name || 'rn-client', createdAt: new Date() });
       deviceId = deviceRef.id;
+      logEmailOtp('verify_device_created', { userId, deviceId });
     } else {
       deviceId = deviceSnap.docs[0].id;
+      logEmailOtp('verify_device_found', { userId, deviceId });
     }
 
     const rawRefresh = base64url(Buffer.from(randomInt(0, 2 ** 31 - 1).toString()));
@@ -80,7 +121,9 @@ export function createEmailOtpRouter(): Router {
       expiresAt: addDays(new Date(), config.refreshTtlDays),
       createdAt: new Date(),
     });
+    logEmailOtp('verify_refresh_token_created', { refreshTokenId: refreshRef.id });
     const access = await TokenService.createAccessToken(userId, 'email-otp-session');
+    logEmailOtp('verify_access_token_created', { userId });
     return res.json({
       access_token: access,
       refresh_token: rawRefresh,
@@ -90,6 +133,10 @@ export function createEmailOtpRouter(): Router {
   });
 
   return r;
+}
+
+function logEmailOtp(step: string, data: Record<string, unknown> = {}) {
+  logger.info({ step, ...data }, '[EmailOtp]');
 }
 
 function sha256(input: string): string {

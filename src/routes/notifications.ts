@@ -4,8 +4,10 @@ import { pushNotificationService } from '../services/pushNotificationService';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { validate } from '../middleware/validationMiddleware';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 const router = Router();
+attachRouteLogger(router, 'notifications');
 
 // Validation schemas
 const saveTokenSchema = z.object({

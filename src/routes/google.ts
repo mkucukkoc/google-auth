@@ -13,9 +13,11 @@ import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { admin } from '../firebase';
 import { logger } from '../utils/logger';
 import { cleanupDeletedAccountArtifacts, ensureFirebaseAuthUserProfile, restoreSoftDeletedUser } from '../services/reactivationService';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 export function createGoogleAuthRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'googleAuth');
 
   r.post(
     '/start',

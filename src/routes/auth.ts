@@ -13,11 +13,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { sendOtpEmail } from '../email';
 import { getJson, setJson } from '../redis';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 import { config } from '../config';
 import { cleanupDeletedAccountArtifacts, ensureFirebaseAuthUserProfile, restoreSoftDeletedUser } from '../services/reactivationService';
 
 export function createAuthRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'auth');
   const isSoftDeletedUser = (user: any) =>
     Boolean(user && (user.isDeleted === true || user.is_deleted === true));
   const normalizeEmailInput = (value: any): string =>

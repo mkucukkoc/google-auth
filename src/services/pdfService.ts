@@ -242,7 +242,7 @@ export class PDFService {
             content: `Bu PDF dosyasının içeriğini özetle:\n\n${truncatedText}`
           }
         ],
-        max_tokens: Number(process.env.PDF_SUMMARY_MAX_TOKENS || 600),
+        max_completion_tokens: Number(process.env.PDF_SUMMARY_MAX_TOKENS || 600),
         temperature: Number(process.env.PDF_SUMMARY_TEMPERATURE || 0.5)
       }, {
         headers: {

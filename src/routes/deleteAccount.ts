@@ -7,10 +7,12 @@ import { dataExportService } from '../services/dataExportService';
 import { DeleteAccountRequestBody } from '../types/deleteAccount';
 import { ResponseBuilder } from '../types/response';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 import { config } from '../config';
 
 export function createDeleteAccountRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'deleteAccount');
 
   r.post(
     '/',

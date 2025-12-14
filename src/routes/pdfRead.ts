@@ -6,6 +6,7 @@ import { validate, pdfReadSchemas } from '../middleware/validationMiddleware';
 import { authRateLimits } from '../middleware/rateLimitMiddleware';
 import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 // Multer configuration for file uploads
 const upload = multer({
@@ -35,6 +36,7 @@ const upload = multer({
 
 export function createPDFReadRouter(): Router {
   const r = Router();
+  attachRouteLogger(r, 'pdfRead');
 
   // removed: /pdfread/summarize (handled by pdf-read service)
 
@@ -48,7 +50,13 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('detect_ai_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+        });
         if (!req.file) {
+          logPdfRoute('detect_ai_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -60,6 +68,7 @@ export function createPDFReadRouter(): Router {
           req.file.originalname,
           req.file.mimetype
         );
+        logPdfRoute('detect_ai_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -74,11 +83,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('detect_ai_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('detect_ai_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('detect_ai_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'aiDetection' }, 'AI detection error');
         res.status(500).json({
           error: 'internal_error',
@@ -98,7 +110,14 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('pdf_to_word_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+          mimeType: req.file?.mimetype,
+        });
         if (!req.file) {
+          logPdfRoute('pdf_to_word_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -106,6 +125,7 @@ export function createPDFReadRouter(): Router {
         }
 
         if (req.file.mimetype !== 'application/pdf') {
+          logPdfRoute('pdf_to_word_invalid_mime', { userId: authReq.user?.id, mimeType: req.file.mimetype });
           return res.status(400).json({
             error: 'invalid_file_type',
             message: 'Only PDF files are allowed for this conversion'
@@ -116,6 +136,7 @@ export function createPDFReadRouter(): Router {
           req.file.buffer,
           req.file.originalname
         );
+        logPdfRoute('pdf_to_word_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -129,11 +150,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('pdf_to_word_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('pdf_to_word_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('pdf_to_word_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'pdfToWord' }, 'PDF to Word error');
         res.status(500).json({
           error: 'internal_error',
@@ -151,7 +175,14 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('pdf_to_excel_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+          mimeType: req.file?.mimetype,
+        });
         if (!req.file) {
+          logPdfRoute('pdf_to_excel_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -159,6 +190,7 @@ export function createPDFReadRouter(): Router {
         }
 
         if (req.file.mimetype !== 'application/pdf') {
+          logPdfRoute('pdf_to_excel_invalid_mime', { userId: authReq.user?.id, mimeType: req.file.mimetype });
           return res.status(400).json({
             error: 'invalid_file_type',
             message: 'Only PDF files are allowed for this conversion'
@@ -169,6 +201,7 @@ export function createPDFReadRouter(): Router {
           req.file.buffer,
           req.file.originalname
         );
+        logPdfRoute('pdf_to_excel_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -182,11 +215,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('pdf_to_excel_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('pdf_to_excel_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('pdf_to_excel_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'pdfToExcel' }, 'PDF to Excel error');
         res.status(500).json({
           error: 'internal_error',
@@ -204,7 +240,14 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('pdf_to_ppt_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+          mimeType: req.file?.mimetype,
+        });
         if (!req.file) {
+          logPdfRoute('pdf_to_ppt_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -212,6 +255,7 @@ export function createPDFReadRouter(): Router {
         }
 
         if (req.file.mimetype !== 'application/pdf') {
+          logPdfRoute('pdf_to_ppt_invalid_mime', { userId: authReq.user?.id, mimeType: req.file.mimetype });
           return res.status(400).json({
             error: 'invalid_file_type',
             message: 'Only PDF files are allowed for this conversion'
@@ -222,6 +266,7 @@ export function createPDFReadRouter(): Router {
           req.file.buffer,
           req.file.originalname
         );
+        logPdfRoute('pdf_to_ppt_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -235,11 +280,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('pdf_to_ppt_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('pdf_to_ppt_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('pdf_to_ppt_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'pdfToPPT' }, 'PDF to PPT error');
         res.status(500).json({
           error: 'internal_error',
@@ -257,7 +305,14 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('word_to_pdf_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+          mimeType: req.file?.mimetype,
+        });
         if (!req.file) {
+          logPdfRoute('word_to_pdf_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -265,6 +320,7 @@ export function createPDFReadRouter(): Router {
         }
 
         if (req.file.mimetype !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+          logPdfRoute('word_to_pdf_invalid_mime', { userId: authReq.user?.id, mimeType: req.file.mimetype });
           return res.status(400).json({
             error: 'invalid_file_type',
             message: 'Only Word files are allowed for this conversion'
@@ -275,6 +331,7 @@ export function createPDFReadRouter(): Router {
           req.file.buffer,
           req.file.originalname
         );
+        logPdfRoute('word_to_pdf_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -288,11 +345,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('word_to_pdf_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('word_to_pdf_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('word_to_pdf_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'wordToPDF' }, 'Word to PDF error');
         res.status(500).json({
           error: 'internal_error',
@@ -310,7 +370,14 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('excel_to_pdf_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+          mimeType: req.file?.mimetype,
+        });
         if (!req.file) {
+          logPdfRoute('excel_to_pdf_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -318,6 +385,7 @@ export function createPDFReadRouter(): Router {
         }
 
         if (req.file.mimetype !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+          logPdfRoute('excel_to_pdf_invalid_mime', { userId: authReq.user?.id, mimeType: req.file.mimetype });
           return res.status(400).json({
             error: 'invalid_file_type',
             message: 'Only Excel files are allowed for this conversion'
@@ -328,6 +396,7 @@ export function createPDFReadRouter(): Router {
           req.file.buffer,
           req.file.originalname
         );
+        logPdfRoute('excel_to_pdf_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -341,11 +410,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('excel_to_pdf_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('excel_to_pdf_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('excel_to_pdf_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'excelToPDF' }, 'Excel to PDF error');
         res.status(500).json({
           error: 'internal_error',
@@ -363,7 +435,14 @@ export function createPDFReadRouter(): Router {
     async (req: Request, res: Response) => {
       const authReq = req as unknown as AuthRequest;
       try {
+        logPdfRoute('ppt_to_pdf_request_received', {
+          userId: authReq.user?.id,
+          hasFile: !!req.file,
+          fileName: req.file?.originalname,
+          mimeType: req.file?.mimetype,
+        });
         if (!req.file) {
+          logPdfRoute('ppt_to_pdf_missing_file', { userId: authReq.user?.id });
           return res.status(400).json({
             error: 'no_file',
             message: 'No file uploaded'
@@ -371,6 +450,7 @@ export function createPDFReadRouter(): Router {
         }
 
         if (req.file.mimetype !== 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+          logPdfRoute('ppt_to_pdf_invalid_mime', { userId: authReq.user?.id, mimeType: req.file.mimetype });
           return res.status(400).json({
             error: 'invalid_file_type',
             message: 'Only PowerPoint files are allowed for this conversion'
@@ -381,6 +461,7 @@ export function createPDFReadRouter(): Router {
           req.file.buffer,
           req.file.originalname
         );
+        logPdfRoute('ppt_to_pdf_service_result', { userId: authReq.user?.id, success: result.success });
 
         // Log the action
         await auditService.logUserAction(
@@ -394,11 +475,14 @@ export function createPDFReadRouter(): Router {
         );
 
         if (result.success) {
+          logPdfRoute('ppt_to_pdf_success_response', { userId: authReq.user?.id });
           res.json(result);
         } else {
+          logPdfRoute('ppt_to_pdf_failed_response', { userId: authReq.user?.id });
           res.status(400).json(result);
         }
       } catch (error) {
+        logPdfRoute('ppt_to_pdf_error', { userId: authReq.user?.id, error: (error as Error)?.message });
         logger.error({ err: error, userId: authReq.user!.id, operation: 'pptToPDF' }, 'PPT to PDF error');
         res.status(500).json({
           error: 'internal_error',
@@ -409,4 +493,8 @@ export function createPDFReadRouter(): Router {
   );
 
   return r;
+}
+
+function logPdfRoute(step: string, data: Record<string, unknown>) {
+  logger.info({ step, ...data }, '[PDFRead]');
 }

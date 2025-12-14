@@ -7,9 +7,11 @@ import { auditService } from '../services/auditService';
 import { logger } from '../utils/logger';
 import { db, FieldValue } from '../firebase';
 import { admin } from '../firebase';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 export function createPDFSummaryRouter(): Router {
   const router = Router();
+  attachRouteLogger(router, 'pdfSummary');
 
   /**
    * PDF özetleme endpoint'i
