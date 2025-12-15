@@ -302,6 +302,77 @@ export const swaggerSpec = {
       },
     },
 
+    // ==================== WEBHOOKS ====================
+    '/api/v1/webhooks/revenuecat': {
+      post: {
+        summary: 'RevenueCat webhook (v1)',
+        description: 'Receives subscription lifecycle events from RevenueCat. Authenticated via static secret in the `Authorization` header.',
+        tags: ['Webhooks'],
+        security: [], // custom header, not Bearer auth
+        parameters: [
+          {
+            name: 'Authorization',
+            in: 'header',
+            required: true,
+            schema: { type: 'string', example: 'my-secret-token' },
+            description: 'Must match `REVENUECAT_WEBHOOK_SECRET` environment variable'
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Raw RevenueCat webhook payload',
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: 'Webhook processed successfully' },
+          400: { description: 'Missing or invalid user information' },
+          401: { description: 'Invalid Authorization header' },
+          500: { description: 'Internal server error while processing event' }
+        }
+      }
+    },
+
+    '/webhooks/revenuecat': {
+      post: {
+        summary: 'RevenueCat webhook (legacy path)',
+        description: 'Legacy path for RevenueCat webhook events. Identical behaviour to `/api/v1/webhooks/revenuecat`.',
+        tags: ['Webhooks'],
+        security: [],
+        parameters: [
+          {
+            name: 'Authorization',
+            in: 'header',
+            required: true,
+            schema: { type: 'string', example: 'my-secret-token' },
+            description: 'Must match `REVENUECAT_WEBHOOK_SECRET` environment variable'
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Raw RevenueCat webhook payload',
+              }
+            }
+          }
+        },
+        responses: {
+          200: { description: 'Webhook processed successfully' },
+          400: { description: 'Missing or invalid user information' },
+          401: { description: 'Invalid Authorization header' },
+          500: { description: 'Internal server error while processing event' }
+        }
+      }
+    },
+
     // ==================== AUTHENTICATION ====================
     '/api/v1/auth/register': {
       post: {

@@ -291,6 +291,7 @@ const applyEventMutations = (
 
 export const revenuecatWebhookHandler = async (req: Request, res: Response): Promise<void> => {
   if (req.method !== 'POST') {
+    logger.warn({ method: req.method, path: req.originalUrl }, 'RevenueCat webhook rejected non-POST request');
     res.status(405).send('Method Not Allowed');
     return;
   }
@@ -302,6 +303,7 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
   }
 
   const incomingAuthHeader = (req.get('Authorization') || '').trim();
+  logger.debug({ headerPresent: !!incomingAuthHeader }, 'RevenueCat webhook authorization header received');
   if (!incomingAuthHeader) {
     logger.warn('RevenueCat webhook missing Authorization header');
     res.status(401).send('Missing authorization header');
@@ -315,12 +317,29 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
   }
 
   const eventBody = (req.body || {}) as any;
+  logger.debug(
+    {
+      payloadKeys: Object.keys(eventBody || {}),
+      subscriberKeys: Object.keys(eventBody?.subscriber || {}),
+      eventKeys: Object.keys(eventBody?.event || {}),
+    },
+    'RevenueCat webhook payload structure'
+  );
 
   try {
     const webhookEvent = eventBody.event || {};
     const subscriber = eventBody.subscriber || webhookEvent.subscriber || {};
     const eventTypeName: string = webhookEvent?.type || 'UNKNOWN';
     const nowISO = new Date().toISOString();
+    logger.info(
+      {
+        eventType: eventTypeName,
+        eventId: webhookEvent?.id || webhookEvent?.event_id || webhookEvent?.transaction_id,
+        requestId: webhookEvent?.event_id || webhookEvent?.request_id,
+        store: webhookEvent?.store,
+      },
+      'RevenueCat webhook event received'
+    );
 
     const firebaseUserId = subscriber?.attributes?.firebaseUserId?.value ?? null;
     const appUserEmailAttr =
@@ -355,6 +374,16 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
     const rcAppUserEmailCandidate =
       !isAnonymousId(rcAppUserIdRaw) ? normalizeEmail(rcAppUserIdRaw) : null;
     const emailCandidate = normalizeEmail(appUserEmailAttr) || rcAppUserEmailCandidate;
+
+    logger.debug(
+      {
+        firebaseUserId,
+        hasEmailCandidate: !!emailCandidate,
+        appUserId: rcAppUserIdRaw,
+        originalAppUserId,
+      },
+      'RevenueCat webhook user identification payload'
+    );
 
     let userId = firebaseUserId ?? null;
 
@@ -537,12 +566,15 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       rawEvent: webhookEvent,
     };
 
+    logger.info({ logId: logEntry.logId }, 'RevenueCat webhook writing log entry');
     await admin.firestore().collection(PREMIUM_LOGS_COLLECTION).doc(logEntry.logId).set(logEntry);
+    logger.info('RevenueCat webhook log entry persisted to Firestore', logEntry);
 
     logger.info('RevenueCat webhook processed successfully', {
       userId,
       event: eventTypeName,
-      premium: resolvedUpdates.premium,
+      premiumBefore: basePremiumValue,
+      premiumAfter,
       premiumStatus: resolvedUpdates.premiumStatus,
       store,
       environment,
