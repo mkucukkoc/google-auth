@@ -63,6 +63,7 @@ import { createPremiumRouter } from './routes/premium';
 // Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
 // We intentionally avoid static import here
 import notificationRouter from './routes/notifications';
+import revenuecatWebhookRouter from './revenuecat_webhook/revenuecatWebhook';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
@@ -227,6 +228,7 @@ const startServer = async () => {
     mountRouter(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter, 'pdfSummary');
     mountRouter(`/api/${API_VERSION}/delete-account`, createDeleteAccountRouter, 'deleteAccount');
     mountRouter(`/api/${API_VERSION}/premium`, createPremiumRouter, 'premium');
+    mountRouterInstance(`/api/${API_VERSION}/webhooks/revenuecat`, revenuecatWebhookRouter, 'revenuecatWebhook');
     if (createChatRouter) {
       mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
     }
@@ -243,6 +245,7 @@ const startServer = async () => {
     mountRouter('/pdf', createPDFSummaryRouter, 'pdfSummary (legacy)');
     mountRouter('/delete-account', createDeleteAccountRouter, 'deleteAccount (legacy)');
     mountRouter('/premium', createPremiumRouter, 'premium (legacy)');
+    mountRouterInstance('/webhooks/revenuecat', revenuecatWebhookRouter, 'revenuecatWebhook (legacy)');
     if (createChatRouter) {
       mountRouter('/chat', createChatRouter, 'chat (legacy)');
     }
