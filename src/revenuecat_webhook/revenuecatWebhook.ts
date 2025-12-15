@@ -77,6 +77,80 @@ interface PremiumLogEntry {
 const PREMIUM_USER_COLLECTION = 'premiumusers';
 const PREMIUM_LOGS_COLLECTION = 'premiumusers_logs';
 
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+const logWebhookStep = (
+  level: LogLevel,
+  step: string,
+  data: Record<string, unknown> = {}
+) => {
+  const fn =
+    (logger as Record<LogLevel, (obj: Record<string, unknown>, msg?: string) => void>)[level] ||
+    logger.info.bind(logger);
+  fn(
+    {
+      route: 'revenuecat_webhook',
+      step,
+      ...data,
+    },
+    '[RevenueCatWebhook]'
+  );
+};
+
+const maskSecret = (value?: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  if (value.length <= 10) {
+    return `${value.slice(0, 3)}***`;
+  }
+  return `${value.slice(0, 4)}***${value.slice(-4)}`;
+};
+
+const previewJson = (payload: unknown, limit = 2000): string => {
+  if (payload === undefined) {
+    return 'undefined';
+  }
+  try {
+    const serialized = JSON.stringify(payload);
+    if (serialized.length <= limit) {
+      return serialized;
+    }
+    return `${serialized.slice(0, limit)}… (len=${serialized.length})`;
+  } catch (error) {
+    return `[unserializable:${(error as Error).message}]`;
+  }
+};
+
+const summarizeKeys = (record?: Record<string, any>) => {
+  const keys = Object.keys(record || {});
+  return {
+    count: keys.length,
+    keys,
+  };
+};
+
+const summarizeAttributes = (attributes?: Record<string, any>) => {
+  if (!attributes) {
+    return { count: 0, keys: [] as string[], examples: [] as Array<Record<string, unknown>> };
+  }
+  const keys = Object.keys(attributes);
+  const examples = keys.slice(0, 10).map((key) => {
+    const value = attributes[key];
+    return {
+      key,
+      updatedAt: value?.updated_at,
+      value:
+        typeof value?.value === 'string' ? (value.value as string).slice(0, 120) : value?.value ?? null,
+    };
+  });
+  return {
+    count: keys.length,
+    keys,
+    examples,
+  };
+};
+
 const hashValue = (value?: string | object | null): string | null => {
   if (value === undefined || value === null) {
     return null;
@@ -290,56 +364,96 @@ const applyEventMutations = (
 };
 
 export const revenuecatWebhookHandler = async (req: Request, res: Response): Promise<void> => {
+  let eventBodyForLogs: any = null;
+  let eventTypeForLogs = 'UNKNOWN';
+  let eventIdForLogs: string | null = null;
+  let resolvedUserIdForLogs: string | null = null;
+
   if (req.method !== 'POST') {
-    logger.warn({ method: req.method, path: req.originalUrl }, 'RevenueCat webhook rejected non-POST request');
+    logWebhookStep('warn', 'reject_non_post', {
+      method: req.method,
+      path: req.originalUrl,
+      ip: req.ip,
+    });
     res.status(405).send('Method Not Allowed');
     return;
   }
 
   if (!WEBHOOK_SECRET) {
-    logger.error('RevenueCat webhook authorization secret missing in environment');
+    logWebhookStep('error', 'missing_webhook_secret', {
+      envSecretPresent: !!process.env.REVENUECAT_WEBHOOK_SECRET,
+    });
     res.status(500).send('Webhook authorization not configured');
     return;
   }
 
   const incomingAuthHeader = (req.get('Authorization') || '').trim();
-  logger.debug({ headerPresent: !!incomingAuthHeader }, 'RevenueCat webhook authorization header received');
+  logWebhookStep('info', 'request_metadata', {
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    headers: {
+      'content-type': req.get('content-type'),
+      'content-length': req.get('content-length'),
+    },
+    query: req.query,
+    params: req.params,
+  });
+  logWebhookStep('debug', 'auth_header_received', {
+    headerPresent: !!incomingAuthHeader,
+    headerLength: incomingAuthHeader.length,
+    headerPreview: maskSecret(incomingAuthHeader),
+  });
   if (!incomingAuthHeader) {
-    logger.warn('RevenueCat webhook missing Authorization header');
+    logWebhookStep('warn', 'missing_authorization_header');
     res.status(401).send('Missing authorization header');
     return;
   }
 
   if (incomingAuthHeader !== WEBHOOK_SECRET) {
-    logger.warn('RevenueCat webhook authorization header mismatch');
+    logWebhookStep('warn', 'authorization_mismatch', {
+      providedPreview: maskSecret(incomingAuthHeader),
+    });
     res.status(401).send('Invalid authorization header');
     return;
   }
 
   const eventBody = (req.body || {}) as any;
-  logger.debug(
-    {
-      payloadKeys: Object.keys(eventBody || {}),
-      subscriberKeys: Object.keys(eventBody?.subscriber || {}),
-      eventKeys: Object.keys(eventBody?.event || {}),
-    },
-    'RevenueCat webhook payload structure'
-  );
+  eventBodyForLogs = eventBody;
+  logWebhookStep('debug', 'payload_structure', {
+    payloadKeys: Object.keys(eventBody || {}),
+    subscriberKeys: Object.keys(eventBody?.subscriber || {}),
+    eventKeys: Object.keys(eventBody?.event || {}),
+    rawLength: JSON.stringify(eventBody || {}).length,
+    preview: previewJson(eventBody),
+  });
 
   try {
     const webhookEvent = eventBody.event || {};
     const subscriber = eventBody.subscriber || webhookEvent.subscriber || {};
     const eventTypeName: string = webhookEvent?.type || 'UNKNOWN';
+    eventTypeForLogs = eventTypeName;
     const nowISO = new Date().toISOString();
-    logger.info(
-      {
-        eventType: eventTypeName,
-        eventId: webhookEvent?.id || webhookEvent?.event_id || webhookEvent?.transaction_id,
-        requestId: webhookEvent?.event_id || webhookEvent?.request_id,
-        store: webhookEvent?.store,
+    const derivedEventId = webhookEvent?.id || webhookEvent?.event_id || webhookEvent?.transaction_id;
+    eventIdForLogs = derivedEventId ?? null;
+    logWebhookStep('info', 'event_received', {
+      eventType: eventTypeName,
+      eventId: derivedEventId,
+      requestId: webhookEvent?.event_id || webhookEvent?.request_id,
+      store: webhookEvent?.store,
+      price: webhookEvent?.price,
+      priceCurrency: webhookEvent?.currency,
+      renewalNumber: webhookEvent?.renewal_number,
+      periodType: webhookEvent?.period_type,
+      presentedOfferingId: webhookEvent?.presented_offering_id,
+      metadata: webhookEvent?.metadata,
+      timestamps: {
+        event: webhookEvent?.event_timestamp_ms,
+        purchasedAt: webhookEvent?.purchased_at_ms,
+        expirationAt: webhookEvent?.expiration_at_ms,
       },
-      'RevenueCat webhook event received'
-    );
+    });
 
     const firebaseUserId = subscriber?.attributes?.firebaseUserId?.value ?? null;
     const appUserEmailAttr =
@@ -375,15 +489,20 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       !isAnonymousId(rcAppUserIdRaw) ? normalizeEmail(rcAppUserIdRaw) : null;
     const emailCandidate = normalizeEmail(appUserEmailAttr) || rcAppUserEmailCandidate;
 
-    logger.debug(
-      {
-        firebaseUserId,
-        hasEmailCandidate: !!emailCandidate,
-        appUserId: rcAppUserIdRaw,
-        originalAppUserId,
-      },
-      'RevenueCat webhook user identification payload'
-    );
+    logWebhookStep('debug', 'subscriber_summary', {
+      attributeSummary: summarizeAttributes(subscriber?.attributes),
+      entitlementSummary: summarizeKeys(subscriber?.entitlements),
+      subscriptionSummary: summarizeKeys(subscriber?.subscriptions),
+      lastSeenProductId: subscriber?.last_seen_product_identifier,
+      managementUrl: subscriber?.management_url,
+    });
+    logWebhookStep('debug', 'user_identification_payload', {
+      firebaseUserId,
+      hasEmailCandidate: !!emailCandidate,
+      appUserId: rcAppUserIdRaw,
+      originalAppUserId,
+      emailCandidate,
+    });
 
     let userId = firebaseUserId ?? null;
 
@@ -391,16 +510,21 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       try {
         const userRecord = await admin.auth().getUserByEmail(emailCandidate);
         userId = userRecord.uid;
-      } catch (lookupError) {
-        logger.warn('RevenueCat webhook failed to map email to Firebase UID', {
+        logWebhookStep('info', 'user_lookup_success', {
+          userId,
+          resolutionStrategy: 'email_lookup',
           emailCandidate,
-          lookupError,
+        });
+      } catch (lookupError) {
+        logWebhookStep('warn', 'email_lookup_failed', {
+          emailCandidate,
+          error: lookupError instanceof Error ? lookupError.message : lookupError,
         });
       }
     }
 
     if (!userId) {
-      logger.warn('RevenueCat webhook missing resolvable user id', {
+      logWebhookStep('warn', 'missing_user_id', {
         firebaseUserIdPresent: !!firebaseUserId,
         emailCandidate,
         rcAppUserId: rcAppUserIdRaw,
@@ -409,6 +533,13 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       res.status(400).send('Missing user ID in payload');
       return;
     }
+    resolvedUserIdForLogs = userId;
+    logWebhookStep('info', 'user_resolved', {
+      userId,
+      resolutionStrategy: firebaseUserId ? 'subscriber_attribute' : 'email_lookup',
+      hasFirebaseUidAttribute: !!firebaseUserId,
+      emailCandidate,
+    });
 
     let entitlement = subscriber?.entitlements?.premium ?? null;
     if (!entitlement && eventTypeName === 'TEST' && webhookEvent?.product_id) {
@@ -441,6 +572,18 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
     const eventId = webhookEvent?.id || webhookEvent?.event_id || webhookEvent?.transaction_id || null;
     const requestId = webhookEvent?.event_id || webhookEvent?.request_id || null;
     const alias = webhookEvent?.subscriber_alias || subscriber?.subscriber_alias || null;
+    logWebhookStep('debug', 'event_context_computed', {
+      userId,
+      eventType: eventTypeName,
+      productIdentifier,
+      derivedStatus,
+      expiresAt,
+      environment,
+      store,
+      transactionId,
+      originalTransactionId,
+      alias,
+    });
 
     const premiumUsersRef = admin.firestore().collection(PREMIUM_USER_COLLECTION).doc(userId);
 
@@ -459,6 +602,14 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       }
 
       basePremiumValue = existingData?.premium ?? false;
+      logWebhookStep('debug', 'existing_state_loaded', {
+        userId,
+        hasExisting: !!existingData,
+        existingPremium: existingData?.premium,
+        existingPremiumStatus: existingData?.premiumStatus,
+        lastDecisionId: existingData?.lastPremiumDecisionId,
+        existingDataPreview: previewJson(existingData),
+      });
 
       const updates: PremiumUserDoc = {
         uid: userId,
@@ -533,10 +684,19 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
 
       transaction.set(premiumUsersRef, updates, { merge: true });
       finalUpdates = updates;
+      logWebhookStep('debug', 'mutations_applied', {
+        userId,
+        eventType: eventTypeName,
+        premiumBefore: basePremiumValue,
+        premiumAfter: updates.premium,
+        premiumStatus: updates.premiumStatus,
+        expiresAt: updates.premiumExpiresAt,
+        updatesPreview: previewJson(updates),
+      });
     });
 
     if (duplicateDetected) {
-      logger.info('RevenueCat webhook ignored duplicate event (transaction safe)', {
+      logWebhookStep('info', 'duplicate_event_skipped', {
         userId,
         eventId,
         eventTypeName,
@@ -566,23 +726,41 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       rawEvent: webhookEvent,
     };
 
-    logger.info({ logId: logEntry.logId }, 'RevenueCat webhook writing log entry');
+    logWebhookStep('info', 'log_entry_writing', {
+      logId: logEntry.logId,
+      userId,
+      eventType: eventTypeName,
+      premiumBefore: basePremiumValue,
+      premiumAfter,
+    });
     await admin.firestore().collection(PREMIUM_LOGS_COLLECTION).doc(logEntry.logId).set(logEntry);
-    logger.info('RevenueCat webhook log entry persisted to Firestore', logEntry);
+    logWebhookStep('info', 'log_entry_persisted', {
+      logEntry,
+    });
 
-    logger.info('RevenueCat webhook processed successfully', {
+    logWebhookStep('info', 'webhook_completed', {
       userId,
       event: eventTypeName,
+      eventId,
       premiumBefore: basePremiumValue,
       premiumAfter,
       premiumStatus: resolvedUpdates.premiumStatus,
       store,
       environment,
+      expiresAt: resolvedUpdates.premiumExpiresAt,
+      transactionId: resolvedUpdates.transactionId,
+      originalTransactionId: resolvedUpdates.originalTransactionId,
     });
 
     res.status(200).send('Success');
   } catch (error) {
-    logger.error('Webhook processing error', { error });
+    logWebhookStep('error', 'processing_error', {
+      error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      eventType: eventTypeForLogs,
+      eventId: eventIdForLogs,
+      userId: resolvedUserIdForLogs,
+      payloadPreview: previewJson(eventBodyForLogs),
+    });
     res.status(500).send('Internal Server Error');
   }
 };
