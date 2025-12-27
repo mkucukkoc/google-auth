@@ -156,7 +156,10 @@ export function createGoogleAuthRouter(): Router {
             deviceId: session.device_id,
           }, 600);
 
-          return res.send('<html><body>Bu e-posta şifreyle kayıtlı. Lütfen uygulamaya dönüp e-posta ve şifrenizle giriş yapın.</body></html>');
+          logger.info({ email, state }, '[GoogleAuth] Password account exists - redirecting to app');
+          const appRedirect = config.app?.redirectUri || 'avenia://auth';
+          const redirectUrl = `${appRedirect}?state=${encodeURIComponent(state)}&error=password_account_exists`;
+          return res.redirect(redirectUrl);
         }
 
         if (!user) {
@@ -280,7 +283,13 @@ export function createGoogleAuthRouter(): Router {
         await setJson(`gls:${state}`, readyPayload, 600);
         logger.debug({ state, readyPayload }, '[GoogleAuth] /callback response payload');
 
-        logger.info({ userId: user.id, state }, '[GoogleAuth] /callback processed successfully');
+        logger.info({
+          userId: user.id,
+          state,
+          redirectUriConfigured: config.google.redirectUri,
+          appRedirectUri: config.app?.redirectUri,
+          deviceId: session.device_id,
+        }, '[GoogleAuth] /callback processed successfully');
         const appRedirect = config.app?.redirectUri || 'avenia://auth';
         const redirectUrl = `${appRedirect}?state=${encodeURIComponent(state)}&success=1`;
         return res.redirect(redirectUrl);
