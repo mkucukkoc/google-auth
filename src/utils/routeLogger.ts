@@ -10,6 +10,8 @@ export function attachRouteLogger(router: Router, routeName: string) {
     const requestLog = buildRequestLog(req);
     logRouteStep(routeName, 'request_received', requestLog);
     logRequestJson(routeName, {
+      method: req.method,
+      path: req.originalUrl,
       body: req.body ?? {},
       query: req.query ?? {},
       params: req.params ?? {},

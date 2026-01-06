@@ -41,7 +41,14 @@ export function jsonPretty(value: any): string {
 }
 
 export function logRequestJson(routeName: string, payload: any): void {
-  logger.info({ route: routeName, payload: safeForLog(payload) }, `[${routeName}] request JSON`);
+  const safePayload = safeForLog(payload);
+  const method = (safePayload as any)?.method;
+  const path = (safePayload as any)?.path;
+  const endpointLabel = method && path ? `${method} ${path}` : routeName;
+  logger.info(
+    { route: routeName, endpoint: endpointLabel, payload: safePayload },
+    `[${routeName}] request JSON (${endpointLabel})`
+  );
 }
 
 export function logResponseJson(routeName: string, payload: any): void {
