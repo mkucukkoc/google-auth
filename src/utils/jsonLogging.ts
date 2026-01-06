@@ -52,7 +52,12 @@ export function logRequestJson(routeName: string, payload: any): void {
 }
 
 export function logResponseJson(routeName: string, payload: any): void {
-  logger.info({ route: routeName, response: safeForLog(payload) }, `[${routeName}] response JSON`);
+  const safePayload = safeForLog(payload);
+  const endpointLabel = (safePayload as any)?.endpoint || routeName;
+  logger.info(
+    { route: routeName, endpoint: endpointLabel, response: safePayload },
+    `[${routeName}] response JSON (${endpointLabel})`
+  );
 }
 
 

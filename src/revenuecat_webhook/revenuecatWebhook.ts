@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import * as admin from 'firebase-admin';
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
+import { attachRouteLogger } from '../utils/routeLogger';
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -588,6 +589,7 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
 };
 
 export const revenuecatWebhookRouter = Router();
+attachRouteLogger(revenuecatWebhookRouter, 'revenuecatWebhook');
 revenuecatWebhookRouter.post('/', revenuecatWebhookHandler);
 
 export default revenuecatWebhookRouter;
