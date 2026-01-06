@@ -17,8 +17,10 @@ const rateLimitMiddleware_1 = require("../middleware/rateLimitMiddleware");
 const firebase_1 = require("../firebase");
 const logger_1 = require("../utils/logger");
 const reactivationService_1 = require("../services/reactivationService");
+const routeLogger_1 = require("../utils/routeLogger");
 function createGoogleAuthRouter() {
     const r = (0, express_1.Router)();
+    (0, routeLogger_1.attachRouteLogger)(r, 'googleAuth');
     r.post('/start', rateLimitMiddleware_1.authRateLimits.general, async (req, res) => {
         try {
             const ipAddress = req.ip || req.connection?.remoteAddress;
@@ -123,7 +125,10 @@ function createGoogleAuthRouter() {
                     message: errorMessage,
                     deviceId: session.device_id,
                 }, 600);
-                return res.send('<html><body>Bu e-posta şifreyle kayıtlı. Lütfen uygulamaya dönüp e-posta ve şifrenizle giriş yapın.</body></html>');
+                logger_1.logger.info({ email, state }, '[GoogleAuth] Password account exists - redirecting to app');
+                const appRedirect = config_1.config.app?.redirectUri || 'avenia://auth';
+                const redirectUrl = `${appRedirect}?state=${encodeURIComponent(state)}&error=password_account_exists`;
+                return res.redirect(redirectUrl);
             }
             if (!user) {
                 // Create new Google user in our auth system (this already handles Firebase Auth + subsc)
@@ -229,8 +234,16 @@ function createGoogleAuthRouter() {
             };
             await (0, redis_1.setJson)(`gls:${state}`, readyPayload, 600);
             logger_1.logger.debug({ state, readyPayload }, '[GoogleAuth] /callback response payload');
-            logger_1.logger.info({ userId: user.id, state }, '[GoogleAuth] /callback processed successfully');
-            return res.send('<html><body>Login successful. You may close this window.</body></html>');
+            logger_1.logger.info({
+                userId: user.id,
+                state,
+                redirectUriConfigured: config_1.config.google.redirectUri,
+                appRedirectUri: config_1.config.app?.redirectUri,
+                deviceId: session.device_id,
+            }, '[GoogleAuth] /callback processed successfully');
+            const appRedirect = config_1.config.app?.redirectUri || 'avenia://auth';
+            const redirectUrl = `${appRedirect}?state=${encodeURIComponent(state)}&success=1`;
+            return res.redirect(redirectUrl);
         }
         catch (error) {
             logger_1.logger.error({ err: error, operation: 'googleAuth' }, 'Google auth error');

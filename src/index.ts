@@ -55,9 +55,6 @@ import { createEmailOtpRouter } from './routes/emailOtp';
 import { createGoogleAuthRouter } from './routes/google';
 import { createAppleAuthRouter } from './routes/apple';
 import { createPasswordResetRouter } from './routes/passwordReset';
-import { createPDFReadRouter } from './routes/pdfRead';
-import { createPDFReadExtendedRouter } from './routes/pdfReadExtended';
-import { createPDFSummaryRouter } from './routes/pdfSummary';
 import { createDeleteAccountRouter } from './routes/deleteAccount';
 import { createPremiumRouter } from './routes/premium';
 // Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
@@ -223,9 +220,6 @@ const startServer = async () => {
     mountRouter(`/api/${API_VERSION}/auth/google`, createGoogleAuthRouter, 'googleAuth');
     mountRouter(`/api/${API_VERSION}/auth/apple`, createAppleAuthRouter, 'appleAuth');
     mountRouter(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter, 'passwordReset');
-    mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadRouter, 'pdfRead');
-    mountRouter(`/api/${API_VERSION}/pdfread`, createPDFReadExtendedRouter, 'pdfReadExtended');
-    mountRouter(`/api/${API_VERSION}/pdf`, createPDFSummaryRouter, 'pdfSummary');
     mountRouter(`/api/${API_VERSION}/delete-account`, createDeleteAccountRouter, 'deleteAccount');
     mountRouter(`/api/${API_VERSION}/premium`, createPremiumRouter, 'premium');
     mountRouterInstance(`/api/${API_VERSION}/webhooks/revenuecat`, revenuecatWebhookRouter, 'revenuecatWebhook');
@@ -240,9 +234,6 @@ const startServer = async () => {
     mountRouter('/auth/google', createGoogleAuthRouter, 'googleAuth (legacy)');
     mountRouter('/auth/apple', createAppleAuthRouter, 'appleAuth (legacy)');
     mountRouter('/auth/password-reset', createPasswordResetRouter, 'passwordReset (legacy)');
-    mountRouter('/pdfread', createPDFReadRouter, 'pdfRead (legacy)');
-    mountRouter('/pdfread', createPDFReadExtendedRouter, 'pdfReadExtended (legacy)');
-    mountRouter('/pdf', createPDFSummaryRouter, 'pdfSummary (legacy)');
     mountRouter('/delete-account', createDeleteAccountRouter, 'deleteAccount (legacy)');
     mountRouter('/premium', createPremiumRouter, 'premium (legacy)');
     mountRouterInstance('/webhooks/revenuecat', revenuecatWebhookRouter, 'revenuecatWebhook (legacy)');

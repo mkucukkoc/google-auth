@@ -217,20 +217,6 @@ export const settingsSchemas = {
   }),
 };
 
-// PDF Summary schemas
-export const pdfSummarySchemas = {
-  summarize: Joi.object({
-    fileUrl: Joi.string().uri().required().messages({
-      'string.uri': 'Geçerli bir dosya URL\'si giriniz',
-      'any.required': 'Dosya URL\'si zorunludur',
-    }),
-    chatId: Joi.string().uuid().required().messages({
-      'string.guid': 'Geçerli bir chat ID giriniz',
-      'any.required': 'Chat ID zorunludur',
-    }),
-  }),
-};
-
 // Validation middleware
 export const validateRequest = (schema: Joi.ObjectSchema, property: 'body' | 'query' | 'params' = 'body') => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -357,6 +343,5 @@ export const schemas = {
   file: fileSchemas,
   api: apiSchemas,
   settings: settingsSchemas,
-  pdfSummary: pdfSummarySchemas,
 };
 

@@ -15,10 +15,12 @@ const uuid_1 = require("uuid");
 const email_1 = require("../email");
 const redis_1 = require("../redis");
 const logger_1 = require("../utils/logger");
+const routeLogger_1 = require("../utils/routeLogger");
 const config_1 = require("../config");
 const reactivationService_1 = require("../services/reactivationService");
 function createAuthRouter() {
     const r = (0, express_1.Router)();
+    (0, routeLogger_1.attachRouteLogger)(r, 'auth');
     const isSoftDeletedUser = (user) => Boolean(user && (user.isDeleted === true || user.is_deleted === true));
     const normalizeEmailInput = (value) => typeof value === 'string' ? value.trim().toLowerCase() : '';
     const sanitizeDocId = (value) => value.replace(/\//g, '_');

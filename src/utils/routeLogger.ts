@@ -1,5 +1,6 @@
-import { Router, Request } from 'express';
+import { Router, Request, Response } from 'express';
 import { logger } from './logger';
+import { logRequestJson, logResponseJson } from './jsonLogging';
 
 type LogData = Record<string, unknown>;
 
@@ -8,6 +9,13 @@ export function attachRouteLogger(router: Router, routeName: string) {
     const startTime = Date.now();
     const requestLog = buildRequestLog(req);
     logRouteStep(routeName, 'request_received', requestLog);
+    logRequestJson(routeName, req.body ?? {});
+
+    const originalJson = res.json.bind(res);
+    res.json = ((body: any) => {
+      logResponseJson(routeName, body);
+      return originalJson(body);
+    }) as Response['json'];
 
     const logResponse = (event: 'response_sent' | 'response_aborted') => {
       const responseLog = {
