@@ -9,7 +9,11 @@ export function attachRouteLogger(router: Router, routeName: string) {
     const startTime = Date.now();
     const requestLog = buildRequestLog(req);
     logRouteStep(routeName, 'request_received', requestLog);
-    logRequestJson(routeName, req.body ?? {});
+    logRequestJson(routeName, {
+      body: req.body ?? {},
+      query: req.query ?? {},
+      params: req.params ?? {},
+    });
 
     const originalJson = res.json.bind(res);
     res.json = ((body: any) => {
