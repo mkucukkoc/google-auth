@@ -57,6 +57,9 @@ import { createAppleAuthRouter } from './routes/apple';
 import { createPasswordResetRouter } from './routes/passwordReset';
 import { createDeleteAccountRouter } from './routes/deleteAccount';
 import { createPremiumRouter } from './routes/premium';
+import { createCoinRouter } from './routes/coins';
+import { createCoinJobsRouter } from './routes/coinJobs';
+import { createCoinWebhookRouter } from './routes/coinWebhook';
 // Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
 // We intentionally avoid static import here
 import notificationRouter from './routes/notifications';
@@ -222,7 +225,10 @@ const startServer = async () => {
     mountRouter(`/api/${API_VERSION}/auth/password-reset`, createPasswordResetRouter, 'passwordReset');
     mountRouter(`/api/${API_VERSION}/delete-account`, createDeleteAccountRouter, 'deleteAccount');
     mountRouter(`/api/${API_VERSION}/premium`, createPremiumRouter, 'premium');
+    mountRouter(`/api/${API_VERSION}/coins`, createCoinRouter, 'coins');
+    mountRouter(`/api/${API_VERSION}/jobs`, createCoinJobsRouter, 'coinJobs');
     mountRouterInstance(`/api/${API_VERSION}/webhooks/revenuecat`, revenuecatWebhookRouter, 'revenuecatWebhook');
+    mountRouter(`/api/${API_VERSION}/webhooks/purchase`, createCoinWebhookRouter, 'coinWebhook');
     if (createChatRouter) {
       mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
     }
@@ -236,7 +242,10 @@ const startServer = async () => {
     mountRouter('/auth/password-reset', createPasswordResetRouter, 'passwordReset (legacy)');
     mountRouter('/delete-account', createDeleteAccountRouter, 'deleteAccount (legacy)');
     mountRouter('/premium', createPremiumRouter, 'premium (legacy)');
+    mountRouter('/coins', createCoinRouter, 'coins (legacy)');
+    mountRouter('/jobs', createCoinJobsRouter, 'coinJobs (legacy)');
     mountRouterInstance('/webhooks/revenuecat', revenuecatWebhookRouter, 'revenuecatWebhook (legacy)');
+    mountRouter('/webhooks/purchase', createCoinWebhookRouter, 'coinWebhook (legacy)');
     if (createChatRouter) {
       mountRouter('/chat', createChatRouter, 'chat (legacy)');
     }
@@ -342,4 +351,3 @@ startServer().catch(err => {
   logger.error({ error: err }, 'Failed to start server');
   process.exit(1);
 });
-

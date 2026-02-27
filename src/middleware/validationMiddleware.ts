@@ -181,6 +181,52 @@ export const premiumSchemas = {
   }),
 };
 
+export const coinSchemas = {
+  purchaseVerify: z
+    .object({
+      provider: z.string().max(50).optional(),
+      productId: z.string().min(1, 'productId zorunludur'),
+      transactionId: z.string().max(200).optional(),
+      providerEventId: z.string().max(200).optional(),
+      purchaseToken: z.string().max(4000).optional(),
+      receipt: z.string().max(4000).optional(),
+      platform: z.string().max(50).optional(),
+      coins: z.number().int().positive().optional(),
+      metadata: z.record(z.any()).optional(),
+    })
+    .refine(
+      (data) => Boolean(data.transactionId || data.providerEventId || data.purchaseToken || data.receipt),
+      {
+        message: 'transactionId veya providerEventId zorunludur',
+        path: ['transactionId'],
+      }
+    ),
+  spendAndCreateJob: z.object({
+    kind: z.enum(['image', 'video']),
+    costCoins: z.number().int().positive(),
+    input: z.record(z.any()).optional(),
+    requestId: z.string().max(200).optional(),
+  }),
+  webhook: z.object({
+    provider: z.string().max(50).optional(),
+    eventId: z.string().min(1, 'eventId zorunludur'),
+    uid: z.string().min(1, 'uid zorunludur'),
+    productId: z.string().min(1, 'productId zorunludur'),
+    status: z.string().max(50).optional(),
+    coins: z.number().int().positive().optional(),
+    metadata: z.record(z.any()).optional(),
+  }),
+  jobUpdate: z
+    .object({
+      status: z.enum(['queued', 'running', 'success', 'failed']).optional(),
+      output: z.record(z.any()).optional(),
+    })
+    .refine((data) => Boolean(data.status || data.output), {
+      message: 'status veya output zorunludur',
+      path: ['status'],
+    }),
+};
+
 /**
  * Query parameter validation
  */
