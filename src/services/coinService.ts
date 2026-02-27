@@ -25,9 +25,33 @@ const summarizeValue = (value?: string | null, max = 160) => {
   return `${value.slice(0, max)}...[len=${value.length}]`;
 };
 
+const sanitizeForFirestore = (value: any): any => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (Array.isArray(value)) {
+    const cleaned = value
+      .map((item) => sanitizeForFirestore(item))
+      .filter((item) => item !== undefined);
+    return cleaned;
+  }
+  if (typeof value === 'object') {
+    const output: Record<string, any> = {};
+    Object.entries(value).forEach(([key, val]) => {
+      const cleaned = sanitizeForFirestore(val);
+      if (cleaned !== undefined) {
+        output[key] = cleaned;
+      }
+    });
+    return output;
+  }
+  return value;
+};
+
 const sanitizeMetadata = (metadata?: Record<string, any> | null) => {
   if (!metadata) return metadata;
-  const copy = { ...metadata };
+  const cleaned = sanitizeForFirestore(metadata) as Record<string, any> | null;
+  if (!cleaned) return cleaned;
+  const copy = { ...cleaned };
   if (typeof copy.purchaseToken === 'string') {
     copy.purchaseToken = summarizeValue(copy.purchaseToken);
   }
@@ -252,6 +276,7 @@ class CoinService {
 
       tx.set(userRef, nextUser, { merge: true });
 
+      const transactionMetadata = sanitizeForFirestore(input.metadata ?? null) ?? null;
       const transaction: CoinTransaction & { balanceAfter?: number } = {
         uid,
         type: 'purchase',
@@ -261,7 +286,7 @@ class CoinService {
         status: 'success',
         providerEventId: transactionId,
         createdAt: FieldValue.serverTimestamp(),
-        metadata: input.metadata ?? null,
+        metadata: transactionMetadata,
         balanceAfter: newBalance,
       };
 
@@ -337,12 +362,13 @@ class CoinService {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+      const sanitizedInput = sanitizeForFirestore(input.input ?? null) ?? null;
       const job: GenerationJob = {
         uid,
         kind: input.kind,
         costCoins: input.costCoins,
         status: 'queued',
-        input: input.input ?? null,
+        input: sanitizedInput,
         output: null,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -357,7 +383,7 @@ class CoinService {
         status: 'success',
         providerEventId: transactionId,
         createdAt: FieldValue.serverTimestamp(),
-        metadata: input.input ?? null,
+        metadata: sanitizedInput,
         balanceAfter: updatedBalance,
         jobId,
       };
@@ -426,7 +452,7 @@ class CoinService {
       updates.status = status;
     }
     if (output) {
-      updates.output = output;
+      updates.output = sanitizeForFirestore(output);
     }
 
     await jobRef.update(updates);
@@ -505,6 +531,7 @@ class CoinService {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+      const transactionMetadata = sanitizeForFirestore(input.metadata ?? null) ?? null;
       const transaction: CoinTransaction & { balanceAfter?: number } = {
         uid,
         type: isPurchase ? 'purchase' : 'refund',
@@ -514,7 +541,7 @@ class CoinService {
         status: 'success',
         providerEventId: eventId,
         createdAt: FieldValue.serverTimestamp(),
-        metadata: input.metadata ?? null,
+        metadata: transactionMetadata,
         balanceAfter: newBalance,
       };
 
