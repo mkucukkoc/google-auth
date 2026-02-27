@@ -192,7 +192,7 @@ export const coinSchemas = {
       receipt: z.string().max(4000).optional(),
       platform: z.string().max(50).optional(),
       coins: z.number().int().positive().optional(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
     })
     .refine(
       (data) => Boolean(data.transactionId || data.providerEventId || data.purchaseToken || data.receipt),
@@ -204,7 +204,7 @@ export const coinSchemas = {
   spendAndCreateJob: z.object({
     kind: z.enum(['image', 'video']),
     costCoins: z.number().int().positive(),
-    input: z.record(z.any()).optional(),
+    input: z.record(z.string(), z.any()).optional(),
     requestId: z.string().max(200).optional(),
   }),
   webhook: z.object({
@@ -214,12 +214,12 @@ export const coinSchemas = {
     productId: z.string().min(1, 'productId zorunludur'),
     status: z.string().max(50).optional(),
     coins: z.number().int().positive().optional(),
-    metadata: z.record(z.any()).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
   }),
   jobUpdate: z
     .object({
       status: z.enum(['queued', 'running', 'success', 'failed']).optional(),
-      output: z.record(z.any()).optional(),
+      output: z.record(z.string(), z.any()).optional(),
     })
     .refine((data) => Boolean(data.status || data.output), {
       message: 'status veya output zorunludur',
