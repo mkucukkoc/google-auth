@@ -77,6 +77,12 @@ interface PremiumLogEntry {
 
 const PREMIUM_USER_COLLECTION = 'premiumusers';
 const PREMIUM_LOGS_COLLECTION = 'premiumusers_logs';
+const COIN_PREMIUM_COLLECTION = 'coin_premium';
+
+const isCoinProduct = (productIdentifier?: string | null): boolean => {
+  if (!productIdentifier) return false;
+  return productIdentifier.toLowerCase().startsWith('coin_');
+};
 
 const hashValue = (value?: string | object | null): string | null => {
   if (value === undefined || value === null) {
@@ -442,6 +448,59 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
     const eventId = webhookEvent?.id || webhookEvent?.event_id || webhookEvent?.transaction_id || null;
     const requestId = webhookEvent?.event_id || webhookEvent?.request_id || null;
     const alias = webhookEvent?.subscriber_alias || subscriber?.subscriber_alias || null;
+
+    if (isCoinProduct(productIdentifier)) {
+      const coinDocId = eventId || transactionId || `${userId}_${Date.now()}`;
+      const coinRef = admin.firestore().collection(COIN_PREMIUM_COLLECTION).doc(coinDocId);
+      const existingCoin = await coinRef.get();
+      if (existingCoin.exists) {
+        logger.info('RevenueCat coin webhook ignored duplicate event', {
+          userId,
+          eventId,
+          productId: productIdentifier,
+        });
+        res.status(200).send('Duplicate ignored');
+        return;
+      }
+
+      const coinRecord = {
+        uid: userId,
+        productId: productIdentifier,
+        eventType: eventTypeName,
+        eventId,
+        requestId,
+        transactionId,
+        originalTransactionId,
+        store,
+        environment,
+        appUserId: rcAppUserIdRaw,
+        originalAppUserId,
+        createdAt: nowISO,
+        updatedAt: nowISO,
+        lastRawEvent: webhookEvent,
+        source: 'revenuecat_webhook',
+      };
+
+      await coinRef.set(coinRecord, { merge: true });
+      logger.info('RevenueCat coin event stored to coin_premium', {
+        userId,
+        eventId,
+        productId: productIdentifier,
+      });
+      res.status(200).send('Coin event stored');
+      return;
+    }
+
+    if (derivedStatus !== 'monthly' && derivedStatus !== 'annual') {
+      logger.info('RevenueCat webhook ignored non-premium product', {
+        userId,
+        productId: productIdentifier,
+        derivedStatus,
+        eventTypeName,
+      });
+      res.status(200).send('Non-premium product ignored');
+      return;
+    }
 
     const premiumUsersRef = admin.firestore().collection(PREMIUM_USER_COLLECTION).doc(userId);
 

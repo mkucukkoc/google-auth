@@ -19,6 +19,28 @@ const DEFAULT_COIN_PACKAGES: Record<string, number> = {
   coin_250: 250,
 };
 
+const summarizeValue = (value?: string | null, max = 160) => {
+  if (!value) return value;
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}...[len=${value.length}]`;
+};
+
+const sanitizeMetadata = (metadata?: Record<string, any> | null) => {
+  if (!metadata) return metadata;
+  const copy = { ...metadata };
+  if (typeof copy.purchaseToken === 'string') {
+    copy.purchaseToken = summarizeValue(copy.purchaseToken);
+  }
+  if (typeof copy.receipt === 'string') {
+    copy.receipt = summarizeValue(copy.receipt);
+  }
+  return copy;
+};
+
+const logCoinEvent = (step: string, data: Record<string, any>) => {
+  logger.info({ step, ...data }, `[CoinService] ${step}`);
+};
+
 type TransactionLike = {
   get: (ref: any) => Promise<any>;
   set: (ref: any, data: any, options?: any) => Promise<void>;
@@ -132,6 +154,7 @@ interface JobUpdateInput {
 
 class CoinService {
   async getBalance(uid: string): Promise<CoinUser> {
+    logCoinEvent('get_balance_start', { uid });
     if (!uid) {
       throw new CoinServiceError('UID_REQUIRED', 'UID zorunludur');
     }
@@ -141,20 +164,38 @@ class CoinService {
     if (!snapshot.exists) {
       const freshUser = buildUserDoc(uid);
       await userRef.set(freshUser);
+      logCoinEvent('get_balance_created', { uid, balance: freshUser.balance });
       return freshUser;
     }
 
     const data = snapshot.data() || {};
-    return buildUserDoc(uid, {
+    const resolved = buildUserDoc(uid, {
       balance: toNumber(data.balance, 0),
       lifetimePurchased: toNumber(data.lifetimePurchased, 0),
       lifetimeSpent: toNumber(data.lifetimeSpent, 0),
       createdAt: data.createdAt ?? FieldValue.serverTimestamp(),
       updatedAt: data.updatedAt ?? FieldValue.serverTimestamp(),
     });
+    logCoinEvent('get_balance_success', {
+      uid,
+      balance: resolved.balance,
+      lifetimePurchased: resolved.lifetimePurchased,
+      lifetimeSpent: resolved.lifetimeSpent,
+    });
+    return resolved;
   }
 
   async verifyPurchase(input: VerifyPurchaseInput) {
+    logCoinEvent('verify_purchase_start', {
+      uid: input.uid,
+      provider: input.provider,
+      productId: input.productId,
+      transactionId: input.transactionId,
+      providerEventId: input.providerEventId,
+      platform: input.platform,
+      coinsOverride: input.coins,
+      metadata: sanitizeMetadata(input.metadata),
+    });
     const uid = input.uid;
     if (!uid) {
       throw new CoinServiceError('UID_REQUIRED', 'UID zorunludur');
@@ -179,7 +220,7 @@ class CoinService {
     const provider = ensureProvider(input.provider);
     const productId = input.productId || 'coin_unknown';
 
-    return runTransaction(async (tx) => {
+    const result = await runTransaction(async (tx) => {
       const txnRef = db.collection(COIN_TRANSACTIONS_COLLECTION).doc(transactionId);
       const userRef = db.collection(COIN_USERS_COLLECTION).doc(uid);
 
@@ -233,9 +274,18 @@ class CoinService {
         coins,
       };
     });
+    logCoinEvent('verify_purchase_result', { uid, result });
+    return result;
   }
 
   async spendAndCreateJob(input: SpendInput) {
+    logCoinEvent('spend_and_create_job_start', {
+      uid: input.uid,
+      kind: input.kind,
+      costCoins: input.costCoins,
+      requestId: input.requestId,
+      inputPayload: input.input ?? null,
+    });
     const uid = input.uid;
     if (!uid) {
       throw new CoinServiceError('UID_REQUIRED', 'UID zorunludur');
@@ -254,7 +304,7 @@ class CoinService {
       ? `spend_${input.requestId}`
       : `spend_${jobId}`;
 
-    return runTransaction(async (tx) => {
+    const result = await runTransaction(async (tx) => {
       const userRef = db.collection(COIN_USERS_COLLECTION).doc(uid);
       const txnRef = db.collection(COIN_TRANSACTIONS_COLLECTION).doc(transactionId);
       const jobRef = db.collection(GENERATION_JOBS_COLLECTION).doc(jobId);
@@ -323,22 +373,34 @@ class CoinService {
         balance: updatedBalance,
       };
     });
+    logCoinEvent('spend_and_create_job_result', { uid, result });
+    return result;
   }
 
   async getJob(uid: string, jobId: string) {
+    logCoinEvent('get_job_start', { uid, jobId });
     const jobRef = db.collection(GENERATION_JOBS_COLLECTION).doc(jobId);
     const snapshot = await jobRef.get();
     if (!snapshot.exists) {
+      logCoinEvent('get_job_not_found', { uid, jobId });
       return null;
     }
     const data = snapshot.data() || {};
     if (uid && data.uid && data.uid !== uid) {
       throw new CoinServiceError('JOB_FORBIDDEN', 'Bu job size ait değil');
     }
-    return { id: snapshot.id, ...data };
+    const result = { id: snapshot.id, ...data };
+    logCoinEvent('get_job_success', { uid, jobId, result });
+    return result;
   }
 
   async updateJob(input: JobUpdateInput) {
+    logCoinEvent('update_job_start', {
+      uid: input.uid,
+      jobId: input.jobId,
+      status: input.status,
+      output: input.output ?? null,
+    });
     const { uid, jobId, status, output } = input;
     if (!uid) {
       throw new CoinServiceError('UID_REQUIRED', 'UID zorunludur');
@@ -368,10 +430,21 @@ class CoinService {
     }
 
     await jobRef.update(updates);
-    return { jobId, status: status ?? existing.status, output: output ?? existing.output };
+    const result = { jobId, status: status ?? existing.status, output: output ?? existing.output };
+    logCoinEvent('update_job_success', { uid, jobId, result });
+    return result;
   }
 
   async handleWebhook(input: WebhookInput) {
+    logCoinEvent('webhook_start', {
+      uid: input.uid,
+      eventId: input.eventId,
+      provider: input.provider,
+      productId: input.productId,
+      status: input.status,
+      coinsOverride: input.coins,
+      metadata: sanitizeMetadata(input.metadata),
+    });
     const uid = input.uid;
     const eventId = input.eventId;
     if (!uid) {
@@ -397,7 +470,7 @@ class CoinService {
     const provider = ensureProvider(input.provider);
     const productId = input.productId || 'coin_unknown';
 
-    return runTransaction(async (tx) => {
+    const result = await runTransaction(async (tx) => {
       const txnRef = db.collection(COIN_TRANSACTIONS_COLLECTION).doc(eventId);
       const userRef = db.collection(COIN_USERS_COLLECTION).doc(uid);
 
@@ -454,6 +527,8 @@ class CoinService {
         balance: newBalance,
       };
     });
+    logCoinEvent('webhook_result', { uid, eventId, result });
+    return result;
   }
 }
 

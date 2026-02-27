@@ -234,6 +234,57 @@ export const swaggerSpec = {
           },
         },
       },
+      CoinUser: {
+        type: 'object',
+        properties: {
+          uid: { type: 'string', example: 'user_123' },
+          balance: { type: 'number', example: 250 },
+          lifetimePurchased: { type: 'number', example: 500 },
+          lifetimeSpent: { type: 'number', example: 250 },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CoinPurchaseResult: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          transactionId: { type: 'string', example: 'txn_123' },
+          balance: { type: 'number', example: 300 },
+          coins: { type: 'number', example: 50 },
+        },
+      },
+      CoinSpendResult: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          transactionId: { type: 'string', example: 'spend_job_123' },
+          jobId: { type: 'string', example: 'job_1700000000_ab12cd' },
+          balance: { type: 'number', example: 240 },
+        },
+      },
+      CoinJob: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'job_1700000000_ab12cd' },
+          uid: { type: 'string', example: 'user_123' },
+          kind: { type: 'string', enum: ['image', 'video'] },
+          costCoins: { type: 'number', example: 10 },
+          status: { type: 'string', enum: ['queued', 'running', 'success', 'failed'] },
+          input: { type: 'object', additionalProperties: true, nullable: true },
+          output: { type: 'object', additionalProperties: true, nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CoinWebhookResult: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          eventId: { type: 'string', example: 'evt_123' },
+          balance: { type: 'number', example: 500 },
+        },
+      },
       PremiumCustomerInfoRequest: {
         type: 'object',
         properties: {
@@ -1561,6 +1612,302 @@ export const swaggerSpec = {
       },
     },
 
+    // ==================== COINS ====================
+    '/api/v1/coins/balance': {
+      get: {
+        summary: 'Get coin balance',
+        description: 'Kullanıcının coin bakiyesini döndürür.',
+        tags: ['Coins'],
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Coin bakiyesi',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/CoinUser' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          401: { description: 'Authorization required' },
+          500: { description: 'Coin bakiyesi alınamadı' },
+        },
+      },
+    },
+    '/api/v1/coins/purchase/verify': {
+      post: {
+        summary: 'Verify coin purchase',
+        description: 'Satın alma işlemini doğrular ve coin bakiyesini günceller.',
+        tags: ['Coins'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  provider: { type: 'string', example: 'google' },
+                  productId: { type: 'string', example: 'coin_100' },
+                  transactionId: { type: 'string', example: 'txn_123' },
+                  providerEventId: { type: 'string', example: 'evt_123' },
+                  purchaseToken: { type: 'string' },
+                  receipt: { type: 'string' },
+                  platform: { type: 'string', example: 'android' },
+                  coins: { type: 'number', example: 100 },
+                  metadata: { type: 'object', additionalProperties: true },
+                },
+                required: ['productId'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Satın alma işlendi',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/CoinPurchaseResult' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Geçersiz istek' },
+          401: { description: 'Authorization required' },
+          500: { description: 'Satın alma doğrulama hatası' },
+        },
+      },
+    },
+    '/api/v1/coins/spend-and-create-job': {
+      post: {
+        summary: 'Spend coins and create generation job',
+        description: 'Coin düşer ve generation job oluşturur.',
+        tags: ['Coins'],
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  kind: { type: 'string', enum: ['image', 'video'] },
+                  costCoins: { type: 'number', example: 10 },
+                  input: { type: 'object', additionalProperties: true },
+                  requestId: { type: 'string', example: 'req_123' },
+                },
+                required: ['kind', 'costCoins'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Job oluşturuldu',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/CoinSpendResult' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Geçersiz istek' },
+          401: { description: 'Authorization required' },
+          402: { description: 'Yetersiz bakiye' },
+          500: { description: 'Job oluşturulamadı' },
+        },
+      },
+    },
+
+    // ==================== JOBS ====================
+    '/api/v1/jobs/{jobId}': {
+      get: {
+        summary: 'Get generation job',
+        description: 'Job detaylarını döndürür.',
+        tags: ['Jobs'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'jobId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Job getirildi',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/CoinJob' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          401: { description: 'Authorization required' },
+          403: { description: 'Job erişimi yok' },
+          404: { description: 'Job bulunamadı' },
+        },
+      },
+      patch: {
+        summary: 'Update generation job',
+        description: 'Job status/output günceller.',
+        tags: ['Jobs'],
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'jobId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['queued', 'running', 'success', 'failed'] },
+                  output: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Job güncellendi',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: {
+                          type: 'object',
+                          properties: {
+                            jobId: { type: 'string' },
+                            status: { type: 'string' },
+                            output: { type: 'object', additionalProperties: true },
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Geçersiz istek' },
+          401: { description: 'Authorization required' },
+          403: { description: 'Job erişimi yok' },
+          404: { description: 'Job bulunamadı' },
+        },
+      },
+    },
+
+    // ==================== COIN WEBHOOKS ====================
+    '/api/v1/webhooks/purchase': {
+      post: {
+        summary: 'Coin purchase webhook',
+        description: 'Provider webhook verisini işler ve coin bakiyesini günceller.',
+        tags: ['Webhooks'],
+        security: [],
+        parameters: [
+          {
+            name: 'X-Webhook-Secret',
+            in: 'header',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Must match COIN_WEBHOOK_SECRET environment variable when set',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  provider: { type: 'string', example: 'revenuecat' },
+                  eventId: { type: 'string', example: 'evt_123' },
+                  uid: { type: 'string', example: 'user_123' },
+                  productId: { type: 'string', example: 'coin_100' },
+                  status: { type: 'string', example: 'purchase' },
+                  coins: { type: 'number', example: 100 },
+                  metadata: { type: 'object', additionalProperties: true },
+                },
+                required: ['eventId', 'uid', 'productId'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Webhook işlendi',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Success' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: { $ref: '#/components/schemas/CoinWebhookResult' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          400: { description: 'Geçersiz istek' },
+          401: { description: 'Webhook doğrulama hatası' },
+          500: { description: 'Webhook işlenemedi' },
+        },
+      },
+    },
+
     // ==================== PRESENTATION ====================
   },
   tags: [
@@ -1573,6 +1920,9 @@ export const swaggerSpec = {
     { name: 'PDF Read', description: 'PDF processing and AI analysis' },
     { name: 'Notifications', description: 'Push notification management' },
     { name: 'Delete Account', description: 'Account deletion and data export (GDPR/KVKK compliant)' },
-    { name: 'Premium', description: 'Premium abonelik yönetimi ve senkronizasyonu' }
+    { name: 'Premium', description: 'Premium abonelik yönetimi ve senkronizasyonu' },
+    { name: 'Coins', description: 'Coin satın alma ve bakiye yönetimi' },
+    { name: 'Jobs', description: 'Coin ile oluşturulan üretim jobları' },
+    { name: 'Webhooks', description: 'Webhook endpointleri' }
   ]
 } as const;
