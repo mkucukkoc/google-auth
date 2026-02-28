@@ -3,6 +3,8 @@ import { logger } from './logger';
 const MAX_STRING_LENGTH = 2000;
 const MAX_ARRAY_LENGTH = 50;
 const MAX_DEPTH = 4;
+const LOG_PRETTY_JSON = process.env.LOG_PRETTY_JSON !== 'false';
+const MAX_PRETTY_LINES = Number(process.env.LOG_PRETTY_MAX_LINES || 200);
 
 function safeForLog(value: any, depth = 0): any {
   if (depth > MAX_DEPTH) return '[max-depth-reached]';
@@ -49,6 +51,9 @@ export function logRequestJson(routeName: string, payload: any): void {
     { route: routeName, endpoint: endpointLabel, payload: safePayload },
     `[${routeName}] request JSON (${endpointLabel})`
   );
+  if (LOG_PRETTY_JSON) {
+    logPrettyLines(routeName, endpointLabel, safePayload, 'request');
+  }
 }
 
 export function logResponseJson(routeName: string, payload: any): void {
@@ -58,6 +63,26 @@ export function logResponseJson(routeName: string, payload: any): void {
     { route: routeName, endpoint: endpointLabel, response: safePayload },
     `[${routeName}] response JSON (${endpointLabel})`
   );
+  if (LOG_PRETTY_JSON) {
+    logPrettyLines(routeName, endpointLabel, safePayload, 'response');
+  }
 }
 
+function logPrettyLines(routeName: string, endpointLabel: string, payload: any, kind: 'request' | 'response') {
+  const pretty = jsonPretty(payload);
+  const lines = pretty.split('\n');
+  const maxLines = Math.min(lines.length, MAX_PRETTY_LINES);
+  for (let i = 0; i < maxLines; i += 1) {
+    logger.info(
+      { route: routeName, endpoint: endpointLabel, line: i + 1, kind },
+      `[${routeName}] ${kind} line ${i + 1}: ${lines[i]}`
+    );
+  }
+  if (lines.length > MAX_PRETTY_LINES) {
+    logger.info(
+      { route: routeName, endpoint: endpointLabel, kind },
+      `[${routeName}] ${kind} lines truncated (${MAX_PRETTY_LINES}/${lines.length})`
+    );
+  }
+}
 

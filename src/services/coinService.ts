@@ -10,7 +10,7 @@ import {
 
 const COIN_USERS_COLLECTION = 'coin_users';
 const COIN_TRANSACTIONS_COLLECTION = 'coin_transactions';
-const GENERATION_JOBS_COLLECTION = 'generation_jobs';
+const GENERATION_JOBS_COLLECTION = 'generating_jobs_coin';
 
 const DEFAULT_COIN_PACKAGES: Record<string, number> = {
   coin_30: 30,
@@ -353,21 +353,15 @@ class CoinService {
         throw new CoinServiceError('INSUFFICIENT_COINS', 'Coin yetersiz');
       }
 
-      const updatedBalance = currentBalance - input.costCoins;
-      const nextUser = buildUserDoc(uid, {
-        balance: updatedBalance,
-        lifetimePurchased: toNumber(existingUser?.lifetimePurchased, 0),
-        lifetimeSpent: toNumber(existingUser?.lifetimeSpent, 0) + input.costCoins,
-        createdAt: existingUser?.createdAt ?? FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
       const sanitizedInput = sanitizeForFirestore(input.input ?? null) ?? null;
       const job: GenerationJob = {
         uid,
         kind: input.kind,
         costCoins: input.costCoins,
         status: 'queued',
+        requestId: input.requestId ?? null,
+        transactionId,
+        chargeStatus: 'pending',
         input: sanitizedInput,
         output: null,
         createdAt: FieldValue.serverTimestamp(),
@@ -380,15 +374,14 @@ class CoinService {
         provider: 'app',
         productId: input.kind === 'video' ? 'generation_video' : 'generation_image',
         coins: input.costCoins,
-        status: 'success',
+        status: 'pending',
         providerEventId: transactionId,
         createdAt: FieldValue.serverTimestamp(),
         metadata: sanitizedInput,
-        balanceAfter: updatedBalance,
+        balanceAfter: currentBalance,
         jobId,
       };
 
-      tx.set(userRef, nextUser, { merge: true });
       tx.set(jobRef, job);
       tx.set(txnRef, transaction);
 
@@ -396,7 +389,7 @@ class CoinService {
         status: 'success',
         transactionId,
         jobId,
-        balance: updatedBalance,
+        balance: currentBalance,
       };
     });
     logCoinEvent('spend_and_create_job_result', { uid, result });
@@ -455,8 +448,119 @@ class CoinService {
       updates.output = sanitizeForFirestore(output);
     }
 
-    await jobRef.update(updates);
-    const result = { jobId, status: status ?? existing.status, output: output ?? existing.output };
+    if (status !== 'success') {
+      await jobRef.update(updates);
+      const result = { jobId, status: status ?? existing.status, output: output ?? existing.output };
+      logCoinEvent('update_job_success', { uid, jobId, result });
+      return result;
+    }
+
+    const chargeResult = await runTransaction(async (tx) => {
+      const jobSnap = await tx.get(jobRef);
+      if (!jobSnap.exists) {
+        throw new CoinServiceError('NOT_FOUND', 'Job bulunamadı');
+      }
+      const jobData = jobSnap.data() || {};
+      if (jobData.uid && jobData.uid !== uid) {
+        throw new CoinServiceError('JOB_FORBIDDEN', 'Bu job size ait değil');
+      }
+
+      const costCoins = toNumber(jobData.costCoins, input.output?.costCoins ?? 0);
+      const jobKind: GenerationKind = jobData.kind || 'image';
+      const transactionId: string =
+        jobData.transactionId ||
+        (jobData.requestId ? `spend_${jobData.requestId}` : `spend_${jobId}`);
+
+      const txnRef = db.collection(COIN_TRANSACTIONS_COLLECTION).doc(transactionId);
+      const userRef = db.collection(COIN_USERS_COLLECTION).doc(uid);
+
+      const txnSnap = await tx.get(txnRef);
+      if (txnSnap.exists && txnSnap.data()?.status === 'success') {
+        tx.set(
+          jobRef,
+          {
+            ...updates,
+            chargeStatus: 'charged',
+            chargedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        return {
+          charged: true,
+          balance: toNumber(txnSnap.data()?.balanceAfter, undefined),
+        };
+      }
+
+      const userSnap = await tx.get(userRef);
+      const existingUser = userSnap.exists ? userSnap.data() : null;
+      const currentBalance = toNumber(existingUser?.balance, 0);
+
+      if (currentBalance < costCoins) {
+        const failedTxn: CoinTransaction & { balanceAfter?: number; jobId?: string } = {
+          uid,
+          type: 'spend',
+          provider: 'app',
+          productId: jobKind === 'video' ? 'generation_video' : 'generation_image',
+          coins: costCoins,
+          status: 'failed',
+          providerEventId: transactionId,
+          createdAt: FieldValue.serverTimestamp(),
+          metadata: sanitizeForFirestore(jobData.input ?? null) ?? null,
+          balanceAfter: currentBalance,
+          jobId,
+        };
+        tx.set(txnRef, failedTxn, { merge: true });
+        tx.set(
+          jobRef,
+          {
+            ...updates,
+            chargeStatus: 'failed',
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        throw new CoinServiceError('INSUFFICIENT_COINS', 'Coin yetersiz');
+      }
+
+      const updatedBalance = currentBalance - costCoins;
+      const nextUser = buildUserDoc(uid, {
+        balance: updatedBalance,
+        lifetimePurchased: toNumber(existingUser?.lifetimePurchased, 0),
+        lifetimeSpent: toNumber(existingUser?.lifetimeSpent, 0) + costCoins,
+        createdAt: existingUser?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      const transaction: CoinTransaction & { balanceAfter?: number; jobId?: string } = {
+        uid,
+        type: 'spend',
+        provider: 'app',
+        productId: jobKind === 'video' ? 'generation_video' : 'generation_image',
+        coins: costCoins,
+        status: 'success',
+        providerEventId: transactionId,
+        createdAt: FieldValue.serverTimestamp(),
+        metadata: sanitizeForFirestore(jobData.input ?? null) ?? null,
+        balanceAfter: updatedBalance,
+        jobId,
+      };
+
+      tx.set(userRef, nextUser, { merge: true });
+      tx.set(txnRef, transaction, { merge: true });
+      tx.set(
+        jobRef,
+        {
+          ...updates,
+          chargeStatus: 'charged',
+          chargedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return { charged: true, balance: updatedBalance };
+    });
+
+    const result = { jobId, status: status ?? existing.status, output: output ?? existing.output, ...chargeResult };
     logCoinEvent('update_job_success', { uid, jobId, result });
     return result;
   }

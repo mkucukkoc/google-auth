@@ -31,6 +31,10 @@ export interface GenerationJob {
   kind: GenerationKind;
   costCoins: number;
   status: GenerationStatus;
+  requestId?: string | null;
+  transactionId?: string | null;
+  chargeStatus?: 'pending' | 'charged' | 'failed';
+  chargedAt?: any;
   input: Record<string, any> | null;
   output: {
     url?: string;
