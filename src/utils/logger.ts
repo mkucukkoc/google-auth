@@ -56,18 +56,11 @@ const productionLogger = pino({
   transport: undefined,
 });
 
-// Render logger (console'a yaz, pretty format)
+// Render logger (JSON format)
 const renderLogger = pino({
   ...baseConfig,
   level: 'debug', // Render'da daha detaylı loglar
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: false, // Render'da renk yok
-      translateTime: 'SYS:standard',
-      ignore: 'pid,hostname',
-    },
-  },
+  transport: undefined,
 });
 
 // Choose logger based on environment
@@ -146,4 +139,3 @@ export const logBusinessEvent = (event: string, userId?: string, metadata?: any)
     message: 'Business event',
   }, `Business: ${event}`);
 };
-
