@@ -300,6 +300,16 @@ class CoinService {
       };
     });
     logCoinEvent('verify_purchase_result', { uid, result });
+    if (result.status === 'success' && typeof result.balance === 'number') {
+      logCoinEvent('coin_credit_applied', {
+        uid,
+        transactionId,
+        productId,
+        coins,
+        balance: result.balance,
+        source: 'verify_purchase',
+      });
+    }
     return result;
   }
 
@@ -600,9 +610,9 @@ class CoinService {
     const provider = ensureProvider(input.provider);
     const productId = input.productId || 'coin_unknown';
 
-    const result = await runTransaction(async (tx) => {
-      const txnRef = db.collection(COIN_TRANSACTIONS_COLLECTION).doc(eventId);
-      const userRef = db.collection(COIN_USERS_COLLECTION).doc(uid);
+      const result = await runTransaction(async (tx) => {
+        const txnRef = db.collection(COIN_TRANSACTIONS_COLLECTION).doc(eventId);
+        const userRef = db.collection(COIN_USERS_COLLECTION).doc(uid);
 
       const txnSnap = await tx.get(txnRef);
       if (txnSnap.exists) {
@@ -656,9 +666,22 @@ class CoinService {
         status: 'success',
         eventId,
         balance: newBalance,
+        previousBalance: currentBalance,
       };
     });
     logCoinEvent('webhook_result', { uid, eventId, result });
+    if (result.status === 'success' && typeof result.balance === 'number') {
+      logCoinEvent('coin_balance_updated', {
+        uid,
+        eventId,
+        productId,
+        status,
+        coins,
+        previousBalance: (result as any).previousBalance,
+        balance: result.balance,
+        source: 'webhook',
+      });
+    }
     return result;
   }
 }

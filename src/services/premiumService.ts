@@ -11,7 +11,7 @@ const USERS_COLLECTION = 'users';
 const SUBSC_COLLECTION = 'subsc';
 const REVENUECAT_ENTITLEMENT_ID = process.env.REVENUECAT_ENTITLEMENT_ID || 'premium';
 
-type PremiumStatus = 'monthly' | 'annual' | null;
+type PremiumStatus = 'weekly' | 'monthly' | 'annual' | null;
 
 interface PremiumState {
   premium: boolean;
@@ -440,6 +440,9 @@ class PremiumService {
     if (!basePlanId) {
       return null;
     }
+    if (basePlanId.includes('weekly') || basePlanId.includes('week')) {
+      return 'weekly';
+    }
     if (basePlanId.includes('annual') || basePlanId.includes('year')) {
       return 'annual';
     }
@@ -704,4 +707,3 @@ class PremiumService {
 }
 
 export const premiumService = new PremiumService();
-

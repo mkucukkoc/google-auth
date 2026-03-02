@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import * as admin from 'firebase-admin';
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
+import { coinService } from '../services/coinService';
 import { attachRouteLogger } from '../utils/routeLogger';
 
 if (!admin.apps.length) {
@@ -10,7 +11,7 @@ if (!admin.apps.length) {
 
 const WEBHOOK_SECRET = (process.env.REVENUECAT_WEBHOOK_SECRET || '').trim();
 
-type PremiumStatus = 'monthly' | 'annual' | 'lifetime' | 'unknown' | null;
+type PremiumStatus = 'weekly' | 'monthly' | 'annual' | 'lifetime' | 'unknown' | null;
 type PremiumStore = 'google_play' | 'app_store' | 'stripe' | 'unknown';
 type PremiumEnvironment = 'production' | 'sandbox' | 'unknown';
 
@@ -108,10 +109,35 @@ const determinePremiumStatus = (productIdentifier?: string | null): PremiumStatu
   ) {
     return 'annual';
   }
+  if (normalized.includes('weekly') || normalized.includes('week') || normalized.includes('7')) {
+    return 'weekly';
+  }
   if (normalized.includes('monthly') || normalized.includes('month') || normalized.includes('30')) {
     return 'monthly';
   }
   return 'unknown';
+};
+
+const resolvePremiumBonusCoins = (status: PremiumStatus, eventTypeName: string): number => {
+  const normalizedEvent = (eventTypeName || '').toUpperCase();
+  if (normalizedEvent !== 'INITIAL_PURCHASE' && normalizedEvent !== 'RENEWAL') {
+    return 0;
+  }
+  if (status === 'weekly') {
+    return 25;
+  }
+  if (status === 'monthly') {
+    return 100;
+  }
+  return 0;
+};
+
+const mapCoinStatus = (eventTypeName: string): string => {
+  const normalized = (eventTypeName || '').toUpperCase();
+  if (normalized === 'RENEWAL') {
+    return 'renew';
+  }
+  return normalized.toLowerCase();
 };
 
 const determineStore = (subscriber: any, productId?: string | null): PremiumStore => {
@@ -491,7 +517,7 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
       return;
     }
 
-    if (derivedStatus !== 'monthly' && derivedStatus !== 'annual') {
+    if (derivedStatus !== 'weekly' && derivedStatus !== 'monthly' && derivedStatus !== 'annual') {
       logger.info('RevenueCat webhook ignored non-premium product', {
         userId,
         productId: productIdentifier,
@@ -611,6 +637,41 @@ export const revenuecatWebhookHandler = async (req: Request, res: Response): Pro
 
     const resolvedUpdates = finalUpdates as PremiumUserDoc;
     const premiumAfter = resolvedUpdates.premium;
+
+    const bonusCoins = resolvePremiumBonusCoins(derivedStatus, eventTypeName);
+    if (bonusCoins > 0) {
+      const baseEventId = eventId || transactionId || `${userId}_${Date.now()}`;
+      const bonusEventId = `premium_bonus_${baseEventId}`;
+      try {
+        const coinResult = await coinService.handleWebhook({
+          uid: userId,
+          eventId: bonusEventId,
+          provider: 'revenuecat',
+          productId: productIdentifier ?? 'premium_bonus',
+          status: mapCoinStatus(eventTypeName),
+          coins: bonusCoins,
+          metadata: {
+            source: 'premium_subscription',
+            premiumStatus: derivedStatus,
+            originalEventId: eventId ?? null,
+            eventType: eventTypeName,
+          },
+        });
+        logger.info('Premium bonus coins credited', {
+          userId,
+          eventTypeName,
+          bonusCoins,
+          result: coinResult,
+        });
+      } catch (coinError) {
+        logger.error('Premium bonus coin credit failed', {
+          userId,
+          eventTypeName,
+          bonusCoins,
+          error: coinError,
+        });
+      }
+    }
     const logEntry: PremiumLogEntry = {
       logId: `${userId}_${Date.now()}_${eventId ?? 'noevent'}`,
       userId,
