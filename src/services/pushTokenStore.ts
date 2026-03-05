@@ -1,4 +1,5 @@
 import { db } from '../firebase';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase-admin/firestore';
 import { logger } from '../utils/logger';
 
 export type StoredPushToken = {
@@ -49,7 +50,9 @@ export const pushTokenStore = {
       .where('userId', '==', userId)
       .where('isActive', '==', true)
       .get();
-    return snapshot.docs.map(doc => normalizeToken(doc.id, doc.data()));
+    return snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) =>
+      normalizeToken(doc.id, doc.data())
+    );
   },
 
   async getByUsers(userIds: string[]): Promise<StoredPushToken[]> {
@@ -66,14 +69,18 @@ export const pushTokenStore = {
         .where('userId', 'in', chunk)
         .where('isActive', '==', true)
         .get();
-      snapshot.docs.forEach(doc => results.push(normalizeToken(doc.id, doc.data())));
+      snapshot.docs.forEach((doc: QueryDocumentSnapshot<DocumentData>) =>
+        results.push(normalizeToken(doc.id, doc.data()))
+      );
     }
     return results;
   },
 
   async getAllActive(): Promise<StoredPushToken[]> {
     const snapshot = await db.collection(COLLECTION).where('isActive', '==', true).get();
-    return snapshot.docs.map(doc => normalizeToken(doc.id, doc.data()));
+    return snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) =>
+      normalizeToken(doc.id, doc.data())
+    );
   },
 
   async getByDevice(userId: string, deviceId: string): Promise<StoredPushToken | null> {
