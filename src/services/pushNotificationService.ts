@@ -2,6 +2,7 @@ import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 import { admin } from '../firebase';
 import { logger } from '../utils/logger';
 import { databaseManager } from '../config/database';
+import { pushTokenStore } from './pushTokenStore';
 
 export interface PushNotificationData {
   to: string | string[];
@@ -309,9 +310,8 @@ class PushNotificationService {
   // Get user push tokens
   private async getUserPushTokens(userId: string): Promise<UserPushToken[]> {
     try {
-      // Mock Firestore query
-      logger.debug(`Mock PushNotificationService: Getting tokens for user ${userId}`);
-      return [] as UserPushToken[];
+      const tokens = await pushTokenStore.getByUser(userId);
+      return tokens as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get user push tokens:', error);
       return [];
@@ -321,11 +321,8 @@ class PushNotificationService {
   // Get multiple users push tokens
   private async getUsersPushTokens(userIds: string[]): Promise<UserPushToken[]> {
     try {
-      // Mock Firestore query
-      logger.debug(`Mock PushNotificationService: Getting tokens for users ${userIds.join(', ')}`);
-      const snapshot = { docs: [] };
-
-      return [] as UserPushToken[];
+      const tokens = await pushTokenStore.getByUsers(userIds);
+      return tokens as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get users push tokens:', error);
       return [];
@@ -335,9 +332,8 @@ class PushNotificationService {
   // Get all active push tokens
   private async getAllActivePushTokens(): Promise<UserPushToken[]> {
     try {
-      // Mock Firestore query
-      logger.debug('Mock PushNotificationService: Getting all active push tokens');
-      return [] as UserPushToken[];
+      const tokens = await pushTokenStore.getAllActive();
+      return tokens as UserPushToken[];
     } catch (error) {
       logger.error('Failed to get all active push tokens:', error);
       return [];
@@ -350,9 +346,8 @@ class PushNotificationService {
     deviceId: string
   ): Promise<UserPushToken | null> {
     try {
-      // Mock Firestore query
-      logger.debug(`Mock PushNotificationService: Getting token for user ${userId}, device ${deviceId}`);
-      return null; // Return null for testing
+      const token = await pushTokenStore.getByDevice(userId, deviceId);
+      return token as UserPushToken | null;
     } catch (error) {
       logger.error('Failed to get user push token by device:', error);
       return null;
@@ -362,8 +357,7 @@ class PushNotificationService {
   // Create user push token
   private async createUserPushToken(tokenData: UserPushToken): Promise<void> {
     try {
-      // Mock Firestore add
-      logger.debug('Mock PushNotificationService: Creating user push token', tokenData);
+      await pushTokenStore.save(tokenData);
     } catch (error) {
       logger.error('Failed to create user push token:', error);
       throw error;
@@ -376,8 +370,7 @@ class PushNotificationService {
     updateData: Partial<UserPushToken>
   ): Promise<void> {
     try {
-      // Mock Firestore update
-      logger.debug(`Mock PushNotificationService: Updating token ${tokenId}`, updateData);
+      await pushTokenStore.update(tokenId, updateData);
     } catch (error) {
       logger.error('Failed to update user push token:', error);
       throw error;
@@ -469,4 +462,3 @@ class FirebasePushNotificationService {
 }
 
 export const firebasePushNotificationService = new FirebasePushNotificationService();
-

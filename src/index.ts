@@ -63,6 +63,7 @@ import { createCoinWebhookRouter } from './routes/coinWebhook';
 // Chat router: resolve robustly to avoid ESM/CJS interop issues in Render
 // We intentionally avoid static import here
 import notificationRouter from './routes/notifications';
+import generationWebhookRouter from './routes/generationWebhook';
 import revenuecatWebhookRouter from './revenuecat_webhook/revenuecatWebhook';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
@@ -227,8 +228,10 @@ const startServer = async () => {
     mountRouter(`/api/${API_VERSION}/premium`, createPremiumRouter, 'premium');
     mountRouter(`/api/${API_VERSION}/coins`, createCoinRouter, 'coins');
     mountRouter(`/api/${API_VERSION}/jobs`, createCoinJobsRouter, 'coinJobs');
+    mountRouterInstance(`/api/${API_VERSION}/notifications`, notificationRouter, 'notifications');
     mountRouterInstance(`/api/${API_VERSION}/webhooks/revenuecat`, revenuecatWebhookRouter, 'revenuecatWebhook');
     mountRouter(`/api/${API_VERSION}/webhooks/purchase`, createCoinWebhookRouter, 'coinWebhook');
+    mountRouterInstance(`/api/${API_VERSION}/webhooks`, generationWebhookRouter, 'generationWebhook');
     if (createChatRouter) {
       mountRouter(`/api/${API_VERSION}/chat`, createChatRouter, 'chat');
     }
@@ -246,6 +249,7 @@ const startServer = async () => {
     mountRouter('/jobs', createCoinJobsRouter, 'coinJobs (legacy)');
     mountRouterInstance('/webhooks/revenuecat', revenuecatWebhookRouter, 'revenuecatWebhook (legacy)');
     mountRouter('/webhooks/purchase', createCoinWebhookRouter, 'coinWebhook (legacy)');
+    mountRouterInstance('/webhooks', generationWebhookRouter, 'generationWebhook (legacy)');
     if (createChatRouter) {
       mountRouter('/chat', createChatRouter, 'chat (legacy)');
     }
