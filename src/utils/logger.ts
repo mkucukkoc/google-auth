@@ -8,6 +8,38 @@ const isRender = process.env.RENDER === 'true'; // Render'da çalışıp çalı�
 const baseConfig = {
   level: process.env.LOG_LEVEL || (isDevelopment ? 'debug' : 'info'),
   timestamp: pino.stdTimeFunctions.isoTime,
+  redact: {
+    paths: [
+      'authorization',
+      'req.headers.authorization',
+      'req.headers.Authorization',
+      '*.token',
+      '*.*.token',
+      '*.*.*.token',
+      '*.accessToken',
+      '*.*.accessToken',
+      '*.refreshToken',
+      '*.*.refreshToken',
+      '*.idToken',
+      '*.*.idToken',
+      '*.firebaseToken',
+      '*.*.firebaseToken',
+      '*.fcmToken',
+      '*.*.fcmToken',
+      '*.expoPushToken',
+      '*.*.expoPushToken',
+      '*.pushToken',
+      '*.*.pushToken',
+      '*.notificationToken',
+      '*.*.notificationToken',
+      '*.sessionId',
+      '*.*.sessionId',
+      '*.refresh_token',
+      '*.*.refresh_token',
+    ],
+    censor: '[REDACTED]',
+    remove: false,
+  },
   formatters: {
     level: (label: string) => {
       return { level: label.toUpperCase() };
