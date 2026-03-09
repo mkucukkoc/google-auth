@@ -20,7 +20,7 @@ const reportSchema = z.object({
   messageId: z.string().max(200).optional(),
   chatId: z.string().max(200).optional(),
   source: z.string().max(100).optional(),
-  context: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  context: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 export function createReportRouter(): Router {
