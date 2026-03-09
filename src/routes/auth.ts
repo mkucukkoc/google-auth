@@ -377,6 +377,19 @@ export function createAuthRouter(): Router {
       try {
         const rawEmail = req.body?.email;
         const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+        const ipAddress = (req as any).ip || (req as any).connection?.remoteAddress;
+        const forwardedFor = req.get('x-forwarded-for') || undefined;
+        const cfConnectingIp = req.get('cf-connecting-ip') || undefined;
+        const userAgent = req.get('user-agent') || undefined;
+        const realIp =
+          cfConnectingIp ||
+          (forwardedFor ? forwardedFor.split(',')[0].trim() : '') ||
+          ipAddress ||
+          'unknown';
+        logger.info(
+          { email, ipAddress, realIp, forwardedFor, cfConnectingIp, userAgent },
+          'Password reset start request received'
+        );
         if (!email) {
           return res.status(400).json({
             error: 'invalid_request',
@@ -1264,6 +1277,5 @@ export function createAuthRouter(): Router {
 function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
-
 
 
