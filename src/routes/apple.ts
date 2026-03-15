@@ -203,8 +203,33 @@ export function createAppleAuthRouter(): Router {
           firebase_token: firebaseCustomToken ?? null,
         }, 600);
         logger.info('[apple/callback] session ready for polling', { state });
-        
-        return res.send('<html><body>Login successful. You may close this window.</body></html>');
+
+        const appRedirect = config.app.redirectUri || 'avenia://auth';
+        const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="0; url=${appRedirect}" />
+    <title>Login Successful</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; padding: 24px; }
+      a { color: #007aff; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <h3>Login successful</h3>
+    <p>Returning to the app...</p>
+    <p>If nothing happens, <a href="${appRedirect}">tap here to open the app</a>.</p>
+    <script>
+      window.location = ${JSON.stringify(appRedirect)};
+      setTimeout(function () { window.location.href = ${JSON.stringify(appRedirect)}; }, 500);
+    </script>
+  </body>
+</html>`;
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(html);
       } catch (error) {
         logger.error({ err: error, operation: 'appleAuth' }, 'Apple auth error');
         logger.debug('[apple/callback] error details', { errorMessage: error instanceof Error ? error.message : 'unknown' });
