@@ -36,7 +36,20 @@ export function createAppleAuthRouter(): Router {
       
       // Generate Apple client secret (JWT)
       logger.debug('[apple/start] generating Apple client secret');
-      const clientSecret = generateAppleClientSecret();
+      let clientSecret = '';
+      try {
+        clientSecret = generateAppleClientSecret();
+      } catch (error) {
+        logger.error('[apple/start] failed to generate Apple client secret', {
+          error: error instanceof Error ? error.message : String(error),
+          hasClientId: Boolean(config.apple.clientId),
+          hasTeamId: Boolean(config.apple.teamId),
+          hasKeyId: Boolean(config.apple.keyId),
+          hasPrivateKey: Boolean(config.apple.privateKey),
+          privateKeyLength: config.apple.privateKey ? config.apple.privateKey.length : 0,
+        });
+        return res.status(500).json({ error: 'apple_config_error' });
+      }
       
       const params = new URLSearchParams({
         client_id: config.apple.clientId,
@@ -213,6 +226,12 @@ export function createAppleAuthRouter(): Router {
 }
 
 function generateAppleClientSecret(): string {
+  if (!config.apple.clientId || !config.apple.teamId || !config.apple.keyId) {
+    throw new Error('APPLE_CONFIG_MISSING');
+  }
+  if (!config.apple.privateKey) {
+    throw new Error('APPLE_PRIVATE_KEY_MISSING');
+  }
   const now = Math.floor(Date.now() / 1000);
   
   const payload = {
@@ -228,7 +247,8 @@ function generateAppleClientSecret(): string {
     kid: config.apple.keyId,
   };
 
-  return jwt.sign(payload, config.apple.privateKey, {
+  const normalizedPrivateKey = config.apple.privateKey.replace(/\\n/g, '\n').trim();
+  return jwt.sign(payload, normalizedPrivateKey, {
     algorithm: 'ES256',
     header,
   });

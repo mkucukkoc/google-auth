@@ -52,7 +52,17 @@ export function createGoogleAuthRouter(): Router {
         });
         
         const authUrl = `https://accounts.google.com/o/oauth2/auth?${params}`;
-        logger.info({ id, deviceId: device_id }, '[GoogleAuth] Generated auth URL');
+        logger.info(
+          {
+            id,
+            deviceId: device_id,
+            redirectUri: config.google.redirectUri,
+            appRedirectUri: config.app?.redirectUri,
+            hasClientId: Boolean(config.google.clientId),
+            hasClientSecret: Boolean(config.google.clientSecret),
+          },
+          '[GoogleAuth] Generated auth URL'
+        );
         
         const responsePayload = { url: authUrl, id };
         logger.debug({ response: responsePayload }, '[GoogleAuth] /start response payload');
@@ -79,6 +89,18 @@ export function createGoogleAuthRouter(): Router {
         return res.json(responsePayload);
       }
 
+      logger.info(
+        {
+          ...requestPayload,
+          ready: true,
+          deviceId: session.deviceId || session.device_id,
+          hasUser: Boolean(session.user),
+          hasAccessToken: Boolean(session.accessToken),
+          hasRefreshToken: Boolean(session.refreshToken),
+          hasError: Boolean(session.error),
+        },
+        '[GoogleAuth] /status ready state'
+      );
       logger.info({ ...requestPayload, ready: true }, '[GoogleAuth] Session ready');
       logger.debug({ response: session }, '[GoogleAuth] /status response payload');
       return res.json(session);
