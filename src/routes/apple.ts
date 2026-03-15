@@ -70,11 +70,20 @@ export function createAppleAuthRouter(): Router {
   );
 
   r.get('/status/:id', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
     logger.debug('[apple/status] polling status', { id: req.params.id });
     const session = await getJson<any>(`als:${req.params.id}`);
     if (!session) {
       logger.debug('[apple/status] session not ready', { id: req.params.id });
       return res.json({ ready: false });
+    }
+    if (!session.ready) {
+      logger.debug('[apple/status] session not ready', { id: req.params.id });
+      return res.json({ ready: false, device_id: session.device_id });
     }
     logger.debug('[apple/status] session ready', { id: req.params.id });
     return res.json(session);
