@@ -6,6 +6,7 @@ import {
   CoinUser,
   GenerationJob,
   GenerationKind,
+  GenerationStatus,
 } from '../types/coin';
 
 const COIN_USERS_COLLECTION = 'coin_users';
@@ -420,6 +421,70 @@ class CoinService {
     }
     const result = { id: snapshot.id, ...data };
     logCoinEvent('get_job_success', { uid, jobId, result });
+    return result;
+  }
+
+  async getJobByRequestId(uid: string, requestId: string) {
+    logCoinEvent('get_job_by_request_id_start', { uid, requestId });
+    if (!requestId) {
+      throw new CoinServiceError('REQUEST_ID_REQUIRED', 'requestId zorunludur');
+    }
+    const snapshot = await db
+      .collection(GENERATION_JOBS_COLLECTION)
+      .where('requestId', '==', requestId)
+      .limit(1)
+      .get();
+    if (snapshot.empty) {
+      logCoinEvent('get_job_by_request_id_not_found', { uid, requestId });
+      return null;
+    }
+    if (snapshot.size > 1) {
+      logCoinEvent('get_job_by_request_id_multiple', { uid, requestId, count: snapshot.size });
+    }
+    const doc = snapshot.docs[0];
+    const data = doc.data() || {};
+    if (uid && data.uid && data.uid !== uid) {
+      throw new CoinServiceError('JOB_FORBIDDEN', 'Bu job size ait değil');
+    }
+    const result = { id: doc.id, ...data };
+    logCoinEvent('get_job_by_request_id_success', { uid, requestId, jobId: doc.id, result });
+    return result;
+  }
+
+  async updateJobByRequestId(input: {
+    uid: string;
+    requestId: string;
+    status?: GenerationStatus;
+    output?: Record<string, any>;
+  }) {
+    logCoinEvent('update_job_by_request_id_start', {
+      uid: input.uid,
+      requestId: input.requestId,
+      status: input.status,
+    });
+    if (!input.uid) {
+      throw new CoinServiceError('UID_REQUIRED', 'UID zorunludur');
+    }
+    if (!input.requestId) {
+      throw new CoinServiceError('REQUEST_ID_REQUIRED', 'requestId zorunludur');
+    }
+    const job = await this.getJobByRequestId(input.uid, input.requestId);
+    if (!job) {
+      logCoinEvent('update_job_by_request_id_not_found', { uid: input.uid, requestId: input.requestId });
+      return null;
+    }
+    const result = await this.updateJob({
+      uid: input.uid,
+      jobId: job.id,
+      status: input.status,
+      output: input.output,
+    });
+    logCoinEvent('update_job_by_request_id_success', {
+      uid: input.uid,
+      requestId: input.requestId,
+      jobId: job.id,
+      result,
+    });
     return result;
   }
 
