@@ -95,7 +95,15 @@ const resolveCoinAmount = (productId?: string | null, coinsOverride?: number | n
     return null;
   }
   const normalized = productId.toLowerCase();
-  return DEFAULT_COIN_PACKAGES[normalized] ?? null;
+  if (DEFAULT_COIN_PACKAGES[normalized]) {
+    return DEFAULT_COIN_PACKAGES[normalized];
+  }
+  const match = normalized.match(/^coin_(\d+)/);
+  if (!match) {
+    return null;
+  }
+  const amount = Number(match[1]);
+  return Number.isFinite(amount) ? amount : null;
 };
 
 const ensureProvider = (provider?: string | null): CoinProvider => {
